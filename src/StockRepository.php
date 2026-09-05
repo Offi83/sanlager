@@ -47,6 +47,38 @@ class StockRepository
         return $statement->fetchAll();
     }
 
+    public function getStockByBatch(int $articleId): array
+    {
+        $statement = $this->db->prepare(
+            'SELECT
+                b.id AS batch_id,
+                b.batch_number,
+                b.expiry_date,
+                COALESCE(SUM(sm.quantity), 0) AS quantity
+             FROM batches b
+             LEFT JOIN stock_movements sm
+                ON sm.batch_id = b.id
+             WHERE b.article_id = :article_id
+             GROUP BY
+                b.id,
+                b.batch_number,
+                b.expiry_date
+             ORDER BY
+                CASE
+                    WHEN b.expiry_date IS NULL THEN 1
+                    ELSE 0
+                END,
+                b.expiry_date,
+                b.batch_number'
+        );
+
+        $statement->execute([
+            'article_id' => $articleId
+        ]);
+
+        return $statement->fetchAll();
+    }
+
     public function getTotalStock(int $articleId): int
     {
         $statement = $this->db->prepare(
@@ -64,19 +96,37 @@ class StockRepository
 
     public function getStockAtLocation(
         int $articleId,
-        int $locationId
+        int $locationId,
+        ?int $batchId = null
     ): int {
-        $statement = $this->db->prepare(
-            'SELECT COALESCE(SUM(quantity), 0)
-             FROM stock_movements
-             WHERE article_id = :article_id
-             AND location_id = :location_id'
-        );
+        if ($batchId === null) {
+            $statement = $this->db->prepare(
+                'SELECT COALESCE(SUM(quantity), 0)
+                 FROM stock_movements
+                 WHERE article_id = :article_id
+                 AND location_id = :location_id
+                 AND batch_id IS NULL'
+            );
 
-        $statement->execute([
-            'article_id' => $articleId,
-            'location_id' => $locationId
-        ]);
+            $statement->execute([
+                'article_id' => $articleId,
+                'location_id' => $locationId
+            ]);
+        } else {
+            $statement = $this->db->prepare(
+                'SELECT COALESCE(SUM(quantity), 0)
+                 FROM stock_movements
+                 WHERE article_id = :article_id
+                 AND location_id = :location_id
+                 AND batch_id = :batch_id'
+            );
+
+            $statement->execute([
+                'article_id' => $articleId,
+                'location_id' => $locationId,
+                'batch_id' => $batchId
+            ]);
+        }
 
         return (int) $statement->fetchColumn();
     }
@@ -86,7 +136,8 @@ class StockRepository
         int $locationId,
         int $quantity,
         string $type,
-        ?string $note = null
+        ?string $note = null,
+        ?int $batchId = null
     ): void {
         if ($quantity === 0) {
             throw new RuntimeException(
@@ -107,12 +158,13 @@ class StockRepository
         if ($type === 'issue') {
             $current = $this->getStockAtLocation(
                 $articleId,
-                $locationId
+                $locationId,
+                $batchId
             );
 
             if ($quantity > $current) {
                 throw new RuntimeException(
-                    'Nicht genügend Bestand an diesem Lagerort.'
+                    'Nicht genügend Bestand dieser Charge an diesem Lagerort.'
                 );
             }
 
@@ -123,6 +175,7 @@ class StockRepository
             'INSERT INTO stock_movements
                 (
                     article_id,
+                    batch_id,
                     location_id,
                     quantity,
                     movement_type,
@@ -131,6 +184,7 @@ class StockRepository
              VALUES
                 (
                     :article_id,
+                    :batch_id,
                     :location_id,
                     :quantity,
                     :movement_type,
@@ -140,6 +194,7 @@ class StockRepository
 
         $statement->execute([
             'article_id' => $articleId,
+            'batch_id' => $batchId,
             'location_id' => $locationId,
             'quantity' => $quantity,
             'movement_type' => $type,
