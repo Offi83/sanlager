@@ -441,3 +441,26 @@ tbody tr:last-child td {
     font-size: 13px;
     font-weight: 700;
 }
+
+
+/* ------------------------------------------------------------
+   Artikelkategorien
+   ------------------------------------------------------------ */
+
+.category-filter {
+    min-width: 190px;
+}
+
+.category-row th {
+    padding-top: 18px;
+    padding-bottom: 8px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 700;
+    border-bottom: 2px solid #ddd;
+    background: #f7f7f7;
+}
+
+.category-row:first-child th {
+    padding-top: 8px;
+}
