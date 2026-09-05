@@ -395,9 +395,20 @@ if (isset($_GET['message'])) {
 $search = trim($_GET['search'] ?? '');
 
 $articleList = [];
+$selectedCategoryId = null;
 
 if ($page === 'articles') {
-    $articleList = $articles->all($search);
+
+    $categoryParam = (int) ($_GET['category'] ?? 0);
+
+    if ($categoryParam > 0 && $categories->find($categoryParam)) {
+        $selectedCategoryId = $categoryParam;
+    }
+
+    $articleList = $articles->all(
+        $search,
+        $selectedCategoryId
+    );
 }
 
 $article = null;
@@ -550,6 +561,28 @@ if ($page === 'article') {
                 autofocus
             >
 
+            <select
+                name="category"
+                class="category-filter"
+            >
+
+                <option value="0">
+                    Alle Kategorien
+                </option>
+
+                <?php foreach ($categoryList as $category): ?>
+
+                    <option
+                        value="<?= (int) $category['id'] ?>"
+                        <?= $selectedCategoryId === (int) $category['id'] ? 'selected' : '' ?>
+                    >
+                        <?= h($category['name']) ?>
+                    </option>
+
+                <?php endforeach; ?>
+
+            </select>
+
             <button
                 type="submit"
                 class="button"
@@ -612,7 +645,28 @@ if ($page === 'article') {
 
                     <tbody>
 
+                    <?php
+                    $currentCategoryId = null;
+                    ?>
+
                     <?php foreach ($articleList as $item): ?>
+
+                        <?php if (
+                            $selectedCategoryId === null
+                            && $currentCategoryId !== (int) ($item['category_id'] ?? 0)
+                        ): ?>
+
+                            <?php
+                            $currentCategoryId = (int) ($item['category_id'] ?? 0);
+                            ?>
+
+                            <tr class="category-row">
+                                <th colspan="5">
+                                    <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
+                                </th>
+                            </tr>
+
+                        <?php endif; ?>
 
                         <?php
                         $total = $stock->getTotalStock(

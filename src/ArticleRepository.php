@@ -11,50 +11,44 @@ class ArticleRepository
     ) {
     }
 
-    public function all(string $search = ''): array
+    public function all(string $search = '', ?int $categoryId = null): array
     {
-        if ($search === '') {
-            $statement = $this->db->query(
-                'SELECT
+        $conditions = [
+            'a.active = 1'
+        ];
+
+        $parameters = [];
+
+        if ($search !== '') {
+            $conditions[] = '(
+                a.name LIKE :search
+                OR a.article_number LIKE :search
+                OR a.description LIKE :search
+            )';
+
+            $parameters['search'] = '%' . $search . '%';
+        }
+
+        if ($categoryId !== null) {
+            $conditions[] = 'a.category_id = :category_id';
+            $parameters['category_id'] = $categoryId;
+        }
+
+        $sql = 'SELECT
                     a.*,
                     c.name AS category_name,
                     c.sort_order AS category_sort_order
-                 FROM articles a
-                 LEFT JOIN article_categories c
+                FROM articles a
+                LEFT JOIN article_categories c
                     ON c.id = a.category_id
-                 WHERE a.active = 1
-                 ORDER BY
+                WHERE ' . implode(' AND ', $conditions) . '
+                ORDER BY
                     COALESCE(c.sort_order, 9999),
                     c.name COLLATE NOCASE,
-                    a.name COLLATE NOCASE'
-            );
+                    a.name COLLATE NOCASE';
 
-            return $statement->fetchAll();
-        }
-
-        $statement = $this->db->prepare(
-            'SELECT
-                a.*,
-                c.name AS category_name,
-                c.sort_order AS category_sort_order
-             FROM articles a
-             LEFT JOIN article_categories c
-                ON c.id = a.category_id
-             WHERE a.active = 1
-             AND (
-                 a.name LIKE :search
-                 OR a.article_number LIKE :search
-                 OR a.description LIKE :search
-             )
-             ORDER BY
-                COALESCE(c.sort_order, 9999),
-                c.name COLLATE NOCASE,
-                a.name COLLATE NOCASE'
-        );
-
-        $statement->execute([
-            'search' => '%' . $search . '%'
-        ]);
+        $statement = $this->db->prepare($sql);
+        $statement->execute($parameters);
 
         return $statement->fetchAll();
     }
