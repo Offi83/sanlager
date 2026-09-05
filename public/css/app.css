@@ -407,3 +407,29 @@ tbody tr:last-child td {
     }
 
 }
+
+/* Chargen / MHD */
+
+.expiry-ok {
+    color: #287a3d;
+    font-weight: 600;
+}
+
+.expiry-warning {
+    color: #9a6700;
+    font-weight: 700;
+}
+
+.expiry-expired {
+    color: #b00020;
+    font-weight: 700;
+}
+
+.warning-alert {
+    border-left: 5px solid #b00020;
+}
+
+.small-empty {
+    padding: 24px;
+}
+

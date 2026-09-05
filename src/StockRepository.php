@@ -47,37 +47,34 @@ class StockRepository
         return $statement->fetchAll();
     }
 
-    public function getStockByBatch(int $articleId): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                b.id AS batch_id,
-                b.batch_number,
-                b.expiry_date,
-                COALESCE(SUM(sm.quantity), 0) AS quantity
-             FROM batches b
-             LEFT JOIN stock_movements sm
-                ON sm.batch_id = b.id
-             WHERE b.article_id = :article_id
-             GROUP BY
-                b.id,
-                b.batch_number,
-                b.expiry_date
-             ORDER BY
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
-                b.expiry_date,
-                b.batch_number'
-        );
+public function getStockByBatch(int $articleId): array
+{
+    $statement = $this->db->prepare(
+        'SELECT
+            b.id AS batch_id,
+            b.expiry_date,
+            COALESCE(SUM(sm.quantity), 0) AS quantity
+         FROM batches b
+         LEFT JOIN stock_movements sm
+            ON sm.batch_id = b.id
+         WHERE b.article_id = :article_id
+         GROUP BY
+            b.id,
+            b.expiry_date
+         ORDER BY
+            CASE
+                WHEN b.expiry_date IS NULL THEN 1
+                ELSE 0
+            END,
+            b.expiry_date'
+    );
 
-        $statement->execute([
-            'article_id' => $articleId
-        ]);
+    $statement->execute([
+        'article_id' => $articleId
+    ]);
 
-        return $statement->fetchAll();
-    }
+    return $statement->fetchAll();
+}
 
     public function getTotalStock(int $articleId): int
     {

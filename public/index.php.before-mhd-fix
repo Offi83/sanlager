@@ -265,25 +265,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             /*
              * MHD-Auswahl:
              *
-             * none = ohne MHD
-             * ID   = vorhandenes MHD
-             * new  = neues MHD
+             * none       = ohne MHD
+             * existing   = vorhandenes MHD
+             * new        = neues MHD
              */
-            $batchSelection =
-                $_POST['batch_selection'] ?? 'none';
+            $batchMode = $_POST['batch_mode'] ?? 'none';
 
             $batchId = null;
 
-            /*
-             * Neues MHD
-             */
-            if ($batchSelection === 'new') {
+            if ($batchMode === 'existing') {
 
-                if ($movementType !== 'receipt') {
+                $batchId = (int) (
+                    $_POST['batch_id'] ?? 0
+                );
+
+                if ($batchId <= 0) {
                     throw new RuntimeException(
-                        'Bei einer Entnahme kann kein neues MHD angelegt werden.'
+                        'Bitte ein MHD auswählen.'
                     );
                 }
+
+                $batch = $batches->find($batchId);
+
+                if (!$batch) {
+                    throw new RuntimeException(
+                        'Das ausgewählte MHD wurde nicht gefunden.'
+                    );
+                }
+
+                if ((int) $batch['article_id'] !== $articleId) {
+                    throw new RuntimeException(
+                        'Das MHD gehört nicht zu diesem Artikel.'
+                    );
+                }
+            }
+
+            if (
+                $movementType === 'receipt'
+                && $batchMode === 'new'
+            ) {
 
                 $expiryDate = trim(
                     $_POST['expiry_date'] ?? ''
@@ -302,31 +322,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             /*
-             * Vorhandenes MHD
+             * Bei Entnahme muss entweder
+             * ein vorhandenes MHD oder "ohne MHD"
+             * gewählt werden.
              */
-            elseif ($batchSelection !== 'none') {
-
-                $batchId = (int) $batchSelection;
-
-                if ($batchId <= 0) {
-                    throw new RuntimeException(
-                        'Ungültige MHD-Auswahl.'
-                    );
-                }
-
-                $batch = $batches->find($batchId);
-
-                if (!$batch) {
-                    throw new RuntimeException(
-                        'Das ausgewählte MHD wurde nicht gefunden.'
-                    );
-                }
-
-                if ((int) $batch['article_id'] !== $articleId) {
-                    throw new RuntimeException(
-                        'Das MHD gehört nicht zu diesem Artikel.'
-                    );
-                }
+            if (
+                $movementType === 'issue'
+                && $batchMode === 'new'
+            ) {
+                throw new RuntimeException(
+                    'Bei einer Entnahme kann kein neues MHD angelegt werden.'
+                );
             }
 
             $note = trim(
@@ -487,13 +493,20 @@ if ($page === 'article') {
     <?php endif; ?>
 
 
+    <?php
+    /*
+    |--------------------------------------------------------------------------
+    | Artikelübersicht
+    |--------------------------------------------------------------------------
+    */
+    ?>
+
     <?php if ($page === 'articles'): ?>
 
         <div class="page-header">
 
             <div>
                 <h1>Artikel</h1>
-
                 <p>
                     Sanitätsmaterial und aktueller Bestand
                 </p>
@@ -574,108 +587,117 @@ if ($page === 'article') {
 
             <?php else: ?>
 
-                <table>
+                <div class="table-wrapper">
 
-                    <thead>
+                    <table>
 
-                    <tr>
-                        <th>Artikel</th>
-                        <th>Artikelnummer</th>
-                        <th>Einheit</th>
-                        <th>Mindestbestand</th>
-                        <th>Aktion</th>
-                    </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                    <?php foreach ($articleList as $item): ?>
-
-                        <?php
-                        $total = $stock->getTotalStock(
-                            (int) $item['id']
-                        );
-
-                        $isLow =
-                            $total <
-                            (int) $item['minimum_stock'];
-                        ?>
+                        <thead>
 
                         <tr>
-
-                            <td>
-
-                                <a
-                                    href="?page=article&id=<?= (int) $item['id'] ?>"
-                                    class="article-link"
-                                >
-                                    <strong>
-                                        <?= h($item['name']) ?>
-                                    </strong>
-                                </a>
-
-                                <?php if ($item['description']): ?>
-
-                                    <small>
-                                        <?= h($item['description']) ?>
-                                    </small>
-
-                                <?php endif; ?>
-
-                            </td>
-
-                            <td>
-                                <?= h($item['article_number']) ?>
-                            </td>
-
-                            <td>
-                                <?= h($item['unit']) ?>
-                            </td>
-
-                            <td>
-                                <?= (int) $item['minimum_stock'] ?>
-                            </td>
-
-                            <td>
-
-                                <a
-                                    class="button button-small"
-                                    href="?page=article&id=<?= (int) $item['id'] ?>"
-                                >
-                                    Bestand:
-                                    <strong class="<?= $isLow ? 'stock-low' : '' ?>">
-                                        <?= $total ?>
-                                    </strong>
-                                </a>
-
-                            </td>
-
+                            <th>Artikel</th>
+                            <th>Artikelnummer</th>
+                            <th>Einheit</th>
+                            <th>Mindestbestand</th>
+                            <th>Aktion</th>
                         </tr>
 
-                    <?php endforeach; ?>
+                        </thead>
 
-                    </tbody>
+                        <tbody>
 
-                </table>
+                        <?php foreach ($articleList as $item): ?>
+
+                            <?php
+                            $total = $stock->getTotalStock(
+                                (int) $item['id']
+                            );
+
+                            $isLow =
+                                $total <
+                                (int) $item['minimum_stock'];
+                            ?>
+
+                            <tr>
+
+                                <td>
+
+                                    <a
+                                        href="?page=article&id=<?= (int) $item['id'] ?>"
+                                        class="article-link"
+                                    >
+                                        <strong>
+                                            <?= h($item['name']) ?>
+                                        </strong>
+                                    </a>
+
+                                    <?php if ($item['description']): ?>
+
+                                        <small>
+                                            <?= h($item['description']) ?>
+                                        </small>
+
+                                    <?php endif; ?>
+
+                                </td>
+
+                                <td>
+                                    <?= h($item['article_number']) ?>
+                                </td>
+
+                                <td>
+                                    <?= h($item['unit']) ?>
+                                </td>
+
+                                <td>
+                                    <?= (int) $item['minimum_stock'] ?>
+                                </td>
+
+                                <td>
+
+                                    <a
+                                        class="button button-small"
+                                        href="?page=article&id=<?= (int) $item['id'] ?>"
+                                    >
+                                        Bestand:
+                                        <strong class="<?= $isLow ? 'stock-low' : '' ?>">
+                                            <?= $total ?>
+                                        </strong>
+                                    </a>
+
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
 
             <?php endif; ?>
 
         </div>
 
 
+    <?php
+    /*
+    |--------------------------------------------------------------------------
+    | Neuer Artikel
+    |--------------------------------------------------------------------------
+    */
+    ?>
+
     <?php elseif ($page === 'new_article'): ?>
 
         <div class="page-header">
 
             <div>
-
                 <h1>Artikel anlegen</h1>
-
                 <p>
                     Neuen Lagerartikel erfassen
                 </p>
-
             </div>
 
             <a
@@ -802,6 +824,14 @@ if ($page === 'article') {
 
         </div>
 
+
+    <?php
+    /*
+    |--------------------------------------------------------------------------
+    | Artikel-Detail
+    |--------------------------------------------------------------------------
+    */
+    ?>
 
     <?php elseif ($page === 'article' && $article): ?>
 
@@ -1078,7 +1108,9 @@ if ($page === 'article') {
                 ): ?>
 
                     <div class="empty-state compact">
+
                         Kein Bestand vorhanden.
+
                     </div>
 
                 <?php endif; ?>
@@ -1196,37 +1228,93 @@ if ($page === 'article') {
                         </span>
 
                         <select
-                            name="batch_selection"
-                            id="batch_selection"
+                            name="batch_mode"
+                            id="batch_mode"
                         >
 
                             <option value="none">
                                 Ohne MHD
                             </option>
 
+                            <option value="new">
+                                Neues MHD
+                            </option>
+
                             <?php foreach ($articleBatches as $batch): ?>
 
                                 <?php
-                                $batchQuantity =
-                                    (int) $batch['quantity'];
+                                if (
+                                    (int) $batch['quantity'] <= 0
+                                    && false
+                                ) {
+                                    continue;
+                                }
                                 ?>
 
                                 <option
-                                    value="<?= (int) $batch['batch_id'] ?>"
-                                    data-quantity="<?= $batchQuantity ?>"
+                                    value="existing"
+                                    data-batch-id="<?= (int) $batch['batch_id'] ?>"
                                 >
                                     MHD:
                                     <?= formatDate($batch['expiry_date']) ?>
                                     –
                                     Bestand:
-                                    <?= $batchQuantity ?>
+                                    <?= (int) $batch['quantity'] ?>
                                 </option>
 
                             <?php endforeach; ?>
 
-                            <option value="new">
-                                Neues MHD
+                        </select>
+
+                    </label>
+
+                </div>
+
+
+                <div
+                    id="existing-batch-field"
+                    class="conditional-field"
+                    hidden
+                >
+
+                    <label>
+
+                        <span>
+                            Vorhandenes MHD
+                        </span>
+
+                        <select
+                            name="batch_id"
+                            id="batch_id"
+                        >
+
+                            <option value="">
+                                Bitte auswählen
                             </option>
+
+                            <?php foreach ($articleBatches as $batch): ?>
+
+                                <?php
+                                $quantity =
+                                    (int) $batch['quantity'];
+                                ?>
+
+                                <option
+                                    value="<?= (int) $batch['batch_id'] ?>"
+                                    data-quantity="<?= $quantity ?>"
+                                >
+
+                                    MHD:
+                                    <?= formatDate($batch['expiry_date']) ?>
+
+                                    –
+
+                                    Bestand:
+                                    <?= $quantity ?>
+
+                                </option>
+
+                            <?php endforeach; ?>
 
                         </select>
 
@@ -1296,7 +1384,17 @@ if ($page === 'article') {
         </div>
 
 
-    <?php elseif ($page === 'edit_article'): ?>
+    <?php
+    /*
+    |--------------------------------------------------------------------------
+    | Artikel bearbeiten
+    |--------------------------------------------------------------------------
+    */
+    ?>
+
+    <?php elseif (
+        $page === 'edit_article'
+    ): ?>
 
         <?php
 
@@ -1517,11 +1615,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const movementType =
         document.getElementById('movement_type');
 
-    const batchSelection =
-        document.getElementById('batch_selection');
+    const batchMode =
+        document.getElementById('batch_mode');
+
+    const existingField =
+        document.getElementById('existing-batch-field');
 
     const newExpiryField =
         document.getElementById('new-expiry-field');
+
+    const batchSelect =
+        document.getElementById('batch_id');
 
     const expiryInput =
         document.getElementById('expiry_date');
@@ -1532,7 +1636,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (
         !movementType
-        || !batchSelection
+        || !batchMode
     ) {
         return;
     }
@@ -1543,15 +1647,16 @@ document.addEventListener('DOMContentLoaded', function () {
         const movement =
             movementType.value;
 
-        let selection =
-            batchSelection.value;
+        let mode =
+            batchMode.value;
 
 
         /*
-         * "Neues MHD" nur beim Einlagern erlauben.
+         * Bei Entnahme darf kein neues MHD
+         * ausgewählt werden.
          */
         const newOption =
-            batchSelection.querySelector(
+            batchMode.querySelector(
                 'option[value="new"]'
             );
 
@@ -1562,66 +1667,64 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (
                 movement === 'issue'
-                && selection === 'new'
+                && mode === 'new'
             ) {
 
-                batchSelection.value =
+                batchMode.value =
                     'none';
 
-                selection =
+                mode =
                     'none';
             }
         }
 
 
         /*
-         * Bei Entnahme nur MHDs
-         * mit positivem Bestand anzeigen.
+         * Vorhandenes MHD
          */
-        Array.from(
-            batchSelection.options
-        ).forEach(function (option) {
+        if (
+            mode === 'existing'
+            && movement !== 'issue'
+        ) {
 
-            if (
-                option.value === ''
-                || option.value === 'none'
-                || option.value === 'new'
-            ) {
-                return;
-            }
+            existingField.hidden = true;
 
-            const quantity =
-                parseInt(
-                    option.dataset.quantity || '0',
-                    10
-                );
+        } else {
 
-            option.hidden =
-                movement === 'issue'
-                && quantity <= 0;
-        });
+            existingField.hidden =
+                mode !== 'existing';
+        }
 
 
         /*
-         * Eingabefeld für neues MHD.
+         * Neues MHD
          */
         newExpiryField.hidden =
             !(
                 movement === 'receipt'
-                && selection === 'new'
+                && mode === 'new'
             );
 
+
+        /*
+         * Pflichtfelder
+         */
+        if (batchSelect) {
+
+            batchSelect.required =
+                mode === 'existing';
+        }
 
         if (expiryInput) {
 
             expiryInput.required =
                 movement === 'receipt'
-                && selection === 'new';
+                && mode === 'new';
         }
 
 
         /*
-         * Button-Beschriftung.
+         * Button-Beschriftung
          */
         if (submitButton) {
 
@@ -1631,6 +1734,34 @@ document.addEventListener('DOMContentLoaded', function () {
                     : 'Entnehmen';
         }
 
+
+        /*
+         * Bei Entnahme nur vorhandene MHDs
+         * mit positivem Bestand anzeigen.
+         */
+        if (batchSelect) {
+
+            Array.from(
+                batchSelect.options
+            ).forEach(function (option) {
+
+                if (!option.value) {
+                    return;
+                }
+
+                const quantity =
+                    parseInt(
+                        option.dataset.quantity || '0',
+                        10
+                    );
+
+                option.hidden =
+                    movement === 'issue'
+                    && quantity <= 0;
+
+            });
+
+        }
     }
 
 
@@ -1639,11 +1770,10 @@ document.addEventListener('DOMContentLoaded', function () {
         updateForm
     );
 
-    batchSelection.addEventListener(
+    batchMode.addEventListener(
         'change',
         updateForm
     );
-
 
     updateForm();
 
