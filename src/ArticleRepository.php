@@ -147,6 +147,30 @@ class ArticleRepository
         ]);
     }
 
+    public function findByArticleNumber(
+        string $articleNumber
+    ): ?array {
+        $statement = $this->db->prepare(
+            'SELECT
+                a.*,
+                c.name AS category_name
+             FROM articles a
+             LEFT JOIN article_categories c
+                ON c.id = a.category_id
+             WHERE a.article_number = :article_number
+             AND a.active = 1
+             LIMIT 1'
+        );
+
+        $statement->execute([
+            'article_number' => $articleNumber
+        ]);
+
+        $article = $statement->fetch();
+
+        return $article ?: null;
+    }
+
     public function deactivate(int $id): void
     {
         $statement = $this->db->prepare(

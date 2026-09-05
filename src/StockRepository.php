@@ -153,6 +153,66 @@ public function getStockByBatch(int $articleId): array
         return (int) $statement->fetchColumn();
     }
 
+    public function issueOldest(
+        int $articleId,
+        int $locationId,
+        ?string $note = null
+    ): array {
+        $statement = $this->db->prepare(
+            'SELECT
+                sm.batch_id,
+                b.expiry_date,
+                SUM(sm.quantity) AS quantity
+             FROM stock_movements sm
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             WHERE sm.article_id = :article_id
+             AND sm.location_id = :location_id
+             GROUP BY
+                sm.batch_id,
+                b.expiry_date
+             HAVING SUM(sm.quantity) > 0
+             ORDER BY
+                CASE
+                    WHEN b.expiry_date IS NULL THEN 1
+                    ELSE 0
+                END,
+                b.expiry_date ASC,
+                sm.batch_id ASC'
+        );
+
+        $statement->execute([
+            'article_id' => $articleId,
+            'location_id' => $locationId
+        ]);
+
+        $batch = $statement->fetch();
+
+        if (!$batch) {
+            throw new RuntimeException(
+                'Kein Bestand an diesem Lagerort vorhanden.'
+            );
+        }
+
+        $batchId = $batch['batch_id'] !== null
+            ? (int) $batch['batch_id']
+            : null;
+
+        $this->move(
+            $articleId,
+            $locationId,
+            1,
+            'issue',
+            $note,
+            $batchId
+        );
+
+        return [
+            'batch_id' => $batchId,
+            'expiry_date' => $batch['expiry_date'],
+        ];
+    }
+
     public function move(
         int $articleId,
         int $locationId,

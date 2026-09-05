@@ -246,6 +246,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
+        | Schnell-Ausbuchung per Artikelnummer / Scanner
+        |--------------------------------------------------------------------------
+        */
+        if ($action === 'quick_issue') {
+
+            $articleNumber = trim(
+                $_POST['article_number'] ?? ''
+            );
+
+            if ($articleNumber === '') {
+                throw new RuntimeException(
+                    'Bitte eine Artikelnummer eingeben oder scannen.'
+                );
+            }
+
+            $article = $articles->findByArticleNumber(
+                $articleNumber
+            );
+
+            if (!$article) {
+                throw new RuntimeException(
+                    'Artikelnummer nicht gefunden: ' .
+                    $articleNumber
+                );
+            }
+
+            $mainLocation = $db->query(
+                "SELECT id
+                 FROM storage_locations
+                 WHERE name = 'Hauptlager'
+                 AND active = 1
+                 LIMIT 1"
+            )->fetchColumn();
+
+            if (!$mainLocation) {
+                throw new RuntimeException(
+                    'Das Hauptlager wurde nicht gefunden.'
+                );
+            }
+
+            $result = $stock->issueOldest(
+                (int) $article['id'],
+                (int) $mainLocation,
+                'Scanner-Ausbuchung'
+            );
+
+            $expiryText = $result['expiry_date']
+                ? formatDate($result['expiry_date'])
+                : 'ohne MHD';
+
+            redirect(
+                '?page=issue' .
+                '&success=' . urlencode(
+                    $article['name'] .
+                    ' – 1 ' .
+                    $article['unit'] .
+                    ' ausgebucht (' .
+                    $expiryText .
+                    ')'
+                )
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
         | Bestand buchen
         |--------------------------------------------------------------------------
         */
@@ -486,6 +551,13 @@ if ($page === 'article') {
                 class="<?= $page === 'articles' ? 'active' : '' ?>"
             >
                 Artikel
+            </a>
+
+            <a
+                href="?page=issue"
+                class="<?= $page === 'issue' ? 'active' : '' ?>"
+            >
+                Ausbuchen
             </a>
 
             <a
@@ -752,6 +824,89 @@ if ($page === 'article') {
 
         </div>
 
+
+    <?php elseif ($page === 'issue'): ?>
+
+        <div class="issue-page">
+
+            <div class="page-header">
+
+                <div>
+
+                    <h1>Ausbuchen</h1>
+
+                    <p>
+                        Artikelnummer scannen oder eingeben.
+                        Es wird automatisch ein Stück mit dem ältesten MHD
+                        aus dem Hauptlager entnommen.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <?php if (
+                isset($_GET['success'])
+                && $_GET['success'] !== ''
+            ): ?>
+
+                <div class="alert success">
+                    <?= h($_GET['success']) ?>
+                </div>
+
+            <?php endif; ?>
+
+            <?php if ($error): ?>
+
+                <div class="alert error">
+                    <?= h($error) ?>
+                </div>
+
+            <?php endif; ?>
+
+            <div class="card issue-card">
+
+                <form
+                    method="post"
+                    class="issue-form"
+                >
+
+                    <input
+                        type="hidden"
+                        name="action"
+                        value="quick_issue"
+                    >
+
+                    <label>
+
+                        <span>
+                            Artikelnummer
+                        </span>
+
+                        <input
+                            type="text"
+                            name="article_number"
+                            id="issue-article-number"
+                            autocomplete="off"
+                            spellcheck="false"
+                            autofocus
+                            required
+                        >
+
+                    </label>
+
+                    <button
+                        type="submit"
+                        class="button button-primary"
+                    >
+                        Ausbuchen
+                    </button>
+
+                </form>
+
+            </div>
+
+        </div>
 
     <?php elseif ($page === 'new_article'): ?>
 
