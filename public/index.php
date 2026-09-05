@@ -597,6 +597,10 @@ if ($page === 'article') {
                             (int) $item['id']
                         );
 
+                        $expiredStock = $stock->getExpiredStock(
+                            (int) $item['id']
+                        );
+
                         $isLow =
                             $total <
                             (int) $item['minimum_stock'];
@@ -648,6 +652,15 @@ if ($page === 'article') {
                                         <?= $total ?>
                                     </strong>
                                 </a>
+
+                                <?php if ($expiredStock > 0): ?>
+
+                                    <span class="expired-stock-warning">
+                                        MHD abgelaufen: <?= $expiredStock ?>
+                                        <?= h($item['unit']) ?>
+                                    </span>
+
+                                <?php endif; ?>
 
                             </td>
 

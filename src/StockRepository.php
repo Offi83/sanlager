@@ -79,9 +79,16 @@ public function getStockByBatch(int $articleId): array
     public function getTotalStock(int $articleId): int
     {
         $statement = $this->db->prepare(
-            'SELECT COALESCE(SUM(quantity), 0)
-             FROM stock_movements
-             WHERE article_id = :article_id'
+            'SELECT COALESCE(SUM(sm.quantity), 0)
+             FROM stock_movements sm
+             LEFT JOIN batches b
+                 ON b.id = sm.batch_id
+             WHERE sm.article_id = :article_id
+             AND (
+                 sm.batch_id IS NULL
+                 OR b.expiry_date IS NULL
+                 OR b.expiry_date >= date("now")
+             )'
         );
 
         $statement->execute([
@@ -89,6 +96,24 @@ public function getStockByBatch(int $articleId): array
         ]);
 
         return (int) $statement->fetchColumn();
+    }
+
+    public function getExpiredStock(int $articleId): int
+    {
+        $statement = $this->db->prepare(
+            'SELECT COALESCE(SUM(sm.quantity), 0)
+             FROM stock_movements sm
+             INNER JOIN batches b
+                 ON b.id = sm.batch_id
+             WHERE sm.article_id = :article_id
+             AND b.expiry_date < date("now")'
+        );
+
+        $statement->execute([
+            'article_id' => $articleId
+        ]);
+
+        return max(0, (int) $statement->fetchColumn());
     }
 
     public function getStockAtLocation(

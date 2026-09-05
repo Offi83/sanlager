@@ -433,3 +433,11 @@ tbody tr:last-child td {
     padding: 24px;
 }
 
+
+.expired-stock-warning {
+    display: block;
+    margin-top: 5px;
+    color: #b00020;
+    font-size: 13px;
+    font-weight: 700;
+}
