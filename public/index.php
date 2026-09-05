@@ -252,6 +252,19 @@ $articleList = $articles->all($search);
 
 $locations = $stock->locations();
 
+
+$defaultLocationId = null;
+
+foreach ($locations as $location) {
+    if (
+        mb_strtolower(trim($location['name'])) ===
+        'hauptlager'
+    ) {
+        $defaultLocationId = (int) $location['id'];
+        break;
+    }
+}
+
 $articleStock = [];
 
 if ($editArticle) {
@@ -777,18 +790,20 @@ $totalStock = $stock->getTotalStock(
                     required
                 >
 
-                    <option value="">
-                        Bitte auswählen …
-                    </option>
+                <?php foreach ($locations as $location): ?>
 
-                    <?php foreach ($locations as $location): ?>
-
-                        <option
-                            value="<?= (int) $location['id'] ?>"
-                        >
-                            <?= e($location['name']) ?>
-                        </option>
-
+        <option
+            value="<?= (int) $location['id'] ?>"
+            <?= (
+                (int) $location['id'] ===
+                $defaultLocationId
+            )
+                ? 'selected'
+                : ''
+            ?>
+        >
+            <?= e($location['name']) ?>
+        </option>
                     <?php endforeach; ?>
 
                 </select>
