@@ -6,6 +6,7 @@ use Dotenv\Dotenv;
 use LagerApp\Database;
 use LagerApp\ArticleRepository;
 use LagerApp\BatchRepository;
+use LagerApp\CategoryRepository;
 use LagerApp\StockRepository;
 
 $root = dirname(__DIR__);
@@ -24,7 +25,10 @@ $db = $database->connection();
 
 $articles = new ArticleRepository($db);
 $batches = new BatchRepository($db);
+$categories = new CategoryRepository($db);
 $stock = new StockRepository($db);
+
+$categoryList = $categories->all();
 
 function h(?string $value): string
 {
@@ -140,6 +144,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int) ($_POST['minimum_stock'] ?? 0)
             );
 
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+
+            if ($categoryId <= 0 || !$categories->find($categoryId)) {
+                throw new RuntimeException(
+                    'Bitte eine gültige Kategorie auswählen.'
+                );
+            }
+
             if ($name === '') {
                 throw new RuntimeException(
                     'Bitte einen Artikelnamen eingeben.'
@@ -151,7 +163,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $name,
                 $description,
                 $unit !== '' ? $unit : 'Stück',
-                $minimumStock
+                $minimumStock,
+                $categoryId
             );
 
             redirect('?page=articles&message=Artikel+angelegt');
@@ -175,9 +188,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int) ($_POST['minimum_stock'] ?? 0)
             );
 
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+
             if ($id <= 0) {
                 throw new RuntimeException(
                     'Ungültiger Artikel.'
+                );
+            }
+
+            if ($categoryId <= 0 || !$categories->find($categoryId)) {
+                throw new RuntimeException(
+                    'Bitte eine gültige Kategorie auswählen.'
                 );
             }
 
@@ -193,7 +214,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $name,
                 $description,
                 $unit !== '' ? $unit : 'Stück',
-                $minimumStock
+                $minimumStock,
+                $categoryId
             );
 
             redirect(
@@ -746,10 +768,38 @@ if ($page === 'article') {
                     </label>
 
 
-                    <label>
 
-                        <span>
-                            Einheit
+                <label>
+
+                    <span>
+                        Kategorie
+                    </span>
+
+                    <select
+                        name="category_id"
+                        required
+                    >
+
+                        <?php foreach ($categoryList as $category): ?>
+
+                            <option
+                                value="<?= (int) $category['id'] ?>"
+                                <?= $category['name'] === 'Sonstiges' ? 'selected' : '' ?>
+                            >
+                                <?= h($category['name']) ?>
+                            </option>
+
+                        <?php endforeach; ?>
+
+                    </select>
+
+                </label>
+
+
+                <label>
+
+                    <span>
+                        Einheit
                         </span>
 
                         <input
@@ -1397,6 +1447,34 @@ if ($page === 'article') {
                             name="article_number"
                             value="<?= h($editArticle['article_number']) ?>"
                         >
+
+                    </label>
+
+
+
+            <label>
+
+                <span>
+                    Kategorie
+                </span>
+
+                <select
+                    name="category_id"
+                    required
+                >
+
+                    <?php foreach ($categoryList as $category): ?>
+
+                        <option
+                            value="<?= (int) $category['id'] ?>"
+                            <?= (int) $editArticle['category_id'] === (int) $category['id'] ? 'selected' : '' ?>
+                        >
+                            <?= h($category['name']) ?>
+                        </option>
+
+                    <?php endforeach; ?>
+
+                </select>
 
                     </label>
 
