@@ -464,3 +464,251 @@ tbody tr:last-child td {
 .category-row:first-child th {
     padding-top: 8px;
 }
+
+/* =========================================================
+   Artikeldetailseite
+   Bewusst vollständig unter .article-detail-page gekapselt
+   ========================================================= */
+
+.article-detail-page .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    color: #666;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.article-detail-page .back-link:hover {
+    color: #d71920;
+}
+
+.article-detail-page .page-header h1 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    line-height: 1.15;
+}
+
+.article-detail-page .page-header p {
+    max-width: 720px;
+    line-height: 1.5;
+}
+
+.article-detail-page .page-header .actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Bestand */
+
+.article-detail-page .stock-summary {
+    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+    gap: 18px;
+    margin-bottom: 22px;
+}
+
+.article-detail-page .stock-total,
+.article-detail-page .stock-minimum {
+    position: relative;
+    padding: 24px 26px;
+    border-radius: 12px;
+}
+
+.article-detail-page .stock-total {
+    border-left: 4px solid #d71920;
+}
+
+.article-detail-page .stock-total span,
+.article-detail-page .stock-minimum span {
+    margin-bottom: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.article-detail-page .stock-total strong,
+.article-detail-page .stock-minimum strong {
+    display: block;
+    font-size: 32px;
+    line-height: 1.1;
+}
+
+.article-detail-page .stock-total .warning {
+    margin-top: 10px;
+}
+
+.article-detail-page .stock-total .stock-low {
+    color: #b00020;
+}
+
+/* Karten */
+
+.article-detail-page .card + .card {
+    margin-top: 20px;
+}
+
+.article-detail-page .card-header {
+    padding: 18px 22px;
+    background: #fafafa;
+}
+
+.article-detail-page .card-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* Lagerorte / MHD */
+
+.article-detail-page .location-list {
+    padding: 0 22px;
+}
+
+.article-detail-page .location-row {
+    min-height: 64px;
+    padding: 16px 0;
+}
+
+.article-detail-page .location-row strong {
+    font-size: 16px;
+}
+
+.article-detail-page .location-row .stock-value {
+    font-size: 17px;
+}
+
+.article-detail-page .location-row .warning {
+    margin-top: 5px;
+}
+
+.article-detail-page .empty-state.compact {
+    padding: 28px 22px;
+    color: #777;
+    text-align: center;
+}
+
+/* Bestand buchen */
+
+.article-detail-page .stock-form {
+    padding: 22px;
+}
+
+.article-detail-page .stock-form > .form-grid {
+    grid-template-columns:
+        minmax(150px, 1fr)
+        minmax(180px, 1.2fr)
+        minmax(120px, .7fr)
+        minmax(220px, 1.5fr);
+    gap: 16px;
+}
+
+.article-detail-page .stock-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.article-detail-page .stock-form label > span {
+    color: #444;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.article-detail-page .stock-form > label {
+    margin-top: 18px;
+}
+
+.article-detail-page .stock-form textarea {
+    resize: vertical;
+    min-height: 76px;
+}
+
+.article-detail-page .conditional-field {
+    margin-top: 18px;
+    padding: 16px 18px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background: #fafafa;
+}
+
+.article-detail-page .conditional-field .form-help {
+    margin: 8px 0 0;
+}
+
+.article-detail-page .stock-form .form-actions {
+    justify-content: flex-start;
+    margin-top: 20px;
+    padding-top: 20px;
+}
+
+.article-detail-page .stock-form .form-actions .button {
+    min-width: 150px;
+}
+
+/* Touchscreen */
+
+@media (min-width: 701px) {
+
+    .article-detail-page .stock-form input,
+    .article-detail-page .stock-form select {
+        min-height: 48px;
+    }
+
+}
+
+/* Tablet */
+
+@media (max-width: 900px) {
+
+    .article-detail-page .stock-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .article-detail-page .stock-form > .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+}
+
+/* Smartphone */
+
+@media (max-width: 700px) {
+
+    .article-detail-page .page-header .actions {
+        width: 100%;
+    }
+
+    .article-detail-page .page-header .actions .button {
+        width: 100%;
+    }
+
+    .article-detail-page .stock-total,
+    .article-detail-page .stock-minimum {
+        padding: 20px;
+    }
+
+    .article-detail-page .stock-total strong,
+    .article-detail-page .stock-minimum strong {
+        font-size: 28px;
+    }
+
+    .article-detail-page .stock-form {
+        padding: 18px;
+    }
+
+    .article-detail-page .stock-form > .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .article-detail-page .stock-form .form-actions {
+        flex-direction: column;
+    }
+
+    .article-detail-page .stock-form .form-actions .button {
+        width: 100%;
+    }
+
+}

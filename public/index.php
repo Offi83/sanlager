@@ -755,6 +755,8 @@ if ($page === 'article') {
 
     <?php elseif ($page === 'new_article'): ?>
 
+        <div class="new-article-page">
+
         <div class="page-header">
 
             <div>
@@ -919,8 +921,11 @@ if ($page === 'article') {
 
         </div>
 
+        </div>
 
     <?php elseif ($page === 'article' && $article): ?>
+
+        <div class="article-detail-page">
 
         <?php
 
@@ -1412,6 +1417,7 @@ if ($page === 'article') {
 
         </div>
 
+        </div>
 
     <?php elseif ($page === 'edit_article'): ?>
 
