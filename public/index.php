@@ -1557,20 +1557,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (newOption) {
 
-            newOption.hidden =
+            const isIssue =
                 movement === 'issue';
 
+            newOption.disabled = isIssue;
+            newOption.hidden = isIssue;
+
             if (
-                movement === 'issue'
+                isIssue
                 && selection === 'new'
             ) {
 
-                batchSelection.value =
-                    'none';
+                batchSelection.value = 'none';
 
-                selection =
-                    'none';
+                selection = 'none';
             }
+
         }
 
 
