@@ -1421,6 +1421,8 @@ if ($page === 'article') {
 
     <?php elseif ($page === 'edit_article'): ?>
 
+        <div class="edit-article-page">
+
         <?php
 
         $articleId = (int) ($_GET['id'] ?? 0);
@@ -1655,6 +1657,9 @@ if ($page === 'article') {
             </div>
 
         </div>
+
+        </div>
+
 
     <?php endif; ?>
 

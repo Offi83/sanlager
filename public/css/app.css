@@ -712,3 +712,257 @@ tbody tr:last-child td {
     }
 
 }
+
+/* =========================================================
+   Artikel anlegen
+   Bewusst vollständig unter .new-article-page gekapselt
+   ========================================================= */
+
+.new-article-page .page-header {
+    margin-bottom: 22px;
+}
+
+.new-article-page .page-header h1 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    line-height: 1.15;
+}
+
+.new-article-page .page-header p {
+    max-width: 720px;
+    line-height: 1.5;
+}
+
+.new-article-page .page-header .button {
+    min-width: 120px;
+}
+
+/* Formular */
+
+.new-article-page .card {
+    padding: 0;
+}
+
+.new-article-page .form {
+    padding: 24px;
+}
+
+.new-article-page .form-grid {
+    grid-template-columns:
+        minmax(0, 1.5fr)
+        minmax(180px, 1fr)
+        minmax(180px, 1fr);
+    gap: 18px;
+}
+
+.new-article-page .form-grid label,
+.new-article-page .form > label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.new-article-page label > span {
+    color: #444;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.new-article-page input,
+.new-article-page select,
+.new-article-page textarea {
+    font-size: 16px;
+}
+
+.new-article-page textarea {
+    resize: vertical;
+    min-height: 90px;
+}
+
+/* Beschreibung */
+
+.new-article-page .form > label {
+    margin-top: 20px;
+}
+
+/* Buttons */
+
+.new-article-page .form-actions {
+    justify-content: flex-start;
+    margin-top: 22px;
+    padding-top: 20px;
+}
+
+.new-article-page .form-actions .button {
+    min-width: 150px;
+}
+
+/* Touchscreen */
+
+@media (min-width: 701px) {
+
+    .new-article-page input,
+    .new-article-page select {
+        min-height: 48px;
+    }
+
+}
+
+/* Tablet */
+
+@media (max-width: 900px) {
+
+    .new-article-page .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+}
+
+/* Smartphone */
+
+@media (max-width: 700px) {
+
+    .new-article-page .form {
+        padding: 18px;
+    }
+
+    .new-article-page .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .new-article-page .form-actions {
+        flex-direction: column;
+    }
+
+    .new-article-page .form-actions .button {
+        width: 100%;
+    }
+
+}
+
+/* =========================================================
+   Artikel bearbeiten
+   Optik identisch mit "Artikel anlegen"
+   ========================================================= */
+
+.edit-article-page .page-header {
+    margin-bottom: 22px;
+}
+
+.edit-article-page .page-header h1 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    line-height: 1.15;
+}
+
+.edit-article-page .page-header p {
+    max-width: 720px;
+    line-height: 1.5;
+}
+
+.edit-article-page .page-header .button {
+    min-width: 120px;
+}
+
+/* Formular */
+
+.edit-article-page .card {
+    padding: 0;
+}
+
+.edit-article-page .form {
+    padding: 24px;
+}
+
+.edit-article-page .form-grid {
+    grid-template-columns:
+        minmax(0, 1.5fr)
+        minmax(180px, 1fr)
+        minmax(180px, 1fr);
+    gap: 18px;
+}
+
+.edit-article-page .form-grid label,
+.edit-article-page .form > label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.edit-article-page label > span {
+    color: #444;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.edit-article-page input,
+.edit-article-page select,
+.edit-article-page textarea {
+    font-size: 16px;
+}
+
+.edit-article-page textarea {
+    resize: vertical;
+    min-height: 90px;
+}
+
+/* Beschreibung */
+
+.edit-article-page .form > label {
+    margin-top: 20px;
+}
+
+/* Buttons */
+
+.edit-article-page .form-actions {
+    justify-content: flex-start;
+    margin-top: 22px;
+    padding-top: 20px;
+}
+
+.edit-article-page .form-actions .button {
+    min-width: 150px;
+}
+
+/* Touchscreen */
+
+@media (min-width: 701px) {
+
+    .edit-article-page input,
+    .edit-article-page select {
+        min-height: 48px;
+    }
+
+}
+
+/* Tablet */
+
+@media (max-width: 900px) {
+
+    .edit-article-page .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+}
+
+/* Smartphone */
+
+@media (max-width: 700px) {
+
+    .edit-article-page .form {
+        padding: 18px;
+    }
+
+    .edit-article-page .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .edit-article-page .form-actions {
+        flex-direction: column;
+    }
+
+    .edit-article-page .form-actions .button {
+        width: 100%;
+    }
+
+}
