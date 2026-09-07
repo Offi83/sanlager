@@ -1214,3 +1214,32 @@ tbody tr:last-child td {
         page-break-inside: avoid;
     }
 }
+
+/* =========================================================
+   QR-Scanner – Ausbuchen
+   ========================================================= */
+
+.issue-scan-button {
+    margin-bottom: 16px;
+}
+
+.issue-scanner {
+    width: 100%;
+    max-width: 420px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.issue-scanner video {
+    width: 100%;
+    display: block;
+}
+
+.issue-scan-status {
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f1f3f4;
+    color: #444;
+}

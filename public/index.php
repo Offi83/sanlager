@@ -870,6 +870,26 @@ if ($page === 'article' || $page === 'label') {
 
             <div class="card issue-card">
 
+                <button
+                    type="button"
+                    class="button button-primary issue-scan-button"
+                    id="issue-start-scan"
+                >
+                    QR-Code scannen
+                </button>
+
+                <div
+                    id="issue-scanner"
+                    class="issue-scanner"
+                    hidden
+                ></div>
+
+                <div
+                    id="issue-scan-status"
+                    class="issue-scan-status"
+                    hidden
+                ></div>
+
                 <form
                     method="post"
                     class="issue-form"
@@ -1944,6 +1964,162 @@ if ($page === 'article' || $page === 'label') {
     <?php endif; ?>
 
 </main>
+
+
+<script src="https://unpkg.com/html5-qrcode" defer></script>
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    const scanButton =
+        document.getElementById('issue-start-scan');
+
+    const scannerElement =
+        document.getElementById('issue-scanner');
+
+    const scanStatus =
+        document.getElementById('issue-scan-status');
+
+    const articleNumber =
+        document.getElementById('issue-article-number');
+
+
+    if (
+        !scanButton
+        || !scannerElement
+        || !articleNumber
+        || typeof Html5Qrcode === 'undefined'
+    ) {
+        return;
+    }
+
+
+    let scanner = null;
+    let scanning = false;
+
+
+    function showStatus(message) {
+
+        scanStatus.textContent = message;
+        scanStatus.hidden = false;
+
+    }
+
+
+    async function stopScanner() {
+
+        if (!scanner || !scanning) {
+            return;
+        }
+
+        try {
+            await scanner.stop();
+        } catch (error) {
+            console.warn(
+                'Scanner konnte nicht gestoppt werden:',
+                error
+            );
+        }
+
+        scanner.clear();
+
+        scanning = false;
+        scanner = null;
+
+        scannerElement.hidden = true;
+        scanButton.textContent = 'QR-Code scannen';
+
+    }
+
+
+    scanButton.addEventListener('click', async function () {
+
+        if (scanning) {
+            await stopScanner();
+            return;
+        }
+
+
+        scannerElement.hidden = false;
+        scanButton.textContent = 'Scanner beenden';
+
+        showStatus(
+            'Kamera wird gestartet …'
+        );
+
+
+        scanner = new Html5Qrcode(
+            'issue-scanner'
+        );
+
+
+        try {
+
+            await scanner.start(
+                {
+                    facingMode: 'environment'
+                },
+                {
+                    fps: 10,
+                    qrbox: {
+                        width: 250,
+                        height: 250
+                    }
+                },
+                async function (decodedText) {
+
+                    articleNumber.value =
+                        decodedText.trim();
+
+                    showStatus(
+                        'QR-Code erkannt: '
+                        + decodedText
+                    );
+
+                    await stopScanner();
+
+                    /*
+                     * Kurz warten, damit der Nutzer
+                     * die erkannte Nummer noch sehen kann.
+                     */
+                    setTimeout(function () {
+
+                        articleNumber.form.submit();
+
+                    }, 300);
+
+                },
+                function () {
+                    // Kein QR-Code im aktuellen Bild.
+                }
+            );
+
+            scanning = true;
+
+            showStatus(
+                'QR-Code vor die Kamera halten.'
+            );
+
+        } catch (error) {
+
+            console.error(
+                'QR-Scanner konnte nicht gestartet werden:',
+                error
+            );
+
+            await stopScanner();
+
+            showStatus(
+                'Kamera konnte nicht gestartet werden.'
+            );
+
+        }
+
+    });
+
+});
+</script>
 
 
 <script>
