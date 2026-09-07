@@ -98,6 +98,47 @@ public function getStockByBatch(int $articleId): array
         return (int) $statement->fetchColumn();
     }
 
+    public function getTodayIssues(): array
+    {
+        $statement = $this->db->query(
+            'SELECT
+                sm.id,
+                sm.quantity,
+                sm.created_at,
+                a.name AS article_name,
+                a.article_number,
+                a.unit,
+                b.expiry_date,
+                sl.name AS location_name
+             FROM stock_movements sm
+             INNER JOIN articles a
+                ON a.id = sm.article_id
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             INNER JOIN storage_locations sl
+                ON sl.id = sm.location_id
+             WHERE sm.movement_type = "issue"
+             AND date(sm.created_at, "localtime")
+                 = date("now", "localtime")
+             ORDER BY sm.created_at DESC, sm.id DESC'
+        );
+
+        return $statement->fetchAll();
+    }
+
+    public function getTodayIssueCount(): int
+    {
+        $statement = $this->db->query(
+            'SELECT COUNT(*)
+             FROM stock_movements
+             WHERE movement_type = "issue"
+             AND date(created_at, "localtime")
+                 = date("now", "localtime")'
+        );
+
+        return (int) $statement->fetchColumn();
+    }
+
     public function getExpiredStock(int $articleId): int
     {
         $statement = $this->db->prepare(

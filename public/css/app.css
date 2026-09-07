@@ -1243,3 +1243,33 @@ tbody tr:last-child td {
     background: #f1f3f4;
     color: #444;
 }
+
+/* =========================================================
+   Scan & Buchen
+   ========================================================= */
+
+.scan-result {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: #eaf6ea;
+    font-weight: 600;
+}
+
+.scan-result.error {
+    background: #fbeaea;
+}
+
+.today-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.today-summary strong {
+    font-size: 32px;
+}
+
+.today-summary span {
+    color: #666;
+}

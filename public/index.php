@@ -247,6 +247,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
+        | Dauer-Scanner: Scan & Buchen
+        |--------------------------------------------------------------------------
+        */
+        if ($action === 'scan_issue') {
+
+            header('Content-Type: application/json; charset=utf-8');
+
+            try {
+
+                $articleNumber = trim(
+                    $_POST['article_number'] ?? ''
+                );
+
+                if ($articleNumber === '') {
+                    throw new RuntimeException(
+                        'Keine Artikelnummer empfangen.'
+                    );
+                }
+
+                $article = $articles->findByArticleNumber(
+                    $articleNumber
+                );
+
+                if (!$article) {
+                    throw new RuntimeException(
+                        'Artikelnummer nicht gefunden: ' .
+                        $articleNumber
+                    );
+                }
+
+                $mainLocation = $db->query(
+                    "SELECT id
+                     FROM storage_locations
+                     WHERE name = 'Hauptlager'
+                     AND active = 1
+                     LIMIT 1"
+                )->fetchColumn();
+
+                if (!$mainLocation) {
+                    throw new RuntimeException(
+                        'Das Hauptlager wurde nicht gefunden.'
+                    );
+                }
+
+                $result = $stock->issueOldest(
+                    (int) $article['id'],
+                    (int) $mainLocation,
+                    'Scanner-Ausbuchung'
+                );
+
+                $expiryText = $result['expiry_date']
+                    ? formatDate($result['expiry_date'])
+                    : 'ohne MHD';
+
+                echo json_encode([
+                    'success' => true,
+                    'article_name' => $article['name'],
+                    'article_number' => $articleNumber,
+                    'unit' => $article['unit'],
+                    'expiry_date' => $expiryText
+                ]);
+
+            } catch (Throwable $exception) {
+
+                http_response_code(400);
+
+                echo json_encode([
+                    'success' => false,
+                    'error' => $exception->getMessage()
+                ]);
+            }
+
+            exit;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
         | Schnell-Ausbuchung per Artikelnummer / Scanner
         |--------------------------------------------------------------------------
         */
@@ -481,6 +558,14 @@ $article = null;
 $articleStock = [];
 $articleBatches = [];
 $locations = [];
+$todayIssues = [];
+$todayIssueCount = 0;
+
+if ($page === 'today_issues') {
+
+    $todayIssues = $stock->getTodayIssues();
+    $todayIssueCount = $stock->getTodayIssueCount();
+}
 
 if ($page === 'article' || $page === 'label') {
 
@@ -562,6 +647,20 @@ if ($page === 'article' || $page === 'label') {
                 class="<?= $page === 'issue' ? 'active' : '' ?>"
             >
                 Ausbuchen
+            </a>
+
+            <a
+                href="?page=scan_issue"
+                class="<?= $page === 'scan_issue' ? 'active' : '' ?>"
+            >
+                Scan &amp; Buchen
+            </a>
+
+            <a
+                href="?page=today_issues"
+                class="<?= $page === 'today_issues' ? 'active' : '' ?>"
+            >
+                Heute ausgebucht
             </a>
 
             <a
@@ -828,6 +927,193 @@ if ($page === 'article' || $page === 'label') {
 
         </div>
 
+
+    <?php elseif ($page === 'today_issues'): ?>
+
+        <div class="today-issues-page">
+
+            <div class="page-header">
+
+                <div>
+
+                    <h1>Heute ausgebucht</h1>
+
+                    <p>
+                        Übersicht aller heutigen Ausbuchungen.
+                    </p>
+
+                </div>
+
+                <div class="actions">
+
+                    <a
+                        href="?page=today_issues"
+                        class="button"
+                    >
+                        Aktualisieren
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="card">
+
+                <div class="today-summary">
+
+                    <strong>
+                        <?= $todayIssueCount ?>
+                    </strong>
+
+                    <span>
+                        Ausbuchungen heute
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div class="card">
+
+                <?php if (!$todayIssues): ?>
+
+                    <p class="empty">
+                        Heute wurden noch keine Artikel ausgebucht.
+                    </p>
+
+                <?php else: ?>
+
+                    <div class="table-wrapper">
+
+                        <table>
+
+                            <thead>
+
+                                <tr>
+
+                                    <th>Zeit</th>
+                                    <th>Artikel</th>
+                                    <th>Artikelnummer</th>
+                                    <th>Menge</th>
+                                    <th>MHD</th>
+                                    <th>Lagerort</th>
+
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                <?php foreach ($todayIssues as $movement): ?>
+
+                                    <tr>
+
+                                        <td>
+                                            <?= h(
+                                                date(
+                                                    'H:i',
+                                                    strtotime($movement['created_at'])
+                                                )
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <strong>
+                                                <?= h($movement['article_name']) ?>
+                                            </strong>
+                                        </td>
+
+                                        <td>
+                                            <?= h(
+                                                $movement['article_number']
+                                                    ?? ''
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= abs((int) $movement['quantity']) ?>
+                                            <?= h($movement['unit']) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= h(
+                                                formatDate(
+                                                    $movement['expiry_date']
+                                                )
+                                            ) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= h($movement['location_name']) ?>
+                                        </td>
+
+                                    </tr>
+
+                                <?php endforeach; ?>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                <?php endif; ?>
+
+            </div>
+
+        </div>
+
+    <?php elseif ($page === 'scan_issue'): ?>
+
+        <div class="issue-page">
+
+            <div class="page-header">
+
+                <div>
+
+                    <h1>Scan &amp; Buchen</h1>
+
+                    <p>
+                        QR-Code scannen und automatisch
+                        1 Stück aus dem Hauptlager ausbuchen.
+                    </p>
+
+                </div>
+
+            </div>
+
+            <div class="card issue-card">
+
+                <button
+                    type="button"
+                    class="button button-primary issue-scan-button"
+                    id="continuous-scan-start"
+                >
+                    Scanner starten
+                </button>
+
+                <div
+                    id="continuous-scanner"
+                    class="issue-scanner"
+                    hidden
+                ></div>
+
+                <div
+                    id="continuous-scan-status"
+                    class="issue-scan-status"
+                >
+                    Scanner noch nicht gestartet.
+                </div>
+
+                <div
+                    id="continuous-scan-result"
+                    class="scan-result"
+                    hidden
+                ></div>
+
+            </div>
+
+        </div>
 
     <?php elseif ($page === 'issue'): ?>
 
@@ -2119,6 +2405,267 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
 });
+</script>
+
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    const scanButton =
+        document.getElementById('continuous-scan-start');
+
+    const scannerElement =
+        document.getElementById('continuous-scanner');
+
+    const scanStatus =
+        document.getElementById('continuous-scan-status');
+
+    const scanResult =
+        document.getElementById('continuous-scan-result');
+
+
+    if (
+        !scanButton
+        || !scannerElement
+        || !scanStatus
+        || !scanResult
+        || typeof Html5Qrcode === 'undefined'
+    ) {
+        return;
+    }
+
+
+    let scanner = null;
+    let scanning = false;
+    let processing = false;
+
+
+    function showStatus(message) {
+
+        scanStatus.textContent = message;
+
+    }
+
+
+    function showResult(message, error = false) {
+
+        scanResult.textContent = message;
+        scanResult.hidden = false;
+
+        scanResult.classList.toggle(
+            'error',
+            error
+        );
+
+    }
+
+
+    async function stopScanner() {
+
+        if (!scanner) {
+            return;
+        }
+
+        try {
+
+            if (scanning) {
+                await scanner.stop();
+            }
+
+            scanner.clear();
+
+        } catch (error) {
+
+            console.warn(
+                'Scanner konnte nicht gestoppt werden:',
+                error
+            );
+
+        }
+
+        scanner = null;
+        scanning = false;
+
+        scannerElement.hidden = true;
+
+        scanButton.textContent =
+            'Scanner starten';
+
+    }
+
+
+    async function startScanner() {
+
+        scannerElement.hidden = false;
+
+        scanButton.textContent =
+            'Scanner beenden';
+
+        showStatus(
+            'Kamera wird gestartet …'
+        );
+
+
+        scanner = new Html5Qrcode(
+            'continuous-scanner'
+        );
+
+
+        try {
+
+            await scanner.start(
+                {
+                    facingMode: 'environment'
+                },
+                {
+                    fps: 10,
+                    qrbox: {
+                        width: 250,
+                        height: 250
+                    }
+                },
+                async function (decodedText) {
+
+                    if (processing) {
+                        return;
+                    }
+
+                    processing = true;
+
+                    const articleNumber =
+                        decodedText.trim();
+
+                    showStatus(
+                        'Buchung läuft …'
+                    );
+
+                    try {
+
+                        const formData =
+                            new FormData();
+
+                        formData.append(
+                            'action',
+                            'scan_issue'
+                        );
+
+                        formData.append(
+                            'article_number',
+                            articleNumber
+                        );
+
+
+                        const response =
+                            await fetch(
+                                window.location.href,
+                                {
+                                    method: 'POST',
+                                    body: formData
+                                }
+                            );
+
+
+                        const data =
+                            await response.json();
+
+
+                        if (!data.success) {
+
+                            throw new Error(
+                                data.error
+                                    || 'Buchung fehlgeschlagen.'
+                            );
+                        }
+
+
+                        showResult(
+                            data.article_name
+                            + ' – 1 '
+                            + data.unit
+                            + ' ausgebucht – MHD '
+                            + data.expiry_date
+                        );
+
+                        showStatus(
+                            'Bereit für den nächsten Scan.'
+                        );
+
+                    } catch (error) {
+
+                        showResult(
+                            error.message,
+                            true
+                        );
+
+                        showStatus(
+                            'Fehler – nächster Scan möglich.'
+                        );
+
+                    }
+
+
+                    /*
+                     * Kurze Sperre gegen Doppel-Scans.
+                     */
+                    setTimeout(function () {
+
+                        processing = false;
+
+                    }, 800);
+
+                },
+                function () {
+                    // Kein QR-Code erkannt.
+                }
+            );
+
+            scanning = true;
+
+            showStatus(
+                'QR-Code vor die Kamera halten.'
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Scanner konnte nicht gestartet werden:',
+                error
+            );
+
+            await stopScanner();
+
+            showStatus(
+                'Kamera konnte nicht gestartet werden.'
+            );
+
+        }
+
+    }
+
+
+    scanButton.addEventListener(
+        'click',
+        async function () {
+
+            if (scanning) {
+
+                await stopScanner();
+
+                showStatus(
+                    'Scanner beendet.'
+                );
+
+                return;
+            }
+
+            await startScanner();
+
+        }
+    );
+
+});
+
 </script>
 
 
