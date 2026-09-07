@@ -2439,6 +2439,10 @@ document.addEventListener('DOMContentLoaded', function () {
     let scanner = null;
     let scanning = false;
     let processing = false;
+    let lastScannedCode = null;
+    let ignoreLastScannedUntil = 0;
+    let lastResult = null;
+    let lastResultCount = 0;
 
 
     function showStatus(message) {
@@ -2531,10 +2535,25 @@ document.addEventListener('DOMContentLoaded', function () {
                         return;
                     }
 
-                    processing = true;
-
                     const articleNumber =
                         decodedText.trim();
+
+                    /*
+                     * Den zuletzt erfolgreich gescannten Code
+                     * kurz ignorieren, solange er noch vor
+                     * der Kamera gehalten wird.
+                     *
+                     * Andere QR-Codes können sofort gescannt
+                     * werden.
+                     */
+                    if (
+                        articleNumber === lastScannedCode
+                        && Date.now() < ignoreLastScannedUntil
+                    ) {
+                        return;
+                    }
+
+                    processing = true;
 
                     showStatus(
                         'Buchung läuft …'
@@ -2579,9 +2598,36 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
 
 
+                        /*
+                         * Diesen QR-Code für 7 Sekunden sperren.
+                         * So verhindert der Dauer-Scanner
+                         * Mehrfachbuchungen durch einen noch
+                         * vor der Kamera gehaltenen QR-Code.
+                         */
+                        lastScannedCode = articleNumber;
+                        ignoreLastScannedUntil =
+                            Date.now() + 7000;
+
+                        /*
+                         * Aufeinanderfolgende Buchungen desselben
+                         * Artikels zusammenfassen.
+                         */
+                        if (lastResult === articleNumber) {
+
+                            lastResultCount++;
+
+                        } else {
+
+                            lastResult = articleNumber;
+                            lastResultCount = 1;
+
+                        }
+
                         showResult(
                             data.article_name
-                            + ' – 1 '
+                            + ' – '
+                            + lastResultCount
+                            + ' '
                             + data.unit
                             + ' ausgebucht – MHD '
                             + data.expiry_date
@@ -2606,13 +2652,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
                     /*
-                     * Kurze Sperre gegen Doppel-Scans.
+                     * Buchung abgeschlossen.
+                     * Der gleiche Code bleibt über
+                     * ignoreLastScannedUntil gesperrt.
                      */
-                    setTimeout(function () {
-
-                        processing = false;
-
-                    }, 800);
+                    processing = false;
 
                 },
                 function () {
