@@ -8,6 +8,7 @@ use LagerApp\ArticleRepository;
 use LagerApp\BatchRepository;
 use LagerApp\CategoryRepository;
 use LagerApp\StockRepository;
+use LagerApp\QrCodeGenerator;
 
 $root = dirname(__DIR__);
 
@@ -1090,6 +1091,15 @@ if ($page === 'article') {
 
         $minimumStock = (int) $article['minimum_stock'];
 
+        $qrCode = null;
+
+        if (!empty($article['article_number'])) {
+            $qrGenerator = new QrCodeGenerator();
+            $qrCode = $qrGenerator->generate(
+                $article['article_number']
+            );
+        }
+
         $isLow = $totalStock < $minimumStock;
 
         $mainLocationId = null;
@@ -1150,6 +1160,49 @@ if ($page === 'article') {
             </div>
 
         </div>
+
+
+        <?php if ($qrCode !== null): ?>
+
+            <div class="card article-qr-card">
+
+                <div class="card-header">
+
+                    <h2>
+                        QR-Code
+                    </h2>
+
+                </div>
+
+                <div class="article-qr-content">
+
+                    <div class="article-qr-code">
+                        <?= $qrCode ?>
+                    </div>
+
+                    <div class="article-qr-info">
+
+                        <strong>
+                            <?= h($article['name']) ?>
+                        </strong>
+
+                        <span>
+                            Artikelnummer:
+                            <?= h($article['article_number']) ?>
+                        </span>
+
+                        <small>
+                            Dieser QR-Code enthält ausschließlich
+                            die Artikelnummer.
+                        </small>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        <?php endif; ?>
 
 
         <div class="stock-summary">

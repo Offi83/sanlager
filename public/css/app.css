@@ -1033,3 +1033,62 @@ tbody tr:last-child td {
         width: 100%;
     }
 }
+
+/* =========================================================
+   QR-Code im Artikeldetail
+   ========================================================= */
+
+.article-qr-card {
+    margin-bottom: 20px;
+}
+
+.article-qr-content {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 22px;
+}
+
+.article-qr-code {
+    flex: 0 0 180px;
+    width: 180px;
+    height: 180px;
+}
+
+.article-qr-code svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.article-qr-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.article-qr-info strong {
+    font-size: 18px;
+}
+
+.article-qr-info span {
+    color: #555;
+}
+
+.article-qr-info small {
+    margin-top: 8px;
+    color: #777;
+}
+
+@media (max-width: 700px) {
+
+    .article-qr-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .article-qr-code {
+        width: 160px;
+        height: 160px;
+    }
+}
