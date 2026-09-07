@@ -1092,3 +1092,125 @@ tbody tr:last-child td {
         height: 160px;
     }
 }
+
+/* =========================================================
+   A7-Etiketten auf A4
+   ========================================================= */
+
+.label-print-page {
+    width: 210mm;
+    height: 296mm;
+    display: grid;
+    grid-template-columns: repeat(2, 105mm);
+    grid-template-rows: repeat(4, 74mm);
+    margin: 0 auto;
+}
+
+.label {
+    width: 105mm;
+    height: 74mm;
+    border: 0.3mm solid #888;
+    padding: 7mm;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #fff;
+}
+
+.label-category {
+    font-size: 11pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #555;
+    margin-bottom: 4mm;
+}
+
+.label-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6mm;
+}
+
+.label-text {
+    min-width: 0;
+    flex: 1;
+}
+
+.label-name {
+    font-size: 18pt;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+.label-number {
+    margin-top: 5mm;
+    font-size: 11pt;
+    color: #555;
+    font-family: monospace;
+}
+
+.label-qr {
+    flex: 0 0 35mm;
+    width: 35mm;
+    height: 35mm;
+}
+
+.label-qr svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+@media screen {
+    .label-print-page {
+        margin-top: 20px;
+        box-shadow: 0 0 0 1px #ddd;
+    }
+
+    .label {
+        background: #fff;
+    }
+}
+
+@media print {
+
+    @page {
+        size: A4 portrait;
+        margin: 0;
+    }
+
+    html,
+    body {
+        width: 210mm;
+        margin: 0;
+        padding: 0;
+        background: #fff;
+    }
+
+    .topbar,
+    .container > *:not(.label-print-page) {
+        display: none !important;
+    }
+
+    .container {
+        width: 210mm;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .label-print-page {
+        width: 210mm;
+        height: 296mm;
+        margin: 0;
+    }
+
+    .label {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}

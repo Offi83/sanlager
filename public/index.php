@@ -482,7 +482,7 @@ $articleStock = [];
 $articleBatches = [];
 $locations = [];
 
-if ($page === 'article') {
+if ($page === 'article' || $page === 'label') {
 
     $articleId = (int) ($_GET['id'] ?? 0);
 
@@ -496,15 +496,18 @@ if ($page === 'article') {
         redirect('?page=articles');
     }
 
-    $articleStock = $stock->getStockForArticle(
-        $articleId
-    );
+    if ($page === 'article') {
 
-    $articleBatches = $stock->getStockByBatch(
-        $articleId
-    );
+        $articleStock = $stock->getStockForArticle(
+            $articleId
+        );
 
-    $locations = $stock->locations();
+        $articleBatches = $stock->getStockByBatch(
+            $articleId
+        );
+
+        $locations = $stock->locations();
+    }
 }
 
 /*
@@ -909,7 +912,65 @@ if ($page === 'article') {
 
         </div>
 
-    <?php elseif ($page === 'new_article'): ?>
+    <?php elseif ($page === 'label' && $article): ?>
+
+    <div class="label-print-page">
+
+        <?php for ($i = 0; $i < 8; $i++): ?>
+
+            <div class="label">
+
+                <div class="label-category">
+                    <?= h($article['category_name'] ?? 'Sonstiges') ?>
+                </div>
+
+                <div class="label-content">
+
+                    <div class="label-text">
+
+                        <div class="label-name">
+                            <?= h($article['name']) ?>
+                        </div>
+
+                        <?php if (!empty($article['article_number'])): ?>
+
+                            <div class="label-number">
+                                <?= h($article['article_number']) ?>
+                            </div>
+
+                        <?php endif; ?>
+
+                    </div>
+
+                    <?php
+                    $labelQrCode = null;
+
+                    if (!empty($article['article_number'])) {
+                        $labelQrGenerator = new QrCodeGenerator();
+
+                        $labelQrCode = $labelQrGenerator->generate(
+                            $article['article_number']
+                        );
+                    }
+                    ?>
+
+                    <?php if ($labelQrCode !== null): ?>
+
+                        <div class="label-qr">
+                            <?= $labelQrCode ?>
+                        </div>
+
+                    <?php endif; ?>
+
+                </div>
+
+            </div>
+
+        <?php endfor; ?>
+
+    </div>
+
+<?php elseif ($page === 'new_article'): ?>
 
         <div class="new-article-page">
 
@@ -1151,6 +1212,14 @@ if ($page === 'article') {
             <div class="actions">
 
                 <a
+                    href="?page=label&id=<?= (int) $article['id'] ?>"
+                    class="button"
+                    target="_blank"
+                >
+                    Etikett drucken
+                </a>
+
+                <a
                     href="?page=edit_article&id=<?= (int) $article['id'] ?>"
                     class="button"
                 >
@@ -1243,9 +1312,6 @@ if ($page === 'article') {
 
             </div>
 
-        </div>
-
-
         <div class="card">
 
             <div class="card-header">
@@ -1288,9 +1354,6 @@ if ($page === 'article') {
                 <?php endforeach; ?>
 
             </div>
-
-        </div>
-
 
         <div class="card">
 
@@ -1414,9 +1477,6 @@ if ($page === 'article') {
                 <?php endif; ?>
 
             </div>
-
-        </div>
-
 
         <div class="card">
 
@@ -1658,12 +1718,24 @@ if ($page === 'article') {
 
             </div>
 
-            <a
-                href="?page=article&id=<?= (int) $editArticle['id'] ?>"
-                class="button button-secondary"
-            >
-                Abbrechen
-            </a>
+            <div class="actions">
+
+                <a
+                    href="?page=label&id=<?= (int) $editArticle['id'] ?>"
+                    class="button"
+                    target="_blank"
+                >
+                    Etikett drucken
+                </a>
+
+                <a
+                    href="?page=article&id=<?= (int) $editArticle['id'] ?>"
+                    class="button button-secondary"
+                >
+                    Abbrechen
+                </a>
+
+            </div>
 
         </div>
 
