@@ -2,6 +2,6 @@
 /data/
 /.env
 .DS_Store
-*.sqlite
-*.sqlite3
-*.db
+/database/*.sqlite
+/database/*.sqlite3
+/database/*.db
