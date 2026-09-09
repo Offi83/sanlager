@@ -40,21 +40,21 @@ SanLager besteht aus einer webbasierten Anwendung und optional einem fest instal
 
 ```text
 ┌──────────────────────────────┐
-│          SanLager             │
-│      Webanwendung             │
+│          SanLager            │
+│        Webanwendung          │
 │                              │
-│      PHP / SQLite             │
+│        PHP / SQLite          │
 └──────────────┬───────────────┘
                │
                │ HTTPS
                │
 ┌──────────────▼───────────────┐
-│       Raspberry Pi            │
+│       Raspberry Pi           │
 │                              │
-│       7" Touchscreen          │
-│       Chromium Kiosk          │
+│       7" Touchscreen         │
+│       Chromium Kiosk         │
 │                              │
-│       SanLager Terminal       │
+│      SanLager Terminal       │
 └──────────────────────────────┘
 ```
 
