@@ -754,7 +754,7 @@ if ($page === 'article' || $page === 'label') {
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>DRK Lager-App</title>
+    <title>SanLager</title>
 
     <link
         rel="stylesheet"
@@ -775,8 +775,8 @@ if ($page === 'article' || $page === 'label') {
         alt="DRK Bereitschaften"
     >
     <div class="brand-text">
-        <strong>DRK Lager-App</strong>
-        <span>Sanitätslager</span>
+        <strong>SanLager</strong>
+        <span>Materialverwaltung</span>
     </div>
 </a>
 
