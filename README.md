@@ -36,6 +36,15 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 
 ---
 
+## Screenshots
+
+![Ausbuchen - bei Smartdevices auch via Kamera](images/schema_lager.png)
+![Artikelübersicht](images/schema_lager.png)
+![Heute ausgebuchte Artikel](images/ausgebucht.png)
+![Anlegen/Sortieren/Anpassen der Kategorien](images/kategorien.png)
+
+---
+
 ## Aufbau
 
 SanLager besteht aus einer webbasierten Anwendung und optional einem fest installierten Lagerterminal.
