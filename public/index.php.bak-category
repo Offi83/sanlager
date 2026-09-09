@@ -113,7 +113,7 @@ function expiryWarning(?string $date): string
     return '';
 }
 
-$page = $_GET['page'] ?? 'issue';
+$page = $_GET['page'] ?? 'articles';
 $action = $_POST['action'] ?? null;
 
 $error = null;
@@ -159,14 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
             }
 
-            if ($articleNumber === '') {
-                throw new RuntimeException(
-                    'Bitte eine Artikelnummer eingeben.'
-                );
-            }
-
             $articles->create(
-                $articleNumber,
+                $articleNumber !== '' ? $articleNumber : null,
                 $name,
                 $description,
                 $unit !== '' ? $unit : 'Stück',
@@ -367,154 +361,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
-        | Kategorie anlegen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'create_category') {
-
-            $name = trim($_POST['name'] ?? '');
-            $shortName = trim($_POST['short_name'] ?? '');
-            $color = trim($_POST['color'] ?? '');
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Kategorienamen eingeben.'
-                );
-            }
-
-            if ($shortName === '') {
-                throw new RuntimeException(
-                    'Bitte ein Kürzel eingeben.'
-                );
-            }
-
-            if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
-                throw new RuntimeException(
-                    'Ungültige Farbe.'
-                );
-            }
-
-            $categories->create(
-                $name,
-                mb_strtoupper($shortName),
-                $color
-            );
-
-            redirect('?page=categories&message=Kategorie+angelegt');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorie bearbeiten
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'update_category') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-            $name = trim($_POST['name'] ?? '');
-            $shortName = trim($_POST['short_name'] ?? '');
-            $color = trim($_POST['color'] ?? '');
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültige Kategorie.'
-                );
-            }
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Kategorienamen eingeben.'
-                );
-            }
-
-            if ($shortName === '') {
-                throw new RuntimeException(
-                    'Bitte ein Kürzel eingeben.'
-                );
-            }
-
-            if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
-                throw new RuntimeException(
-                    'Ungültige Farbe.'
-                );
-            }
-
-            $categories->update(
-                $id,
-                $name,
-                mb_strtoupper($shortName),
-                $color
-            );
-
-            redirect('?page=categories&message=Kategorie+gespeichert');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorie löschen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'delete_category') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültige Kategorie.'
-                );
-            }
-
-            if ($categories->articleCount($id) > 0) {
-                throw new RuntimeException(
-                    'Die Kategorie kann nicht gelöscht werden, solange Artikel dieser Kategorie zugeordnet sind.'
-                );
-            }
-
-            $categories->delete($id);
-
-            redirect('?page=categories&message=Kategorie+gelöscht');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorien sortieren
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'reorder_categories') {
-
-            header('Content-Type: application/json; charset=utf-8');
-
-            try {
-
-                $ids = $_POST['ids'] ?? [];
-
-                if (!is_array($ids)) {
-                    throw new RuntimeException(
-                        'Ungültige Kategorienreihenfolge.'
-                    );
-                }
-
-                $categories->reorder($ids);
-
-                echo json_encode([
-                    'success' => true
-                ]);
-
-            } catch (Throwable $exception) {
-
-                http_response_code(400);
-
-                echo json_encode([
-                    'success' => false,
-                    'error' => $exception->getMessage()
-                ]);
-            }
-
-            exit;
-        }
-
-        /*
-        |--------------------------------------------------------------------------
         | Bestand buchen
         |--------------------------------------------------------------------------
         */
@@ -666,11 +512,6 @@ $search = trim($_GET['search'] ?? '');
 $articleList = [];
 $selectedCategoryId = null;
 
-if ($page === 'categories') {
-
-    $categoryList = $categories->all();
-}
-
 if ($page === 'articles') {
 
     $categoryParam = (int) ($_GET['category'] ?? 0);
@@ -691,16 +532,6 @@ $articleBatches = [];
 $locations = [];
 $todayIssues = [];
 $todayIssueCount = 0;
-$editCategory = null;
-
-if ($page === 'categories' && isset($_GET['edit'])) {
-
-    $editCategoryId = (int) $_GET['edit'];
-
-    if ($editCategoryId > 0) {
-        $editCategory = $categories->find($editCategoryId);
-    }
-}
 
 if ($page === 'today_issues') {
 
@@ -769,31 +600,7 @@ if ($page === 'article' || $page === 'label') {
 
     <div class="topbar-inner">
 
-<a href="?page=issue" class="brand">
-    <img
-        src="/images/Logo_DRK_Bereitschaften_RGB.png"
-        alt="DRK Bereitschaften"
-    >
-    <div class="brand-text">
-        <strong>DRK Lager-App</strong>
-        <span>Sanitätslager</span>
-    </div>
-</a>
-
-<nav>
-    <a href="?page=issue" class="<?= $page === 'issue' ? 'active' : '' ?>">
-        Ausbuchen
-    </a>
-    <a href="?page=today_issues" class="<?= $page === 'today_issues' ? 'active' : '' ?>">
-        Heute ausgebucht
-    </a>
-    <a href="?page=articles" class="<?= $page === 'articles' ? 'active' : '' ?>">
-        Artikel
-    </a>
-    <a href="?page=categories" class="<?= $page === 'categories' ? 'active' : '' ?>">
-        Kategorien
-    </a>
-</nav>
+<a href="?page=articles" class="brand"> <img src="/images/Logo_DRK_Bereitschaften_RGB.png" alt="DRK Bereitschaften" > <div class="brand-text"> <strong>DRK Lager-App</strong> <span>Sanitätslager</span> </div> </a> <nav> <a href="?page=articles" class="active"> Artikel </a> <a href="?page=issue"> Ausbuchen </a>  <a href="?page=today_issues"> Heute ausgebucht </a> <a href="?page=new_article"> + Artikel </a> </nav>
 
     </div>
 
@@ -818,370 +625,7 @@ if ($page === 'article' || $page === 'label') {
     <?php endif; ?>
 
 
-    <?php if ($page === 'categories'): ?>
-
-        <div class="page-header">
-
-            <div>
-
-                <h1>Kategorien</h1>
-
-                <p>
-                    Kategorien für die Artikelverwaltung verwalten und sortieren.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div class="category-layout">
-
-            <section class="card">
-
-                <div class="card-header">
-
-                    <h2>
-                        <?= $editCategory ? 'Kategorie bearbeiten' : 'Neue Kategorie' ?>
-                    </h2>
-
-                </div>
-
-                <form method="post" class="form">
-
-                    <input
-                        type="hidden"
-                        name="action"
-                        value="<?= $editCategory ? 'update_category' : 'create_category' ?>"
-                    >
-
-                    <?php if ($editCategory): ?>
-
-                        <input
-                            type="hidden"
-                            name="id"
-                            value="<?= (int) $editCategory['id'] ?>"
-                        >
-
-                    <?php endif; ?>
-
-
-                    <label>
-
-                        <span>Name</span>
-
-                        <input
-                            type="text"
-                            name="name"
-                            required
-                            maxlength="100"
-                            value="<?= h($editCategory['name'] ?? '') ?>"
-                            placeholder="z. B. Verbandmaterial"
-                        >
-
-                    </label>
-
-
-                    <label>
-
-                        <span>Kürzel</span>
-
-                        <input
-                            type="text"
-                            name="short_name"
-                            required
-                            maxlength="20"
-                            value="<?= h($editCategory['short_name'] ?? '') ?>"
-                            placeholder="z. B. VM"
-                        >
-
-                    </label>
-
-
-                    <label>
-
-                        <span>Farbe</span>
-
-                        <div class="category-color-input">
-
-                            <input
-                                type="color"
-                                name="color"
-                                value="<?= h($editCategory['color'] ?? '#d71920') ?>"
-                                title="Kategorie-Farbe auswählen"
-                            >
-
-                            <span>
-                                Farbe der Kategorie
-                            </span>
-
-                        </div>
-
-                    </label>
-
-
-                    <div class="form-actions">
-
-                        <button
-                            type="submit"
-                            class="button primary"
-                        >
-                            <?= $editCategory ? 'Kategorie speichern' : 'Kategorie anlegen' ?>
-                        </button>
-
-                        <?php if ($editCategory): ?>
-
-                            <a
-                                href="?page=categories"
-                                class="button secondary"
-                            >
-                                Abbrechen
-                            </a>
-
-                        <?php endif; ?>
-
-                    </div>
-
-                </form>
-
-            </section>
-
-
-            <section class="card">
-
-                <div class="card-header">
-
-                    <h2>Kategorien</h2>
-
-                </div>
-
-                <div class="card-body">
-
-                    <p class="form-help">
-                        Kategorien per Drag &amp; Drop in die gewünschte Reihenfolge ziehen.
-                    </p>
-
-
-                    <div
-                        id="category-list"
-                        class="category-list"
-                    >
-
-                        <?php foreach ($categoryList as $category): ?>
-
-                            <div
-                                class="category-row"
-                                draggable="true"
-                                data-category-id="<?= (int) $category['id'] ?>"
-                            >
-
-                                <div class="category-drag">
-                                    ⋮⋮
-                                </div>
-
-
-                                <div
-                                    class="category-color"
-                                    style="background-color: <?= h($category['color']) ?>"
-                                ></div>
-
-
-                                <div class="category-info">
-
-                                    <strong>
-                                        <?= h($category['name']) ?>
-                                    </strong>
-
-                                    <span>
-                                        <?= h($category['short_name']) ?>
-                                    </span>
-
-                                </div>
-
-
-                                <div class="category-actions">
-
-                                    <a
-                                        href="?page=categories&edit=<?= (int) $category['id'] ?>"
-                                        class="button secondary small"
-                                    >
-                                        Bearbeiten
-                                    </a>
-
-
-                                    <form
-                                        method="post"
-                                        onsubmit="return confirm('Kategorie wirklich löschen?');"
-                                    >
-
-                                        <input
-                                            type="hidden"
-                                            name="action"
-                                            value="delete_category"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="id"
-                                            value="<?= (int) $category['id'] ?>"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            class="button danger small"
-                                        >
-                                            Löschen
-                                        </button>
-
-                                    </form>
-
-                                </div>
-
-                            </div>
-
-                        <?php endforeach; ?>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-        </div>
-
-
-        <script>
-
-            (() => {
-
-                const list = document.getElementById('category-list');
-
-                if (!list) {
-                    return;
-                }
-
-                let dragged = null;
-
-
-                list.addEventListener('dragstart', event => {
-
-                    const row = event.target.closest('.category-row');
-
-                    if (!row) {
-                        return;
-                    }
-
-                    dragged = row;
-                    row.classList.add('dragging');
-
-                    event.dataTransfer.effectAllowed = 'move';
-
-                });
-
-
-                list.addEventListener('dragend', event => {
-
-                    const row = event.target.closest('.category-row');
-
-                    if (row) {
-                        row.classList.remove('dragging');
-                    }
-
-                    dragged = null;
-
-                    saveOrder();
-
-                });
-
-
-                list.addEventListener('dragover', event => {
-
-                    event.preventDefault();
-
-                    if (!dragged) {
-                        return;
-                    }
-
-                    const target = event.target.closest('.category-row');
-
-                    if (!target || target === dragged) {
-                        return;
-                    }
-
-                    const rect = target.getBoundingClientRect();
-
-                    const before =
-                        event.clientY <
-                        rect.top + rect.height / 2;
-
-                    if (before) {
-                        list.insertBefore(dragged, target);
-                    } else {
-                        list.insertBefore(
-                            dragged,
-                            target.nextSibling
-                        );
-                    }
-
-                });
-
-
-                function saveOrder() {
-
-                    const ids = [
-                        ...list.querySelectorAll('.category-row')
-                    ].map(row => row.dataset.categoryId);
-
-
-                    const formData = new FormData();
-
-                    formData.append(
-                        'action',
-                        'reorder_categories'
-                    );
-
-
-                    ids.forEach(id => {
-                        formData.append('ids[]', id);
-                    });
-
-
-                    fetch('', {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-
-                        if (!data.success) {
-
-                            alert(
-                                data.error ||
-                                'Die Reihenfolge konnte nicht gespeichert werden.'
-                            );
-
-                        }
-
-                    })
-                    .catch(() => {
-
-                        alert(
-                            'Die Reihenfolge konnte nicht gespeichert werden.'
-                        );
-
-                    });
-
-                }
-
-            })();
-
-        </script>
-
-
-    <?php elseif ($page === 'articles'): ?>
+    <?php if ($page === 'articles'): ?>
 
         <div class="page-header">
 
@@ -1324,14 +768,9 @@ if ($page === 'article' || $page === 'label') {
                             $currentCategoryId = (int) ($item['category_id'] ?? 0);
                             ?>
 
-                            <tr
-                                class="article-category-row"
-                                style="background-color: <?= h($item['category_color'] ?? '#64748b') ?>;"
-                            >
+                            <tr class="category-row">
                                 <th colspan="5">
-                                    <span class="article-category-name">
-                                        <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
-                                    </span>
+                                    <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
                                 </th>
                             </tr>
 
@@ -1779,19 +1218,13 @@ if ($page === 'article' || $page === 'label') {
                     <label>
 
                         <span>
-                            Artikelnummer *
+                            Artikelnummer
                         </span>
 
                         <input
                             type="text"
                             name="article_number"
-                            id="new-article-number"
-                            required
                         >
-
-                        <small class="form-hint">
-                            Vorschlag wird aus Kategorie und Artikelname erzeugt.
-                        </small>
 
                     </label>
 
@@ -1812,7 +1245,6 @@ if ($page === 'article' || $page === 'label') {
 
                             <option
                                 value="<?= (int) $category['id'] ?>"
-                                data-short-name="<?= h($category['short_name']) ?>"
                                 <?= $category['name'] === 'Sonstiges' ? 'selected' : '' ?>
                             >
                                 <?= h($category['name']) ?>
@@ -3190,196 +2622,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 });
 
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    /*
-     * Diese Logik gilt ausschließlich für das Formular
-     * "Artikel anlegen".
-     *
-     * Das Bearbeiten-Formular verwendet update_article
-     * und wird hier bewusst nicht angesprochen.
-     */
-
-    const actionInput =
-        document.querySelector(
-            'input[name="action"][value="create_article"]'
-        );
-
-    if (!actionInput) {
-        return;
-    }
-
-
-    const form =
-        actionInput.closest('form');
-
-    if (!form) {
-        return;
-    }
-
-
-    const nameInput =
-        form.querySelector(
-            'input[name="name"]'
-        );
-
-    const articleNumberInput =
-        form.querySelector(
-            'input[name="article_number"]'
-        );
-
-    const categorySelect =
-        form.querySelector(
-            'select[name="category_id"]'
-        );
-
-
-    if (
-        !nameInput
-        || !articleNumberInput
-        || !categorySelect
-    ) {
-        return;
-    }
-
-
-    /*
-     * Hier merken wir uns den zuletzt automatisch
-     * erzeugten Wert.
-     *
-     * Solange der Benutzer diesen Wert nicht verändert,
-     * darf die Anwendung ihn aktualisieren.
-     */
-    let generatedValue = '';
-
-
-    function slugify(value) {
-
-        return value
-            .trim()
-            .toLowerCase()
-
-            /*
-             * Deutsche Umlaute vor normalize() umwandeln,
-             * damit daraus ae/oe/ue statt nur a/o/u wird.
-             */
-            .replace(/ä/g, 'ae')
-            .replace(/ö/g, 'oe')
-            .replace(/ü/g, 'ue')
-            .replace(/ß/g, 'ss')
-
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-
-            /*
-             * Alles außer Buchstaben und Zahlen
-             * wird zu einem Bindestrich.
-             */
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-
-    }
-
-
-    function updateArticleNumberSuggestion() {
-
-        /*
-         * Wenn der Benutzer die automatisch erzeugte
-         * Artikelnummer selbst geändert hat, nichts
-         * mehr automatisch überschreiben.
-         */
-        if (
-            articleNumberInput.value !== ''
-            && articleNumberInput.value !== generatedValue
-        ) {
-            return;
-        }
-
-
-        const selectedOption =
-            categorySelect.options[
-                categorySelect.selectedIndex
-            ];
-
-
-        const shortName =
-            selectedOption
-                ? selectedOption.dataset.shortName || ''
-                : '';
-
-
-        const name =
-            nameInput.value.trim();
-
-
-        const categoryPart =
-            slugify(shortName);
-
-
-        const namePart =
-            slugify(name);
-
-
-        let suggestion = '';
-
-
-        if (categoryPart && namePart) {
-
-            suggestion =
-                categoryPart
-                + '-'
-                + namePart;
-
-        } else if (categoryPart) {
-
-            suggestion = categoryPart;
-
-        } else {
-
-            suggestion = namePart;
-
-        }
-
-
-        generatedValue =
-            suggestion;
-
-
-        articleNumberInput.value =
-            suggestion;
-
-    }
-
-
-    /*
-     * Artikelname geändert:
-     * Artikelnummer-Vorschlag aktualisieren.
-     */
-    nameInput.addEventListener(
-        'input',
-        updateArticleNumberSuggestion
-    );
-
-
-    /*
-     * Kategorie geändert:
-     * Artikelnummer-Vorschlag aktualisieren.
-     */
-    categorySelect.addEventListener(
-        'change',
-        updateArticleNumberSuggestion
-    );
-
-
-    /*
-     * Initialen Vorschlag erzeugen.
-     */
-    updateArticleNumberSuggestion();
-
-});
 </script>
 
 </body>
