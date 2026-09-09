@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $categoryId
             );
 
-            redirect('?page=articles&message=Artikel+angelegt');
+            redirect('?page=new_article&message=Artikel+angelegt');
         }
 
         /*
