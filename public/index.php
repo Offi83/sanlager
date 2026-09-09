@@ -1202,7 +1202,7 @@ if ($page === 'article' || $page === 'label') {
 
         </div>
 
-        <div class="card">
+        <div class="card article-search-card">
         <div class="card-header"><h2>Suche Artikel</h2></div>
         <div class="card-body">
         <form

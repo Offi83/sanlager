@@ -1232,3 +1232,107 @@ tbody tr:last-child td {
     }
 
 }
+
+/* Kompakte Artikelsuche auf kleinen Touchscreens */
+@media (max-width: 800px) {
+
+    .card:has(.search-form) .card-header {
+        display: none;
+    }
+
+    .card:has(.search-form) .card-body {
+        padding: 6px 8px;
+    }
+
+    .search-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .search-form input[type="search"] {
+        min-width: 0;
+        height: 36px;
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    .search-form .category-filter {
+        display: none;
+    }
+
+    .search-form .button {
+        min-height: 36px;
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .search-form .button-secondary {
+        grid-column: 2;
+    }
+
+}
+
+/* =========================================================
+   Raspberry: Artikelsuche kompakt
+   ========================================================= */
+
+@media screen and (max-width: 800px) {
+
+    .article-search-card {
+        margin-bottom: 10px !important;
+    }
+
+    .article-search-card .card-header {
+        display: none !important;
+    }
+
+    .article-search-card .card-body {
+        padding: 6px 8px !important;
+    }
+
+    .article-search-card form.search-form {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin: 0 !important;
+        width: 100% !important;
+    }
+
+    .article-search-card form.search-form input[type="hidden"] {
+        display: none !important;
+    }
+
+    .article-search-card form.search-form input[type="search"] {
+        display: block !important;
+        flex: 1 1 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        margin: 0 !important;
+        padding: 6px 10px !important;
+        box-sizing: border-box !important;
+        font-size: 13px !important;
+    }
+
+    .article-search-card form.search-form select.category-filter {
+        display: none !important;
+    }
+
+    .article-search-card form.search-form button[type="submit"] {
+        display: block !important;
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        margin: 0 !important;
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+        white-space: nowrap !important;
+    }
+
+}
