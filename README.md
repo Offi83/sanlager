@@ -89,7 +89,7 @@ Die technische Dokumentation ist in einzelne Bereiche aufgeteilt.
 
 ### 🗄️ Datenbank
 
-Dokumentation der Datenbankstruktur und der einzelnen Tabellen.
+➡️ **[Dokumentation der Datenbankstruktur und der einzelnen Tabellen.](docs/10-datenbank.md)**
 
 ### 🖥️ Raspberry Pi
 
@@ -107,7 +107,7 @@ Einrichtung des Raspberry Pi als festes SanLager-Terminal:
 
 ### 🔧 Entwicklung
 
-Dokumentation zur Projektstruktur, Entwicklung und Bereitstellung der Anwendung.
+**[Dokumentation zur Projektstruktur, Entwicklung und Bereitstellung der Anwendung.](docs/11-entwicklung.md)**
 
 ---
 
