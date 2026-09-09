@@ -782,7 +782,7 @@ if ($page === 'article' || $page === 'label') {
 
 <nav>
     <a href="?page=issue" class="<?= $page === 'issue' ? 'active' : '' ?>">
-        Ausbuchen
+        iAusbuchen
     </a>
     <a href="?page=today_issues" class="<?= $page === 'today_issues' ? 'active' : '' ?>">
         Heute ausgebucht
