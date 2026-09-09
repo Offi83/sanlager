@@ -628,49 +628,7 @@ if ($page === 'article' || $page === 'label') {
 
     <div class="topbar-inner">
 
-        <div class="brand">
-            <strong>DRK Lager-App</strong>
-            <span>Sanitätslager</span>
-        </div>
-
-        <nav>
-
-            <a
-                href="?page=articles"
-                class="<?= $page === 'articles' ? 'active' : '' ?>"
-            >
-                Artikel
-            </a>
-
-            <a
-                href="?page=issue"
-                class="<?= $page === 'issue' ? 'active' : '' ?>"
-            >
-                Ausbuchen
-            </a>
-
-            <a
-                href="?page=scan_issue"
-                class="<?= $page === 'scan_issue' ? 'active' : '' ?>"
-            >
-                Scan &amp; Buchen
-            </a>
-
-            <a
-                href="?page=today_issues"
-                class="<?= $page === 'today_issues' ? 'active' : '' ?>"
-            >
-                Heute ausgebucht
-            </a>
-
-            <a
-                href="?page=new_article"
-                class="<?= $page === 'new_article' ? 'active' : '' ?>"
-            >
-                + Artikel
-            </a>
-
-        </nav>
+<a href="?page=articles" class="brand"> <img src="/images/Logo_DRK_Bereitschaften_RGB.png" alt="DRK Bereitschaften" > <div class="brand-text"> <strong>DRK Lager-App</strong> <span>Sanitätslager</span> </div> </a> <nav> <a href="?page=articles" class="active"> Artikel </a> <a href="?page=issue"> Ausbuchen </a> <a href="?page=scan_issue"> Scan &amp; Buchen </a> <a href="?page=today_issues"> Heute ausgebucht </a> <a href="?page=new_article"> + Artikel </a> </nav>
 
     </div>
 
@@ -716,7 +674,9 @@ if ($page === 'article' || $page === 'label') {
 
         </div>
 
-
+        <div class="card">
+        <div class="card-header"><h2>Suche Artikel</h2></div>
+        <div class="card-body">
         <form
             method="get"
             class="search-form"
@@ -777,7 +737,8 @@ if ($page === 'article' || $page === 'label') {
             <?php endif; ?>
 
         </form>
-
+        </div>
+        </div>
 
         <div class="card">
 
@@ -991,7 +952,7 @@ if ($page === 'article' || $page === 'label') {
 
                                 <tr>
 
-                                    <th>Zeit</th>
+
                                     <th>Artikel</th>
                                     <th>Artikelnummer</th>
                                     <th>Menge</th>
@@ -1008,14 +969,7 @@ if ($page === 'article' || $page === 'label') {
 
                                     <tr>
 
-                                        <td>
-                                            <?= h(
-                                                date(
-                                                    'H:i',
-                                                    strtotime($movement['created_at'])
-                                                )
-                                            ) ?>
-                                        </td>
+
 
                                         <td>
                                             <strong>
@@ -1031,8 +985,10 @@ if ($page === 'article' || $page === 'label') {
                                         </td>
 
                                         <td>
-                                            <?= abs((int) $movement['quantity']) ?>
-                                            <?= h($movement['unit']) ?>
+                                            <strong>
+                                                <?= (int) $movement['quantity'] ?>
+                                                <?= h($movement['unit']) ?>
+                                            </strong>
                                         </td>
 
                                         <td>

@@ -102,14 +102,12 @@ public function getStockByBatch(int $articleId): array
     {
         $statement = $this->db->query(
             'SELECT
-                sm.id,
-                sm.quantity,
-                sm.created_at,
                 a.name AS article_name,
                 a.article_number,
                 a.unit,
                 b.expiry_date,
-                sl.name AS location_name
+                sl.name AS location_name,
+                ABS(SUM(sm.quantity)) AS quantity
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
@@ -120,7 +118,17 @@ public function getStockByBatch(int $articleId): array
              WHERE sm.movement_type = "issue"
              AND date(sm.created_at, "localtime")
                  = date("now", "localtime")
-             ORDER BY sm.created_at DESC, sm.id DESC'
+             GROUP BY
+                sm.article_id,
+                sm.batch_id,
+                sm.location_id
+             ORDER BY
+                a.name COLLATE NOCASE,
+                CASE
+                    WHEN b.expiry_date IS NULL THEN 1
+                    ELSE 0
+                END,
+                b.expiry_date'
         );
 
         return $statement->fetchAll();
