@@ -771,7 +771,7 @@ if ($page === 'article' || $page === 'label') {
 
 <a href="?page=issue" class="brand">
     <img
-        src="/images/Logo_DRK_Bereitschaften_RGB.png"
+        src="/images/pflaster.svg"
         alt="DRK Bereitschaften"
     >
     <div class="brand-text">
