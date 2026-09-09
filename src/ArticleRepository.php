@@ -37,6 +37,7 @@ class ArticleRepository
         $sql = 'SELECT
                     a.*,
                     c.name AS category_name,
+                    c.color AS category_color,
                     c.sort_order AS category_sort_order
                 FROM articles a
                 LEFT JOIN article_categories c
@@ -59,6 +60,7 @@ class ArticleRepository
             'SELECT
                 a.*,
                 c.name AS category_name,
+                c.color AS category_color,
                 c.sort_order AS category_sort_order
              FROM articles a
              LEFT JOIN article_categories c
