@@ -6,7 +6,8 @@
 
 Die Anwendung wurde speziell für den praktischen Einsatz im Sanitätslager entwickelt. Im Mittelpunkt stehen eine **einfache Bedienung**, eine **schnelle Bestandsübersicht** und die **Verwaltung von Mindesthaltbarkeitsdaten**.
 
-Das System soll die bisherige manuelle Lagerverwaltung vereinfachen und jederzeit einen schnellen Überblick über den aktuellen Bestand ermöglichen.
+Das System soll jederzeit einen schnellen Überblick über den aktuellen Bestand ermöglichen. Hierzu wird das Material in Kisten gelagert die entsprechent mit einem QR-Code-Etikett das in der App erzeugt werden kann beschriftet.
+![SanLager Schema](images/schema_lager.png)
 
 Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 
