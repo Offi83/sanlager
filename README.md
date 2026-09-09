@@ -9,6 +9,7 @@ Die Anwendung wurde speziell für den praktischen Einsatz im Sanitätslager entw
 Das System soll die bisherige manuelle Lagerverwaltung vereinfachen und jederzeit einen schnellen Überblick über den aktuellen Bestand ermöglichen.
 
 Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
+
 ---
 
 ## Funktionen
