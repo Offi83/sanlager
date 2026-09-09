@@ -37,18 +37,17 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 ---
 
 ## Screenshots
-
-![Ausbuchen - auch via Kamera](images/ausbuchen.png)
 *Ausbuchen - auch via Kamera*
+![Ausbuchen - auch via Kamera](images/ausbuchen.png)
 
-![Artikelübersicht](images/artikel.png)
 *Artikelübersicht*
+![Artikelübersicht](images/artikel.png)
 
-![Heute ausgebuchte Artikel](images/ausgebucht.png)
 *Heute ausgebuchte Artikel*
+![Heute ausgebuchte Artikel](images/ausgebucht.png)
 
-![Anlegen/Sortieren/Anpassen der Kategorien](images/kategorien.png)
 *Kategorien Anlegen/Sortieren/Anpassen*
+![Anlegen/Sortieren/Anpassen der Kategorien](images/kategorien.png)
 
 ---
 
