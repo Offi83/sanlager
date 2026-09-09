@@ -1302,7 +1302,7 @@ if ($page === 'article' || $page === 'label') {
                         <th>Artikelnummer</th>
                         <th>Einheit</th>
                         <th>Mindestbestand</th>
-                        <th>Aktion</th>
+                        <th>Bestand</th>
                     </tr>
 
                     </thead>
@@ -1386,13 +1386,12 @@ if ($page === 'article' || $page === 'label') {
                                 <?= (int) $item['minimum_stock'] ?>
                             </td>
 
-                            <td>
+                            <td class="article-stock-cell">
 
                                 <a
-                                    class="button button-small"
                                     href="?page=article&id=<?= (int) $item['id'] ?>"
+                                    class="article-stock-link"
                                 >
-                                    Bestand:
                                     <strong class="<?= $isLow ? 'stock-low' : '' ?>">
                                         <?= $total ?>
                                     </strong>
@@ -1400,10 +1399,9 @@ if ($page === 'article' || $page === 'label') {
 
                                 <?php if ($expiredStock > 0): ?>
 
-                                    <span class="expired-stock-warning">
-                                        MHD abgelaufen: <?= $expiredStock ?>
-                                        <?= h($item['unit']) ?>
-                                    </span>
+                                    <small class="expired-stock-warning">
+                                        MHD: <?= $expiredStock ?> abgelaufen
+                                    </small>
 
                                 <?php endif; ?>
 

@@ -1129,3 +1129,106 @@ tbody tr:last-child td {
     font-weight: 700;
     line-height: 1.3;
 }
+
+/* Kompakte Artikelübersicht für kleine Touchscreens */
+.article-stock-cell {
+    white-space: nowrap;
+}
+
+.article-stock-link {
+    display: inline-block;
+    color: inherit;
+    text-decoration: none;
+}
+
+.article-stock-link strong {
+    font-size: 15px;
+}
+
+.expired-stock-warning {
+    display: block;
+    margin-top: 2px;
+    color: var(--danger, #d71920);
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 600;
+}
+
+@media (max-width: 800px) {
+
+    .page-header {
+        margin-bottom: 12px;
+    }
+
+    .page-header h1 {
+        font-size: 22px;
+    }
+
+    .page-header p {
+        margin-top: 2px;
+        font-size: 12px;
+    }
+
+    .card {
+        margin-bottom: 12px;
+    }
+
+    .card-header {
+        padding: 10px 12px;
+    }
+
+    .card-header h2 {
+        font-size: 15px;
+    }
+
+    .card-body {
+        padding: 10px 12px;
+    }
+
+    table {
+        font-size: 12px;
+    }
+
+    th,
+    td {
+        padding: 6px 8px;
+    }
+
+    .article-category-row th {
+        padding: 6px 8px;
+    }
+
+    .article-category-name {
+        font-size: 12px;
+    }
+
+    .article-link strong {
+        font-size: 13px;
+    }
+
+    .article-link small {
+        display: block;
+        margin-top: 1px;
+        font-size: 10px;
+        line-height: 1.2;
+    }
+
+    .article-stock-link strong {
+        font-size: 14px;
+    }
+
+    .expired-stock-warning {
+        font-size: 10px;
+    }
+
+}
+
+/* Artikelnummer auf kleinen Displays ausblenden */
+@media (max-width: 800px) {
+
+    table th:nth-child(2),
+    table td:nth-child(2) {
+        display: none;
+    }
+
+}
