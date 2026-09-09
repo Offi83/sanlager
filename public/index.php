@@ -247,12 +247,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
-        | Dauer-Scanner: Scan & Buchen
+        | Artikel ausbuchen
+        |--------------------------------------------------------------------------
+        |
+        | Wird sowohl vom manuellen Formular / Hardware-Scanner
+        | als auch vom Kamera-Scanner verwendet.
+        |
+        | ajax=1 liefert JSON zurück.
+        | Ohne ajax=1 erfolgt ein normaler Redirect.
         |--------------------------------------------------------------------------
         */
-        if ($action === 'scan_issue') {
+        if ($action === 'issue') {
 
-            header('Content-Type: application/json; charset=utf-8');
+            $isAjax = ($_POST['ajax'] ?? '') === '1';
 
             try {
 
@@ -262,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($articleNumber === '') {
                     throw new RuntimeException(
-                        'Keine Artikelnummer empfangen.'
+                        'Bitte eine Artikelnummer eingeben oder scannen.'
                     );
                 }
 
@@ -301,90 +308,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ? formatDate($result['expiry_date'])
                     : 'ohne MHD';
 
-                echo json_encode([
-                    'success' => true,
-                    'article_name' => $article['name'],
-                    'article_number' => $articleNumber,
-                    'unit' => $article['unit'],
-                    'expiry_date' => $expiryText
-                ]);
+                if ($isAjax) {
+
+                    header(
+                        'Content-Type: application/json; charset=utf-8'
+                    );
+
+                    echo json_encode([
+                        'success' => true,
+                        'article_name' => $article['name'],
+                        'article_number' => $articleNumber,
+                        'unit' => $article['unit'],
+                        'expiry_date' => $expiryText
+                    ]);
+
+                    exit;
+                }
+
+                redirect(
+                    '?page=issue' .
+                    '&success=' . urlencode(
+                        $article['name'] .
+                        ' – 1 ' .
+                        $article['unit'] .
+                        ' ausgebucht (' .
+                        $expiryText .
+                        ')'
+                    )
+                );
 
             } catch (Throwable $exception) {
 
-                http_response_code(400);
+                if ($isAjax) {
 
-                echo json_encode([
-                    'success' => false,
-                    'error' => $exception->getMessage()
-                ]);
+                    http_response_code(400);
+
+                    header(
+                        'Content-Type: application/json; charset=utf-8'
+                    );
+
+                    echo json_encode([
+                        'success' => false,
+                        'error' => $exception->getMessage()
+                    ]);
+
+                    exit;
+                }
+
+                throw $exception;
             }
-
-            exit;
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Schnell-Ausbuchung per Artikelnummer / Scanner
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'quick_issue') {
-
-            $articleNumber = trim(
-                $_POST['article_number'] ?? ''
-            );
-
-            if ($articleNumber === '') {
-                throw new RuntimeException(
-                    'Bitte eine Artikelnummer eingeben oder scannen.'
-                );
-            }
-
-            $article = $articles->findByArticleNumber(
-                $articleNumber
-            );
-
-            if (!$article) {
-                throw new RuntimeException(
-                    'Artikelnummer nicht gefunden: ' .
-                    $articleNumber
-                );
-            }
-
-            $mainLocation = $db->query(
-                "SELECT id
-                 FROM storage_locations
-                 WHERE name = 'Hauptlager'
-                 AND active = 1
-                 LIMIT 1"
-            )->fetchColumn();
-
-            if (!$mainLocation) {
-                throw new RuntimeException(
-                    'Das Hauptlager wurde nicht gefunden.'
-                );
-            }
-
-            $result = $stock->issueOldest(
-                (int) $article['id'],
-                (int) $mainLocation,
-                'Scanner-Ausbuchung'
-            );
-
-            $expiryText = $result['expiry_date']
-                ? formatDate($result['expiry_date'])
-                : 'ohne MHD';
-
-            redirect(
-                '?page=issue' .
-                '&success=' . urlencode(
-                    $article['name'] .
-                    ' – 1 ' .
-                    $article['unit'] .
-                    ' ausgebucht (' .
-                    $expiryText .
-                    ')'
-                )
-            );
         }
 
         /*
@@ -628,7 +600,7 @@ if ($page === 'article' || $page === 'label') {
 
     <div class="topbar-inner">
 
-<a href="?page=articles" class="brand"> <img src="/images/Logo_DRK_Bereitschaften_RGB.png" alt="DRK Bereitschaften" > <div class="brand-text"> <strong>DRK Lager-App</strong> <span>Sanitätslager</span> </div> </a> <nav> <a href="?page=articles" class="active"> Artikel </a> <a href="?page=issue"> Ausbuchen </a> <a href="?page=scan_issue"> Scan &amp; Buchen </a> <a href="?page=today_issues"> Heute ausgebucht </a> <a href="?page=new_article"> + Artikel </a> </nav>
+<a href="?page=articles" class="brand"> <img src="/images/Logo_DRK_Bereitschaften_RGB.png" alt="DRK Bereitschaften" > <div class="brand-text"> <strong>DRK Lager-App</strong> <span>Sanitätslager</span> </div> </a> <nav> <a href="?page=articles" class="active"> Artikel </a> <a href="?page=issue"> Ausbuchen </a>  <a href="?page=today_issues"> Heute ausgebucht </a> <a href="?page=new_article"> + Artikel </a> </nav>
 
     </div>
 
@@ -1019,58 +991,6 @@ if ($page === 'article' || $page === 'label') {
 
         </div>
 
-    <?php elseif ($page === 'scan_issue'): ?>
-
-        <div class="issue-page">
-
-            <div class="page-header">
-
-                <div>
-
-                    <h1>Scan &amp; Buchen</h1>
-
-                    <p>
-                        QR-Code scannen und automatisch
-                        1 Stück aus dem Hauptlager ausbuchen.
-                    </p>
-
-                </div>
-
-            </div>
-
-            <div class="card issue-card">
-
-                <button
-                    type="button"
-                    class="button button-primary issue-scan-button"
-                    id="continuous-scan-start"
-                >
-                    Scanner starten
-                </button>
-
-                <div
-                    id="continuous-scanner"
-                    class="issue-scanner"
-                    hidden
-                ></div>
-
-                <div
-                    id="continuous-scan-status"
-                    class="issue-scan-status"
-                >
-                    Scanner noch nicht gestartet.
-                </div>
-
-                <div
-                    id="continuous-scan-result"
-                    class="scan-result"
-                    hidden
-                ></div>
-
-            </div>
-
-        </div>
-
     <?php elseif ($page === 'issue'): ?>
 
         <div class="issue-page">
@@ -1117,7 +1037,7 @@ if ($page === 'article' || $page === 'label') {
                     class="button button-primary issue-scan-button"
                     id="issue-start-scan"
                 >
-                    QR-Code scannen
+                    Scanner starten
                 </button>
 
                 <div
@@ -1132,6 +1052,12 @@ if ($page === 'article' || $page === 'label') {
                     hidden
                 ></div>
 
+                <div
+                    id="issue-scan-result"
+                    class="scan-result"
+                    hidden
+                ></div>
+
                 <form
                     method="post"
                     class="issue-form"
@@ -1140,7 +1066,7 @@ if ($page === 'article' || $page === 'label') {
                     <input
                         type="hidden"
                         name="action"
-                        value="quick_issue"
+                        value="issue"
                     >
 
                     <label>
@@ -2223,6 +2149,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const scanStatus =
         document.getElementById('issue-scan-status');
 
+    const scanResult =
+        document.getElementById('issue-scan-result');
+
     const articleNumber =
         document.getElementById('issue-article-number');
 
@@ -2230,163 +2159,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (
         !scanButton
         || !scannerElement
-        || !articleNumber
-        || typeof Html5Qrcode === 'undefined'
-    ) {
-        return;
-    }
-
-
-    let scanner = null;
-    let scanning = false;
-
-
-    function showStatus(message) {
-
-        scanStatus.textContent = message;
-        scanStatus.hidden = false;
-
-    }
-
-
-    async function stopScanner() {
-
-        if (!scanner || !scanning) {
-            return;
-        }
-
-        try {
-            await scanner.stop();
-        } catch (error) {
-            console.warn(
-                'Scanner konnte nicht gestoppt werden:',
-                error
-            );
-        }
-
-        scanner.clear();
-
-        scanning = false;
-        scanner = null;
-
-        scannerElement.hidden = true;
-        scanButton.textContent = 'QR-Code scannen';
-
-    }
-
-
-    scanButton.addEventListener('click', async function () {
-
-        if (scanning) {
-            await stopScanner();
-            return;
-        }
-
-
-        scannerElement.hidden = false;
-        scanButton.textContent = 'Scanner beenden';
-
-        showStatus(
-            'Kamera wird gestartet …'
-        );
-
-
-        scanner = new Html5Qrcode(
-            'issue-scanner'
-        );
-
-
-        try {
-
-            await scanner.start(
-                {
-                    facingMode: 'environment'
-                },
-                {
-                    fps: 10,
-                    qrbox: {
-                        width: 250,
-                        height: 250
-                    }
-                },
-                async function (decodedText) {
-
-                    articleNumber.value =
-                        decodedText.trim();
-
-                    showStatus(
-                        'QR-Code erkannt: '
-                        + decodedText
-                    );
-
-                    await stopScanner();
-
-                    /*
-                     * Kurz warten, damit der Nutzer
-                     * die erkannte Nummer noch sehen kann.
-                     */
-                    setTimeout(function () {
-
-                        articleNumber.form.submit();
-
-                    }, 300);
-
-                },
-                function () {
-                    // Kein QR-Code im aktuellen Bild.
-                }
-            );
-
-            scanning = true;
-
-            showStatus(
-                'QR-Code vor die Kamera halten.'
-            );
-
-        } catch (error) {
-
-            console.error(
-                'QR-Scanner konnte nicht gestartet werden:',
-                error
-            );
-
-            await stopScanner();
-
-            showStatus(
-                'Kamera konnte nicht gestartet werden.'
-            );
-
-        }
-
-    });
-
-});
-</script>
-
-
-<script>
-
-document.addEventListener('DOMContentLoaded', function () {
-
-    const scanButton =
-        document.getElementById('continuous-scan-start');
-
-    const scannerElement =
-        document.getElementById('continuous-scanner');
-
-    const scanStatus =
-        document.getElementById('continuous-scan-status');
-
-    const scanResult =
-        document.getElementById('continuous-scan-result');
-
-
-    if (
-        !scanButton
-        || !scannerElement
         || !scanStatus
         || !scanResult
-        || typeof Html5Qrcode === 'undefined'
+        || !articleNumber
     ) {
         return;
     }
@@ -2395,15 +2170,30 @@ document.addEventListener('DOMContentLoaded', function () {
     let scanner = null;
     let scanning = false;
     let processing = false;
+
     let lastScannedCode = null;
     let ignoreLastScannedUntil = 0;
+
     let lastResult = null;
     let lastResultCount = 0;
+
+
+    function focusArticleNumber() {
+
+        setTimeout(function () {
+
+            articleNumber.focus();
+            articleNumber.select();
+
+        }, 50);
+
+    }
 
 
     function showStatus(message) {
 
         scanStatus.textContent = message;
+        scanStatus.hidden = false;
 
     }
 
@@ -2452,10 +2242,22 @@ document.addEventListener('DOMContentLoaded', function () {
         scanButton.textContent =
             'Scanner starten';
 
+        focusArticleNumber();
+
     }
 
 
     async function startScanner() {
+
+        if (typeof Html5Qrcode === 'undefined') {
+
+            showStatus(
+                'Scanner-Bibliothek konnte nicht geladen werden.'
+            );
+
+            return;
+        }
+
 
         scannerElement.hidden = false;
 
@@ -2468,7 +2270,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
         scanner = new Html5Qrcode(
-            'continuous-scanner'
+            'issue-scanner'
         );
 
 
@@ -2491,29 +2293,25 @@ document.addEventListener('DOMContentLoaded', function () {
                         return;
                     }
 
-                    const articleNumber =
+
+                    const code =
                         decodedText.trim();
 
-                    /*
-                     * Den zuletzt erfolgreich gescannten Code
-                     * kurz ignorieren, solange er noch vor
-                     * der Kamera gehalten wird.
-                     *
-                     * Andere QR-Codes können sofort gescannt
-                     * werden.
-                     */
+
                     if (
-                        articleNumber === lastScannedCode
+                        code === lastScannedCode
                         && Date.now() < ignoreLastScannedUntil
                     ) {
                         return;
                     }
+
 
                     processing = true;
 
                     showStatus(
                         'Buchung läuft …'
                     );
+
 
                     try {
 
@@ -2522,12 +2320,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         formData.append(
                             'action',
-                            'scan_issue'
+                            'issue'
+                        );
+
+                        formData.append(
+                            'ajax',
+                            '1'
                         );
 
                         formData.append(
                             'article_number',
-                            articleNumber
+                            code
                         );
 
 
@@ -2551,33 +2354,35 @@ document.addEventListener('DOMContentLoaded', function () {
                                 data.error
                                     || 'Buchung fehlgeschlagen.'
                             );
+
                         }
 
 
                         /*
-                         * Diesen QR-Code für 7 Sekunden sperren.
-                         * So verhindert der Dauer-Scanner
-                         * Mehrfachbuchungen durch einen noch
-                         * vor der Kamera gehaltenen QR-Code.
+                         * Gleichen QR-Code für 7 Sekunden
+                         * nicht erneut buchen.
                          */
-                        lastScannedCode = articleNumber;
+                        lastScannedCode = code;
+
                         ignoreLastScannedUntil =
                             Date.now() + 7000;
 
+
                         /*
-                         * Aufeinanderfolgende Buchungen desselben
-                         * Artikels zusammenfassen.
+                         * Aufeinanderfolgende Buchungen
+                         * desselben Artikels zusammenfassen.
                          */
-                        if (lastResult === articleNumber) {
+                        if (lastResult === code) {
 
                             lastResultCount++;
 
                         } else {
 
-                            lastResult = articleNumber;
+                            lastResult = code;
                             lastResultCount = 1;
 
                         }
+
 
                         showResult(
                             data.article_name
@@ -2589,9 +2394,11 @@ document.addEventListener('DOMContentLoaded', function () {
                             + data.expiry_date
                         );
 
+
                         showStatus(
                             'Bereit für den nächsten Scan.'
                         );
+
 
                     } catch (error) {
 
@@ -2607,11 +2414,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
 
-                    /*
-                     * Buchung abgeschlossen.
-                     * Der gleiche Code bleibt über
-                     * ignoreLastScannedUntil gesperrt.
-                     */
                     processing = false;
 
                 },
@@ -2620,11 +2422,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             );
 
+
             scanning = true;
 
             showStatus(
                 'QR-Code vor die Kamera halten.'
             );
+
 
         } catch (error) {
 
@@ -2663,6 +2467,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         }
     );
+
+
+    /*
+     * Beim Öffnen der Seite ist das Feld sofort aktiv.
+     * Dadurch kann ein Hardware-Barcode-Scanner direkt
+     * scannen und mit Enter absenden.
+     */
+    focusArticleNumber();
 
 });
 
