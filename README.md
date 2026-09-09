@@ -28,9 +28,10 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 
 ## ToDo
 
-* Benachrichtigung x Tage vor dem Ablauf von Material
-* Benachrichtigung bei Unterschreiten der Mindestmengen
-* Benachrichtigung bei Entnahme von Artikeln
+* Weekly Reportin:
+** Benachrichtigung x Tage vor dem Ablauf von Material
+** Benachrichtigung bei Unterschreiten der Mindestmengen
+** Benachrichtigung bei Entnahme von Artikeln
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
 
