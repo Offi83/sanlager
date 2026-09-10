@@ -34,6 +34,11 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
   * Übersicht Entnahme von Artikeln
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
+* Ausbuchen mit Anzahl >1
+* Umbuchen von Lagerorten
+* Verwaltung Lagerorte
+* Einbuchen via Scan & Anzahl
+* Inventurfunktion
 
 ---
 
