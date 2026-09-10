@@ -2,7 +2,7 @@
 
 ## Digitale Lagerverwaltung für Sanitätsmaterial
 
-**SanLager** ist eine schlanke Webanwendung zur Verwaltung von Sanitätsmaterial.
+**SanLager** ist eine schlanke Webanwendung zur Verwaltung von Sanitätsmaterial z.B. bei einer Hiorg.
 
 Die Anwendung wurde speziell für den praktischen Einsatz im Sanitätslager entwickelt. Im Mittelpunkt stehen eine **einfache Bedienung**, eine **schnelle Bestandsübersicht** und die **Verwaltung von Mindesthaltbarkeitsdaten**.
 
