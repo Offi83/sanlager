@@ -3,6 +3,7 @@
 namespace LagerApp;
 
 use PDO;
+use RuntimeException;
 
 class ArticleRepository
 {
@@ -85,6 +86,42 @@ class ArticleRepository
         int $minimumStock,
         ?int $categoryId
     ): int {
+        if ($articleNumber !== null && $articleNumber !== '') {
+            $existingArticleNumber = $this->db->prepare(
+                'SELECT id
+                 FROM articles
+                 WHERE article_number = :article_number
+                 LIMIT 1'
+            );
+
+            $existingArticleNumber->execute([
+                'article_number' => $articleNumber
+            ]);
+
+            if ($existingArticleNumber->fetchColumn() !== false) {
+                throw new RuntimeException(
+                    'Diese Artikelnummer wird bereits verwendet'
+                );
+            }
+        }
+
+        $existingArticle = $this->db->prepare(
+            'SELECT id
+             FROM articles
+             WHERE name = :name
+             LIMIT 1'
+        );
+
+        $existingArticle->execute([
+            'name' => $name
+        ]);
+
+        if ($existingArticle->fetchColumn() !== false) {
+            throw new RuntimeException(
+                'Ein Artikel mit diesem Namen existiert bereits.'
+            );
+        }
+
         $statement = $this->db->prepare(
             'INSERT INTO articles
                 (
