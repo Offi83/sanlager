@@ -91,7 +91,9 @@ Die technische Dokumentation ist in einzelne Bereiche aufgeteilt.
 
 * Vorstellung und Konzept des SanLagers
 * Aufbau und Funktionsweise
-* verwendete Technologien
+* verwendete Technologien### 🗄️ Datenbank
+
+➡️ **[Installation](docs/05-installation.md)**
 
 ### 🗄️ Datenbank
 
