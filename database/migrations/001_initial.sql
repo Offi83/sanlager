@@ -30,28 +30,6 @@ CREATE TABLE IF NOT EXISTS batches (
         ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS stock (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    article_id INTEGER NOT NULL,
-    batch_id INTEGER,
-    location_id INTEGER NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 0,
-
-    UNIQUE(article_id, batch_id, location_id),
-
-    FOREIGN KEY (article_id)
-        REFERENCES articles(id)
-        ON DELETE CASCADE,
-
-    FOREIGN KEY (batch_id)
-        REFERENCES batches(id)
-        ON DELETE SET NULL,
-
-    FOREIGN KEY (location_id)
-        REFERENCES storage_locations(id)
-        ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS stock_movements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     article_id INTEGER NOT NULL,
@@ -80,12 +58,6 @@ CREATE INDEX IF NOT EXISTS idx_articles_name
 
 CREATE INDEX IF NOT EXISTS idx_batches_expiry
     ON batches(expiry_date);
-
-CREATE INDEX IF NOT EXISTS idx_stock_article
-    ON stock(article_id);
-
-CREATE INDEX IF NOT EXISTS idx_stock_location
-    ON stock(location_id);
 
 CREATE INDEX IF NOT EXISTS idx_movements_article
     ON stock_movements(article_id);

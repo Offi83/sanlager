@@ -159,18 +159,17 @@ a {
     cursor: pointer;
 }
 
-.button.primary {
+.button-primary {
     background: var(--primary);
     color: #fff;
 }
 
-.button.secondary {
+.button-secondary {
     background: #eee;
     color: #222;
 }
 
-.button.danger,
-.button.button-danger {
+.button-danger {
     background: var(--danger);
     color: #fff;
 }
@@ -205,30 +204,20 @@ textarea:focus {
     outline-offset: 1px;
 }
 
-label,
-.form-group {
+label {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
 }
 
-label > span,
-.form-group label {
+label > span {
     font-weight: 600;
-}
-
-.form-group small {
-    color: var(--muted-light);
 }
 
 .form-grid {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 18px;
-}
-
-.form-group.wide {
-    grid-column: 1 / -1;
 }
 
 .form {
@@ -273,14 +262,16 @@ label > span,
    Suche
    ========================================================= */
 
-.search {
+.search-form {
     display: flex;
-    gap: var(--space-2);
-    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
 }
 
-.search input {
-    flex: 1;
+.search-form input[type="search"] {
+    flex: 1 1 240px;
+    width: auto;
 }
 
 
@@ -326,6 +317,7 @@ tbody tr:last-child td {
 }
 
 .category-filter {
+    width: auto;
     min-width: 190px;
 }
 
@@ -367,31 +359,18 @@ tbody tr:last-child td {
     margin-top: 5px;
 }
 
-.warning-alert {
-    border-left: 5px solid var(--danger);
-}
-
-.empty {
+.empty-state {
     padding: 70px 30px;
     text-align: center;
 }
 
-.empty-icon {
-    margin-bottom: 15px;
-    font-size: 48px;
-}
-
-.empty h2 {
+.empty-state h2 {
     margin: 0 0 8px;
 }
 
-.empty p {
+.empty-state p {
     margin: 0 0 var(--space-5);
     color: var(--muted-light);
-}
-
-.small-empty {
-    padding: var(--card-padding);
 }
 
 .empty-state.compact {
@@ -405,31 +384,43 @@ tbody tr:last-child td {
    Bestand
    ========================================================= */
 
-.stock-summary {
+.article-top-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-3);
     margin-bottom: var(--space-4);
 }
 
-.stock-total,
-.stock-minimum {
+.article-top-row.no-qr {
+    grid-template-columns: 1fr;
+}
+
+.stock-total {
     padding: 22px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
 }
 
-.stock-total span,
-.stock-minimum span {
+.stock-total span {
     display: block;
     margin-bottom: 8px;
     color: var(--muted);
 }
 
-.stock-total strong,
-.stock-minimum strong {
+.stock-total strong {
     font-size: 28px;
+}
+
+.mindestbestand-hint {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted-light);
+}
+
+.mindestbestand-hint.is-low {
+    color: var(--danger);
+    font-weight: 600;
 }
 
 .stock-low,
@@ -467,11 +458,6 @@ tbody tr:last-child td {
    MHD
    ========================================================= */
 
-.expiry-ok {
-    color: #287a3d;
-    font-weight: 600;
-}
-
 .expiry-warning {
     color: #9a6700;
     font-weight: 700;
@@ -497,24 +483,20 @@ tbody tr:last-child td {
     color: var(--primary);
 }
 
-.article-detail-page .stock-summary {
-    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+.article-detail-page .article-top-row {
+    grid-template-columns: minmax(280px, 380px) minmax(220px, 1fr);
+    align-items: stretch;
     gap: 18px;
     margin-bottom: 22px;
 }
 
-.article-detail-page .stock-total,
-.article-detail-page .stock-minimum {
+.article-detail-page .stock-total {
     position: relative;
     padding: 24px 26px;
-}
-
-.article-detail-page .stock-total {
     border-left: 4px solid var(--primary);
 }
 
-.article-detail-page .stock-total span,
-.article-detail-page .stock-minimum span {
+.article-detail-page .stock-total span {
     margin-bottom: 9px;
     font-size: 13px;
     font-weight: 700;
@@ -522,15 +504,16 @@ tbody tr:last-child td {
     letter-spacing: .04em;
 }
 
-.article-detail-page .stock-total strong,
-.article-detail-page .stock-minimum strong {
+.article-detail-page .stock-total strong {
     display: block;
     font-size: 32px;
     line-height: 1.1;
 }
 
-.article-detail-page .stock-total .warning {
+.article-detail-page .mindestbestand-hint {
     margin-top: 10px;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 .article-detail-page .location-row .stock-value {
@@ -586,15 +569,16 @@ tbody tr:last-child td {
    QR-Code
    ========================================================= */
 
-.article-qr-card {
-    margin-bottom: var(--space-4);
-}
-
 .article-qr-content {
     display: flex;
     align-items: center;
     gap: var(--space-5);
     padding: 22px;
+}
+
+.article-detail-page .article-qr-content {
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 .article-qr-code {
@@ -848,10 +832,6 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 900px) {
-    .article-detail-page .stock-summary {
-        grid-template-columns: 1fr;
-    }
-
     .article-detail-page .stock-form > .form-grid,
     .form-grid {
         grid-template-columns: 1fr 1fr;
@@ -879,14 +859,6 @@ tbody tr:last-child td {
         gap: var(--space-1);
     }
 
-    .search {
-        flex-wrap: wrap;
-    }
-
-    .search input {
-        flex-basis: 100%;
-    }
-
     .form,
     .issue-card {
         padding: 18px;
@@ -895,10 +867,6 @@ tbody tr:last-child td {
     .form-grid,
     .article-detail-page .stock-form > .form-grid {
         grid-template-columns: 1fr;
-    }
-
-    .form-group.wide {
-        grid-column: auto;
     }
 
     .form-actions,
@@ -916,27 +884,20 @@ tbody tr:last-child td {
         padding: 13px 12px;
     }
 
-    .stock-summary {
+    .article-detail-page .article-top-row {
         grid-template-columns: 1fr;
     }
 
-    .article-detail-page .stock-total,
-    .article-detail-page .stock-minimum {
+    .article-detail-page .stock-total {
         padding: 20px;
     }
 
-    .article-detail-page .stock-total strong,
-    .article-detail-page .stock-minimum strong {
+    .article-detail-page .stock-total strong {
         font-size: 28px;
     }
 
     .article-detail-page .stock-form {
         padding: 18px;
-    }
-
-    .article-qr-content {
-        flex-direction: column;
-        align-items: flex-start;
     }
 
     .article-qr-code {
@@ -949,11 +910,74 @@ tbody tr:last-child td {
     }
 }
 
-/* navigation */
-.topbar { background: #fff; border-bottom: 1px solid #ddd; }
-.topbar-inner { display: flex; align-items: center; gap: 2rem; min-height: 72px; padding: 0.6rem 1.25rem; }
+.topbar-inner {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    min-height: 72px;
+    padding: 0.6rem 1.25rem;
+}
 
-/* Logo + App-Name */ .brand { display: flex; align-items: center; gap: 0.7rem; flex-shrink: 0; color: #222; text-decoration: none; } .brand img { width: auto; height: 50px; display: block; } .brand-text { display: flex; flex-direction: column; line-height: 1.2; } .brand-text strong { font-size: 1rem; font-weight: 700; } .brand-text span { margin-top: 0.15rem; color: #777; font-size: 0.8rem; } /* Navigation */ nav { display: flex; align-items: center; gap: 0.2rem; margin-left: auto; } nav a { display: block; padding: 0.55rem 0.8rem; color: #555; text-decoration: none; font-size: 0.9rem; font-weight: 500; white-space: nowrap; border-radius: 0.4rem; transition: background-color 0.15s ease, color 0.15s ease; } nav a:hover { background: #f5f5f5; color: #cc0000; } nav a.active { background: #cc0000; color: #fff; } 
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    flex-shrink: 0;
+    color: #222;
+    text-decoration: none;
+}
+
+.brand img {
+    width: auto;
+    height: 50px;
+    display: block;
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.brand-text strong {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.brand-text span {
+    margin-top: 0.15rem;
+    color: #777;
+    font-size: 0.8rem;
+}
+
+nav {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: auto;
+}
+
+nav a {
+    display: block;
+    padding: 0.55rem 0.8rem;
+    color: #555;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    white-space: nowrap;
+    border-radius: 0.4rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+nav a:hover {
+    background: #f5f5f5;
+    color: #cc0000;
+}
+
+nav a.active {
+    background: #cc0000;
+    color: #fff;
+}
 
 /* ==========================================================================
    Kategorien
@@ -1118,7 +1142,7 @@ tbody tr:last-child td {
 .article-category-row th {
     padding: 8px 12px;
     border: 0;
-    background: var(--category-color);
+    background: transparent;
     color: #fff;
     text-align: left;
 }
@@ -1221,118 +1245,63 @@ tbody tr:last-child td {
         font-size: 10px;
     }
 
-}
-
-/* Artikelnummer auf kleinen Displays ausblenden */
-@media (max-width: 800px) {
-
+    /* Artikelnummer auf kleinen Displays ausblenden */
     table th:nth-child(2),
     table td:nth-child(2) {
         display: none;
     }
 
-}
+    /* Kompakte Artikelsuche auf kleinen Touchscreens */
+    .article-search-card {
+        margin-bottom: 10px;
+    }
 
-/* Kompakte Artikelsuche auf kleinen Touchscreens */
-@media (max-width: 800px) {
-
-    .card:has(.search-form) .card-header {
+    .article-search-card .card-header {
         display: none;
     }
 
-    .card:has(.search-form) .card-body {
+    .article-search-card .card-body {
         padding: 6px 8px;
     }
 
-    .search-form {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 6px;
+    .article-search-card form.search-form {
+        display: flex;
+        flex-direction: row;
         align-items: center;
+        gap: 6px;
+        margin: 0;
+        width: 100%;
     }
 
-    .search-form input[type="search"] {
+    .article-search-card form.search-form input[type="hidden"] {
+        display: none;
+    }
+
+    .article-search-card form.search-form input[type="search"] {
+        flex: 1 1 auto;
+        width: auto;
         min-width: 0;
         height: 36px;
+        min-height: 36px;
+        margin: 0;
         padding: 6px 10px;
         font-size: 13px;
     }
 
-    .search-form .category-filter {
+    .article-search-card form.search-form select.category-filter {
         display: none;
     }
 
-    .search-form .button {
+    .article-search-card form.search-form button[type="submit"] {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 0;
+        height: 36px;
         min-height: 36px;
+        margin: 0;
         padding: 6px 12px;
         font-size: 12px;
-    }
-
-    .search-form .button-secondary {
-        grid-column: 2;
-    }
-
-}
-
-/* =========================================================
-   Raspberry: Artikelsuche kompakt
-   ========================================================= */
-
-@media screen and (max-width: 800px) {
-
-    .article-search-card {
-        margin-bottom: 10px !important;
-    }
-
-    .article-search-card .card-header {
-        display: none !important;
-    }
-
-    .article-search-card .card-body {
-        padding: 6px 8px !important;
-    }
-
-    .article-search-card form.search-form {
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        gap: 6px !important;
-        margin: 0 !important;
-        width: 100% !important;
-    }
-
-    .article-search-card form.search-form input[type="hidden"] {
-        display: none !important;
-    }
-
-    .article-search-card form.search-form input[type="search"] {
-        display: block !important;
-        flex: 1 1 auto !important;
-        width: auto !important;
-        min-width: 0 !important;
-        height: 36px !important;
-        min-height: 36px !important;
-        margin: 0 !important;
-        padding: 6px 10px !important;
-        box-sizing: border-box !important;
-        font-size: 13px !important;
-    }
-
-    .article-search-card form.search-form select.category-filter {
-        display: none !important;
-    }
-
-    .article-search-card form.search-form button[type="submit"] {
-        display: block !important;
-        flex: 0 0 auto !important;
-        width: auto !important;
-        min-width: 0 !important;
-        height: 36px !important;
-        min-height: 36px !important;
-        margin: 0 !important;
-        padding: 6px 12px !important;
-        font-size: 12px !important;
-        white-space: nowrap !important;
+        white-space: nowrap;
     }
 
 }

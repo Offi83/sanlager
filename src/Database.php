@@ -54,7 +54,24 @@ class Database
 
         /*
          * Migration-Historie anlegen.
+         *
+         * Ältere Datenbankstände können noch eine schema_migrations-Tabelle
+         * aus einem früheren, inkompatiblen Migrationssystem enthalten
+         * (z. B. mit den Spalten filename/checksum statt migration).
+         * Eine solche Tabelle wird beiseitegelegt, damit die aktuelle
+         * Tabellenstruktur angelegt werden kann. Bereits angewendete
+         * Migrationen werden anschließend über migrationAlreadyAppliedInSchema()
+         * anhand des vorhandenen Datenbankschemas wiedererkannt.
          */
+        if (
+            $this->hasTable('schema_migrations')
+            && !$this->hasColumn('schema_migrations', 'migration')
+        ) {
+            $this->connection->exec(
+                'ALTER TABLE schema_migrations RENAME TO schema_migrations_legacy'
+            );
+        }
+
         $this->connection->exec('
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 migration TEXT PRIMARY KEY,

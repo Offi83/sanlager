@@ -164,6 +164,46 @@ class ArticleRepository
         int $minimumStock,
         ?int $categoryId
     ): void {
+        if ($articleNumber !== null && $articleNumber !== '') {
+            $existingArticleNumber = $this->db->prepare(
+                'SELECT id
+                 FROM articles
+                 WHERE article_number = :article_number
+                 AND id != :id
+                 LIMIT 1'
+            );
+
+            $existingArticleNumber->execute([
+                'article_number' => $articleNumber,
+                'id' => $id
+            ]);
+
+            if ($existingArticleNumber->fetchColumn() !== false) {
+                throw new RuntimeException(
+                    'Diese Artikelnummer wird bereits verwendet'
+                );
+            }
+        }
+
+        $existingArticle = $this->db->prepare(
+            'SELECT id
+             FROM articles
+             WHERE name = :name
+             AND id != :id
+             LIMIT 1'
+        );
+
+        $existingArticle->execute([
+            'name' => $name,
+            'id' => $id
+        ]);
+
+        if ($existingArticle->fetchColumn() !== false) {
+            throw new RuntimeException(
+                'Ein Artikel mit diesem Namen existiert bereits.'
+            );
+        }
+
         $statement = $this->db->prepare(
             'UPDATE articles
              SET article_number = :article_number,

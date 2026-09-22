@@ -7,6 +7,7 @@ use LagerApp\Database;
 use LagerApp\ArticleRepository;
 use LagerApp\BatchRepository;
 use LagerApp\CategoryRepository;
+use LagerApp\LocationRepository;
 use LagerApp\StockRepository;
 use LagerApp\QrCodeGenerator;
 
@@ -27,6 +28,7 @@ $db = $database->connection();
 $articles = new ArticleRepository($db);
 $batches = new BatchRepository($db);
 $categories = new CategoryRepository($db);
+$locationRepository = new LocationRepository($db);
 $stock = new StockRepository($db);
 
 $categoryList = $categories->all();
@@ -61,56 +63,38 @@ function formatDate(?string $date): string
     return date('d.m.Y', $timestamp);
 }
 
-function expiryClass(?string $date): string
+/**
+ * Liefert CSS-Klasse und Warntext für ein MHD in einem Aufwasch,
+ * statt Ablaufberechnung und Schwellwerte zweimal zu duplizieren.
+ *
+ * @return array{class: string, warning: string}
+ */
+function expiryInfo(?string $date): array
 {
+    $none = ['class' => '', 'warning' => ''];
+
     if (!$date) {
-        return '';
+        return $none;
     }
 
     $expiry = strtotime($date);
 
     if ($expiry === false) {
-        return '';
+        return $none;
     }
 
     $today = strtotime(date('Y-m-d'));
-    $warning = strtotime('+90 days');
+    $warningThreshold = strtotime('+90 days');
 
     if ($expiry < $today) {
-        return 'expiry-expired';
+        return ['class' => 'expiry-expired', 'warning' => 'ABGELAUFEN'];
     }
 
-    if ($expiry <= $warning) {
-        return 'expiry-warning';
+    if ($expiry <= $warningThreshold) {
+        return ['class' => 'expiry-warning', 'warning' => 'MHD bald erreicht'];
     }
 
-    return '';
-}
-
-function expiryWarning(?string $date): string
-{
-    if (!$date) {
-        return '';
-    }
-
-    $expiry = strtotime($date);
-
-    if ($expiry === false) {
-        return '';
-    }
-
-    $today = strtotime(date('Y-m-d'));
-    $warning = strtotime('+90 days');
-
-    if ($expiry < $today) {
-        return 'ABGELAUFEN';
-    }
-
-    if ($expiry <= $warning) {
-        return 'MHD bald erreicht';
-    }
-
-    return '';
+    return $none;
 }
 
 $page = $_GET['page'] ?? 'issue';
@@ -515,6 +499,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
+        | Lagerort anlegen
+        |--------------------------------------------------------------------------
+        */
+        if ($action === 'create_location') {
+
+            $name = trim($_POST['name'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+
+            if ($name === '') {
+                throw new RuntimeException(
+                    'Bitte einen Namen für den Lagerort eingeben.'
+                );
+            }
+
+            $locationRepository->create($name, $description);
+
+            redirect('?page=locations&message=Lagerort+angelegt');
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Lagerort bearbeiten
+        |--------------------------------------------------------------------------
+        */
+        if ($action === 'update_location') {
+
+            $id = (int) ($_POST['id'] ?? 0);
+            $name = trim($_POST['name'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+
+            if ($id <= 0) {
+                throw new RuntimeException(
+                    'Ungültiger Lagerort.'
+                );
+            }
+
+            if ($name === '') {
+                throw new RuntimeException(
+                    'Bitte einen Namen für den Lagerort eingeben.'
+                );
+            }
+
+            $locationRepository->update($id, $name, $description);
+
+            redirect('?page=locations&message=Lagerort+gespeichert');
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Lagerort deaktivieren
+        |--------------------------------------------------------------------------
+        */
+        if ($action === 'deactivate_location') {
+
+            $id = (int) ($_POST['id'] ?? 0);
+
+            if ($id <= 0) {
+                throw new RuntimeException(
+                    'Ungültiger Lagerort.'
+                );
+            }
+
+            if ($stock->locationHasStock($id)) {
+                throw new RuntimeException(
+                    'Der Lagerort kann nicht deaktiviert werden, solange dort noch Bestand vorhanden ist.'
+                );
+            }
+
+            $locationRepository->deactivate($id);
+
+            redirect('?page=locations&message=Lagerort+deaktiviert');
+        }
+
+        /*
+        |--------------------------------------------------------------------------
         | Bestand buchen
         |--------------------------------------------------------------------------
         */
@@ -671,6 +730,13 @@ if ($page === 'categories') {
     $categoryList = $categories->all();
 }
 
+$locationList = [];
+
+if ($page === 'locations') {
+
+    $locationList = $locationRepository->all();
+}
+
 if ($page === 'articles') {
 
     $categoryParam = (int) ($_GET['category'] ?? 0);
@@ -699,6 +765,17 @@ if ($page === 'categories' && isset($_GET['edit'])) {
 
     if ($editCategoryId > 0) {
         $editCategory = $categories->find($editCategoryId);
+    }
+}
+
+$editLocation = null;
+
+if ($page === 'locations' && isset($_GET['edit'])) {
+
+    $editLocationId = (int) $_GET['edit'];
+
+    if ($editLocationId > 0) {
+        $editLocation = $locationRepository->find($editLocationId);
     }
 }
 
@@ -792,6 +869,9 @@ if ($page === 'article' || $page === 'label') {
     </a>
     <a href="?page=categories" class="<?= $page === 'categories' ? 'active' : '' ?>">
         Kategorien
+    </a>
+    <a href="?page=locations" class="<?= $page === 'locations' ? 'active' : '' ?>">
+        Lagerorte
     </a>
 </nav>
 
@@ -924,7 +1004,7 @@ if ($page === 'article' || $page === 'label') {
 
                         <button
                             type="submit"
-                            class="button primary"
+                            class="button button-primary"
                         >
                             <?= $editCategory ? 'Kategorie speichern' : 'Kategorie anlegen' ?>
                         </button>
@@ -933,7 +1013,7 @@ if ($page === 'article' || $page === 'label') {
 
                             <a
                                 href="?page=categories"
-                                class="button secondary"
+                                class="button button-secondary"
                             >
                                 Abbrechen
                             </a>
@@ -1003,7 +1083,7 @@ if ($page === 'article' || $page === 'label') {
 
                                     <a
                                         href="?page=categories&edit=<?= (int) $category['id'] ?>"
-                                        class="button secondary small"
+                                        class="button button-secondary small"
                                     >
                                         Bearbeiten
                                     </a>
@@ -1028,7 +1108,7 @@ if ($page === 'article' || $page === 'label') {
 
                                         <button
                                             type="submit"
-                                            class="button danger small"
+                                            class="button button-danger small"
                                         >
                                             Löschen
                                         </button>
@@ -1180,6 +1260,192 @@ if ($page === 'article' || $page === 'label') {
 
         </script>
 
+
+    <?php elseif ($page === 'locations'): ?>
+
+        <div class="page-header">
+
+            <div>
+
+                <h1>Lagerorte</h1>
+
+                <p>
+                    Lagerorte für die Bestandsverwaltung anlegen und bearbeiten.
+                </p>
+
+            </div>
+
+        </div>
+
+        <section class="card">
+
+            <div class="card-header">
+
+                <h2>
+                    <?= $editLocation ? 'Lagerort bearbeiten' : 'Neuer Lagerort' ?>
+                </h2>
+
+            </div>
+
+            <form method="post" class="form">
+
+                <input
+                    type="hidden"
+                    name="action"
+                    value="<?= $editLocation ? 'update_location' : 'create_location' ?>"
+                >
+
+                <?php if ($editLocation): ?>
+
+                    <input
+                        type="hidden"
+                        name="id"
+                        value="<?= (int) $editLocation['id'] ?>"
+                    >
+
+                <?php endif; ?>
+
+                <label>
+
+                    <span>Name</span>
+
+                    <input
+                        type="text"
+                        name="name"
+                        required
+                        maxlength="100"
+                        value="<?= h($editLocation['name'] ?? '') ?>"
+                        placeholder="z. B. Hauptlager"
+                    >
+
+                </label>
+
+                <label>
+
+                    <span>Beschreibung</span>
+
+                    <textarea
+                        name="description"
+                        rows="2"
+                        placeholder="Optional"
+                    ><?= h($editLocation['description'] ?? '') ?></textarea>
+
+                </label>
+
+                <div class="form-actions">
+
+                    <button
+                        type="submit"
+                        class="button button-primary"
+                    >
+                        <?= $editLocation ? 'Lagerort speichern' : 'Lagerort anlegen' ?>
+                    </button>
+
+                    <?php if ($editLocation): ?>
+
+                        <a
+                            href="?page=locations"
+                            class="button button-secondary"
+                        >
+                            Abbrechen
+                        </a>
+
+                    <?php endif; ?>
+
+                </div>
+
+            </form>
+
+        </section>
+
+        <div class="card">
+
+            <?php if (!$locationList): ?>
+
+                <div class="empty-state compact">
+                    Noch keine Lagerorte vorhanden.
+                </div>
+
+            <?php else: ?>
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Name</th>
+                            <th>Beschreibung</th>
+                            <th></th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        <?php foreach ($locationList as $location): ?>
+
+                            <tr>
+
+                                <td>
+                                    <strong><?= h($location['name']) ?></strong>
+                                </td>
+
+                                <td>
+                                    <?= h($location['description'] ?? '') ?>
+                                </td>
+
+                                <td>
+
+                                    <div class="category-actions">
+
+                                        <a
+                                            href="?page=locations&edit=<?= (int) $location['id'] ?>"
+                                            class="button button-secondary small"
+                                        >
+                                            Bearbeiten
+                                        </a>
+
+                                        <form
+                                            method="post"
+                                            onsubmit="return confirm('Lagerort wirklich deaktivieren?');"
+                                        >
+
+                                            <input
+                                                type="hidden"
+                                                name="action"
+                                                value="deactivate_location"
+                                            >
+
+                                            <input
+                                                type="hidden"
+                                                name="id"
+                                                value="<?= (int) $location['id'] ?>"
+                                            >
+
+                                            <button
+                                                type="submit"
+                                                class="button button-danger small"
+                                            >
+                                                Deaktivieren
+                                            </button>
+
+                                        </form>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                    </tbody>
+
+                </table>
+
+            <?php endif; ?>
+
+        </div>
 
     <?php elseif ($page === 'articles'): ?>
 
@@ -1469,7 +1735,7 @@ if ($page === 'article' || $page === 'label') {
 
                 <?php if (!$todayIssues): ?>
 
-                    <p class="empty">
+                    <p class="empty-state compact">
                         Heute wurden noch keine Artikel ausgebucht.
                     </p>
 
@@ -1985,50 +2251,50 @@ if ($page === 'article' || $page === 'label') {
         </div>
 
 
-        <?php if ($qrCode !== null): ?>
+        <div class="article-top-row<?= $qrCode === null ? ' no-qr' : '' ?>">
 
-            <div class="card article-qr-card">
+            <?php if ($qrCode !== null): ?>
 
-                <div class="card-header">
+                <div class="card article-qr-card">
 
-                    <h2>
-                        QR-Code
-                    </h2>
+                    <div class="card-header">
 
-                </div>
-
-                <div class="article-qr-content">
-
-                    <div class="article-qr-code">
-                        <?= $qrCode ?>
-                    </div>
-
-                    <div class="article-qr-info">
-
-                        <strong>
-                            <?= h($article['name']) ?>
-                        </strong>
-
-                        <span>
-                            Artikelnummer:
-                            <?= h($article['article_number']) ?>
-                        </span>
-
-                        <small>
-                            Dieser QR-Code enthält ausschließlich
-                            die Artikelnummer.
-                        </small>
+                        <h2>
+                            QR-Code
+                        </h2>
 
                     </div>
 
+                    <div class="article-qr-content">
+
+                        <div class="article-qr-code">
+                            <?= $qrCode ?>
+                        </div>
+
+                        <div class="article-qr-info">
+
+                            <strong>
+                                <?= h($article['name']) ?>
+                            </strong>
+
+                            <span>
+                                Artikelnummer:
+                                <?= h($article['article_number']) ?>
+                            </span>
+
+                            <small>
+                                Dieser QR-Code enthält ausschließlich
+                                die Artikelnummer.
+                            </small>
+
+                        </div>
+
+                    </div>
+
                 </div>
 
-            </div>
+            <?php endif; ?>
 
-        <?php endif; ?>
-
-
-        <div class="stock-summary">
 
             <div class="stock-total">
 
@@ -2041,30 +2307,15 @@ if ($page === 'article' || $page === 'label') {
                     <?= h($article['unit']) ?>
                 </strong>
 
-                <?php if ($isLow): ?>
-
-                    <small class="warning">
-                        Mindestbestand:
-                        <?= $minimumStock ?>
-                    </small>
-
-                <?php endif; ?>
-
-            </div>
-
-
-            <div class="stock-minimum">
-
-                <span>
-                    Mindestbestand
-                </span>
-
-                <strong>
+                <small class="mindestbestand-hint<?= $isLow ? ' is-low' : '' ?>">
+                    Mindestbestand:
                     <?= $minimumStock ?>
                     <?= h($article['unit']) ?>
-                </strong>
+                </small>
 
             </div>
+
+        </div>
 
         <div class="card">
 
@@ -2108,6 +2359,8 @@ if ($page === 'article' || $page === 'label') {
                 <?php endforeach; ?>
 
             </div>
+
+        </div>
 
         <div class="card">
 
@@ -2168,10 +2421,9 @@ if ($page === 'article' || $page === 'label') {
                         continue;
                     }
 
-                    $warning =
-                        expiryWarning(
-                            $batch['expiry_date']
-                        );
+                    $expiry = expiryInfo(
+                        $batch['expiry_date']
+                    );
                     ?>
 
                     <div class="location-row">
@@ -2179,16 +2431,16 @@ if ($page === 'article' || $page === 'label') {
                         <div>
 
                             <strong
-                                class="<?= expiryClass($batch['expiry_date']) ?>"
+                                class="<?= $expiry['class'] ?>"
                             >
                                 MHD:
                                 <?= formatDate($batch['expiry_date']) ?>
                             </strong>
 
-                            <?php if ($warning): ?>
+                            <?php if ($expiry['warning']): ?>
 
                                 <span class="warning">
-                                    <?= h($warning) ?>
+                                    <?= h($expiry['warning']) ?>
                                 </span>
 
                             <?php endif; ?>
@@ -2231,6 +2483,8 @@ if ($page === 'article' || $page === 'label') {
                 <?php endif; ?>
 
             </div>
+
+        </div>
 
         <div class="card">
 
@@ -2700,7 +2954,7 @@ if ($page === 'article' || $page === 'label') {
 </main>
 
 
-<script src="https://unpkg.com/html5-qrcode" defer></script>
+<script src="/js/vendor/html5-qrcode.min.js" defer></script>
 
 <script>
 

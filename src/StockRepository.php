@@ -24,6 +24,24 @@ class StockRepository
             ->fetchAll();
     }
 
+    public function locationHasStock(int $locationId): bool
+    {
+        $statement = $this->db->prepare(
+            'SELECT article_id
+             FROM stock_movements
+             WHERE location_id = :location_id
+             GROUP BY article_id
+             HAVING SUM(quantity) > 0
+             LIMIT 1'
+        );
+
+        $statement->execute([
+            'location_id' => $locationId
+        ]);
+
+        return $statement->fetchColumn() !== false;
+    }
+
     public function getStockForArticle(int $articleId): array
     {
         $statement = $this->db->prepare(

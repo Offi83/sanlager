@@ -3,6 +3,7 @@
 namespace LagerApp;
 
 use PDO;
+use RuntimeException;
 
 class CategoryRepository
 {
@@ -46,6 +47,12 @@ class CategoryRepository
         string $shortName,
         string $color
     ): int {
+        if ($this->existsWithName($name)) {
+            throw new RuntimeException(
+                'Eine Kategorie mit diesem Namen existiert bereits.'
+            );
+        }
+
         $statement = $this->db->prepare(
             'INSERT INTO article_categories
                 (name, short_name, color, sort_order, active)
@@ -69,6 +76,12 @@ class CategoryRepository
         string $shortName,
         string $color
     ): void {
+        if ($this->existsWithName($name, $id)) {
+            throw new RuntimeException(
+                'Eine Kategorie mit diesem Namen existiert bereits.'
+            );
+        }
+
         $statement = $this->db->prepare(
             'UPDATE article_categories
              SET name = :name,
@@ -144,6 +157,24 @@ class CategoryRepository
 
             throw $exception;
         }
+    }
+
+    private function existsWithName(string $name, ?int $excludeId = null): bool
+    {
+        $statement = $this->db->prepare(
+            'SELECT 1
+             FROM article_categories
+             WHERE name = :name
+             AND id != :exclude_id
+             LIMIT 1'
+        );
+
+        $statement->execute([
+            'name' => $name,
+            'exclude_id' => $excludeId ?? 0
+        ]);
+
+        return $statement->fetchColumn() !== false;
     }
 
     private function nextSortOrder(): int
