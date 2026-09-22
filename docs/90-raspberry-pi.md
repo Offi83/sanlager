@@ -55,7 +55,7 @@ sudo reboot
 
 ---
 
-## 4. Python-WebSocket-Unterstützung installieren
+## 3. Python-WebSocket-Unterstützung installieren
 
 WebSocket-Unterstützung installieren:
 
@@ -65,7 +65,7 @@ sudo apt install -y python3-websocket
 
 ---
 
-## 5. SanLager-Konfiguration anlegen
+## 4. SanLager-Konfiguration anlegen
 
 Verzeichnis erstellen:
 
@@ -103,7 +103,7 @@ chmod 600 ~/.config/sanlager/auth
 
 ---
 
-## 6. Chromium Helper installieren
+## 5. Chromium Helper installieren
 
 Der Python-Helper startet Chromium und übernimmt die HTTP-Basic-Authentication über das Chrome DevTools Protocol.
 
@@ -366,7 +366,7 @@ Bei erfolgreicher Prüfung gibt es keine Ausgabe.
 
 ---
 
-## 7. Autostart konfigurieren
+## 6. Autostart konfigurieren
 
 Datei:
 
@@ -394,7 +394,7 @@ Damit passiert beim Start der grafischen Oberfläche automatisch:
 
 ---
 
-## 8. Autostart testen
+## 7. Autostart testen
 
 Raspberry Pi neu starten:
 
@@ -433,7 +433,7 @@ SanLager betriebsbereit
 
 ---
 
-## 9. Log
+## 8. Log
 
 Der Chromium-Helper schreibt ein Log:
 
@@ -443,7 +443,7 @@ Der Chromium-Helper schreibt ein Log:
 
 ---
 
-## 10. Verzeichnisstruktur
+## 9. Verzeichnisstruktur
 
 Die relevante Konfiguration:
 

@@ -9,25 +9,33 @@ Die wichtigsten Verzeichnisse des Projekts:
 ```text
 sanlager/
 ├── database/
-│   └── database.sqlite
+│   ├── database.sqlite
+│   └── migrations/
+│       └── ...
 ├── docs/
 │   └── ...
 ├── public/
 │   ├── css/
 │   ├── images/
+│   ├── js/
+│   │   └── vendor/
 │   └── index.php
+├── script/
+│   ├── pull.sh
+│   └── push.sh
 ├── src/
 │   ├── ArticleRepository.php
 │   ├── BatchRepository.php
 │   ├── CategoryRepository.php
 │   ├── Database.php
+│   ├── LocationRepository.php
+│   ├── QrCodeGenerator.php
 │   └── StockRepository.php
 ├── vendor/
 ├── .gitignore
 ├── composer.json
 ├── composer.lock
-├── pull.sh
-└── push.sh
+└── start.sh
 ```
 
 ### `public/`
@@ -35,6 +43,8 @@ sanlager/
 Enthält die öffentlich erreichbaren Dateien der Anwendung.
 
 Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung.
+
+`public/js/vendor/` enthält extern bezogene JavaScript-Bibliotheken (z. B. den QR-Code-Scanner `html5-qrcode`), die lokal mitgeliefert werden, damit SanLager ohne Internetzugriff funktioniert.
 
 ### `src/`
 
@@ -44,7 +54,7 @@ Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
 ### `database/`
 
-Enthält die lokale SQLite-Datenbank.
+Enthält die lokale SQLite-Datenbank sowie die Migrationen.
 
 Die Datei
 
@@ -53,6 +63,12 @@ database/database.sqlite
 ```
 
 wird **nicht über GitHub verteilt**.
+
+`database/migrations/` enthält die fortlaufend nummerierten SQL-Migrationen, über die Änderungen an der Datenbankstruktur vorgenommen werden (siehe [Datenbank-Dokumentation](10-datenbank.md)).
+
+### `script/`
+
+Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`), siehe die Abschnitte weiter unten auf dieser Seite.
 
 ### `docs/`
 
@@ -87,12 +103,12 @@ php -l public/index.php
 
 ## Änderungen zu GitHub übertragen
 
-Für das Projekt steht das Skript `push.sh` zur Verfügung.
+Für das Projekt steht das Skript `script/push.sh` zur Verfügung.
 
 Aufruf:
 
 ```bash
-./push.sh "Beschreibung der Änderung"
+./script/push.sh "Beschreibung der Änderung"
 ```
 
 Das Skript führt dabei die notwendigen Git-Schritte aus:
@@ -104,10 +120,10 @@ Das Skript führt dabei die notwendigen Git-Schritte aus:
 
 ## Änderungen auf dem Server bereitstellen
 
-Auf dem Server wird der aktuelle Stand aus GitHub mit `pull.sh` übernommen:
+Auf dem Server wird der aktuelle Stand aus GitHub mit `script/pull.sh` übernommen:
 
 ```bash
-./pull.sh
+./script/pull.sh
 ```
 
 Das Skript aktualisiert ausschließlich den versionierten Anwendungscode.

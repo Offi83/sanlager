@@ -20,8 +20,13 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 * Anzeige von Mindesthaltbarkeitsdaten
 * Erkennung abgelaufener Artikel
 * Verwaltung von Artikelstammdaten
+* Verwaltung und Sortierung von Kategorien
+* Verwaltung und Sortierung von Lagerorten
+* Buchen: Ausbuchen oder Umbuchen an einen anderen Lagerort per Scan oder manueller Eingabe
+* QR-Code je Artikel und Etikettendruck
 * einfache und übersichtliche Bedienung
 * optimiert für die Nutzung per Touchscreen
+* funktioniert vollständig ohne Internetzugriff (auch der Kamera-Scanner ist lokal eingebunden)
 * lokale SQLite-Datenbank
 * Webzugriff über Browser
 * Raspberry-Pi-Terminal für das Lager (optional)
@@ -35,9 +40,8 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
 * Ausbuchen mit Anzahl >1
-* Umbuchen von Lagerorten
-* Verwaltung Lagerorte
 * Einbuchen via Scan & Anzahl
+* Weitere Umsetzung der Lagerorte (Artikel pro Lagerort, ablaufende MHD pro Lagerort, etc.)
 * Inventurfunktion
 
 ---
@@ -91,7 +95,9 @@ Die technische Dokumentation ist in einzelne Bereiche aufgeteilt.
 
 * Vorstellung und Konzept des SanLagers
 * Aufbau und Funktionsweise
-* verwendete Technologien### 🗄️ Datenbank
+* verwendete Technologien
+
+### 🛠️ Installation
 
 ➡️ **[Installation](docs/05-installation.md)**
 
@@ -111,7 +117,7 @@ Einrichtung des Raspberry Pi als festes SanLager-Terminal:
 * Autostart
 * Fehlerbehebung
 
-➡️ **[Raspberry-Pi-Terminal einrichten](docs/99-raspberry-pi.md)**
+➡️ **[Raspberry-Pi-Terminal einrichten](docs/90-raspberry-pi.md)**
 
 ### 🔧 Entwicklung
 

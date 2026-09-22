@@ -8,7 +8,7 @@ Die Datenbank liegt unter:
 database/database.sqlite
 ```
 
-Die SQLite-Datei enthält die Artikeldaten, Kategorien, Bestände und Lagerbewegungen der Anwendung.
+Die SQLite-Datei enthält die Artikeldaten, Kategorien, Lagerorte, Chargen und Lagerbewegungen der Anwendung.
 
 > **Hinweis:** Die produktive Datenbank wird nicht über Git versioniert. Dadurch bleiben die Daten auf dem jeweiligen System erhalten, wenn der Anwendungscode aktualisiert wird.
 
@@ -21,15 +21,14 @@ Enthält die Stammdaten der Lagerartikel.
 | Feld             | Beschreibung               |
 | ---------------- | -------------------------- |
 | `id`             | Eindeutige ID des Artikels |
-| `article_number` | Artikelnummer              |
+| `article_number` | Artikelnummer (eindeutig)  |
 | `name`           | Bezeichnung des Artikels   |
-| `description`    | Beschreibung               |
+| `description`    | Beschreibung                |
 | `unit`           | Einheit, z. B. Stück       |
 | `minimum_stock`  | Mindestbestand             |
 | `category_id`    | Zugehörige Kategorie       |
-| `active`         | Status des Artikels        |
+| `active`         | Status des Artikels (Soft-Delete beim Löschen) |
 | `created_at`     | Erstellungszeitpunkt       |
-| `updated_at`     | Letzte Änderung            |
 
 ### `article_categories`
 
@@ -38,17 +37,66 @@ Enthält die Kategorien für die Artikel.
 | Feld         | Beschreibung                 |
 | ------------ | ---------------------------- |
 | `id`         | Eindeutige ID der Kategorie  |
-| `name`       | Name der Kategorie           |
+| `name`       | Name der Kategorie (eindeutig) |
 | `short_name` | Kürzel der Kategorie         |
 | `color`      | Farbe der Kategorie          |
-| `sort_order` | Reihenfolge in der Anwendung |
+| `sort_order` | Reihenfolge in der Anwendung, per Drag & Drop änderbar |
 | `active`     | Status der Kategorie         |
 
-### Bestands- und Bewegungsdaten
+### `storage_locations`
 
-Die Bestandsverwaltung basiert auf den Lagerbewegungen. Dadurch können Aus- und Einbuchungen nachvollzogen und Bestände daraus ermittelt werden.
+Enthält die Lagerorte (z. B. Hauptlager, Fahrzeuge, Außenlager).
 
-Die konkreten Tabellen und Beziehungen werden bei Änderungen an der Datenbankstruktur in dieser Dokumentation ergänzt.
+| Feld          | Beschreibung                 |
+| ------------- | ----------------------------- |
+| `id`          | Eindeutige ID des Lagerorts  |
+| `name`        | Name des Lagerorts (eindeutig) |
+| `description` | Beschreibung, optional       |
+| `sort_order`  | Reihenfolge in der Anwendung, per Drag & Drop änderbar |
+| `active`      | Status des Lagerorts (Soft-Delete beim Deaktivieren) |
+
+Der Lagerort mit dem Namen **`Hauptlager`** hat eine besondere Bedeutung: Er ist die feste Quelle für Ausbuchungen und Umbuchungen über die Buchen-Seite (Scanner und manuelle Eingabe). Es muss außerdem stets mindestens ein aktiver Lagerort vorhanden sein.
+
+### `batches`
+
+Enthält die Chargen (Mindesthaltbarkeitsdaten, MHD) je Artikel.
+
+| Feld           | Beschreibung                                |
+| -------------- | -------------------------------------------- |
+| `id`           | Eindeutige ID der Charge                     |
+| `article_id`   | Zugehöriger Artikel                          |
+| `batch_number` | Chargennummer, optional (aktuell ungenutzt) |
+| `expiry_date`  | Mindesthaltbarkeitsdatum, optional           |
+| `created_at`   | Erstellungszeitpunkt                         |
+
+Eine Charge ohne `expiry_date` steht für Bestand ohne MHD.
+
+### `stock_movements`
+
+Die Bestandsverwaltung basiert ausschließlich auf dieser Bewegungs-Tabelle. Der aktuelle Bestand eines Artikels an einem Lagerort ergibt sich stets aus der Summe seiner Bewegungen – es gibt keine separate Bestandstabelle.
+
+| Feld            | Beschreibung                                  |
+| --------------- | ---------------------------------------------- |
+| `id`            | Eindeutige ID der Bewegung                     |
+| `article_id`    | Betroffener Artikel                            |
+| `batch_id`      | Betroffene Charge (MHD), optional              |
+| `location_id`   | Betroffener Lagerort                           |
+| `quantity`      | Menge, positiv (Zugang) oder negativ (Abgang) |
+| `movement_type` | Art der Bewegung, siehe unten                  |
+| `note`          | Freitext-Notiz, optional                       |
+| `created_at`    | Zeitpunkt der Bewegung                         |
+
+Mögliche Werte für `movement_type`:
+
+| Wert           | Bedeutung                                                   |
+| -------------- | ------------------------------------------------------------ |
+| `receipt`      | Einlagerung (Zugang)                                         |
+| `issue`        | Ausbuchung/Entnahme (Abgang) – zählt in „Heute ausgebucht“   |
+| `correction`   | Manuelle Bestandskorrektur                                   |
+| `transfer_out` | Abgang durch Umbuchung an einen anderen Lagerort              |
+| `transfer_in`  | Zugang durch Umbuchung von einem anderen Lagerort              |
+
+Eine Umbuchung (Ziel-Auswahl auf der Buchen-Seite) erzeugt immer **zwei** zusammengehörige Bewegungen (`transfer_out` am Quell- und `transfer_in` am Ziel-Lagerort, mit derselben `batch_id`), damit das MHD beim Zielort erhalten bleibt. Umbuchungen zählen bewusst nicht als Ausbuchung, da kein Material verbraucht wird.
 
 ## Datenbank lokal prüfen
 
@@ -78,7 +126,14 @@ Datenbank verlassen:
 
 ## Änderungen an der Datenbank
 
-Änderungen an der Datenbankstruktur werden über Migrationen bzw. die dafür vorgesehenen Datenbankänderungen der Anwendung durchgeführt.
+Änderungen an der Datenbankstruktur werden über Migrationen im Verzeichnis
+
+```text
+database/migrations/
+```
+
+durchgeführt. Jede Migration ist eine eigene, fortlaufend nummerierte SQL-Datei (z. B. `007_location_sort_order.sql`).
+
+Beim Start prüft SanLager automatisch (`src/Database.php`), welche Migrationen bereits angewendet wurden (Tabelle `schema_migrations`), und führt nur die noch fehlenden aus. Es gibt **kein separates Migration-Script** und keinen manuellen Migrationsbefehl.
 
 Die produktive SQLite-Datei sollte dabei **nicht gelöscht oder durch eine Version aus Git ersetzt werden**.
-

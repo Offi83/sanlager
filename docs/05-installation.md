@@ -39,7 +39,11 @@ composer install --no-dev --optimize-autoloader
 
 ### Konfiguration
 
-SanLager verwendet eine `.env`-Datei.
+SanLager verwendet eine `.env`-Datei. Eine Vorlage dafür liegt als `.env.example` im Projekt und kann kopiert werden:
+
+```bash
+cp .env.example .env
+```
 
 Beispiel:
 
@@ -47,7 +51,7 @@ Beispiel:
 DB_DATABASE=database/database.sqlite
 ```
 
-Die `.env`-Datei darf nicht über den Webserver öffentlich erreichbar sein.
+Die `.env`-Datei ist lokal und wird nicht über Git versioniert. Sie darf zudem nicht über den Webserver öffentlich erreichbar sein.
 
 ### Datenbank
 
@@ -75,7 +79,9 @@ Bei Apache muss daher `public/` als `DocumentRoot` verwendet werden.
 
 Das komplette Projektverzeichnis darf nicht öffentlich erreichbar sein.
 
-Für den Produktivbetrieb sollte SanLager über HTTPS erreichbar sein.
+Für den Produktivbetrieb sollte SanLager über HTTPS erreichbar sein. Das ist insbesondere für den Kamera-Scanner beim Buchen erforderlich: Mobile Browser (z. B. iOS Safari) erlauben Kamerazugriff (`getUserMedia`) nur über eine sichere Verbindung (`https://`) oder `localhost` – über eine reine `http://`-Adresse im lokalen Netz funktioniert das Scannen nicht.
+
+SanLager benötigt zur Laufzeit **keinen Internetzugriff**. Auch die JavaScript-Bibliothek für den QR-Code-Scanner (`html5-qrcode`) liegt lokal unter `public/js/vendor/` und wird nicht von einem externen CDN nachgeladen.
 
 ---
 
