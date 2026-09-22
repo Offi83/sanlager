@@ -19,7 +19,7 @@ class LocationRepository
                 'SELECT *
                  FROM storage_locations
                  WHERE active = 1
-                 ORDER BY name COLLATE NOCASE'
+                 ORDER BY sort_order, name COLLATE NOCASE'
             )
             ->fetchAll();
     }
@@ -52,14 +52,15 @@ class LocationRepository
 
         $statement = $this->db->prepare(
             'INSERT INTO storage_locations
-                (name, description, active)
+                (name, description, sort_order, active)
              VALUES
-                (:name, :description, 1)'
+                (:name, :description, :sort_order, 1)'
         );
 
         $statement->execute([
             'name' => $name,
-            'description' => $description !== '' ? $description : null
+            'description' => $description !== '' ? $description : null,
+            'sort_order' => $this->nextSortOrder()
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -117,6 +118,48 @@ class LocationRepository
                  WHERE active = 1'
             )
             ->fetchColumn();
+    }
+
+    public function reorder(array $ids): void
+    {
+        $statement = $this->db->prepare(
+            'UPDATE storage_locations
+             SET sort_order = :sort_order
+             WHERE id = :id
+             AND active = 1'
+        );
+
+        $this->db->beginTransaction();
+
+        try {
+
+            foreach ($ids as $position => $id) {
+
+                $statement->execute([
+                    'sort_order' => ($position + 1) * 10,
+                    'id' => (int) $id
+                ]);
+            }
+
+            $this->db->commit();
+
+        } catch (\Throwable $exception) {
+
+            $this->db->rollBack();
+
+            throw $exception;
+        }
+    }
+
+    private function nextSortOrder(): int
+    {
+        $sortOrder = $this->db->query(
+            'SELECT COALESCE(MAX(sort_order), 0)
+             FROM storage_locations
+             WHERE active = 1'
+        )->fetchColumn();
+
+        return ((int) $sortOrder) + 10;
     }
 
     private function existsWithName(string $name, ?int $excludeId = null): bool

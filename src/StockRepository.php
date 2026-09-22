@@ -19,7 +19,7 @@ class StockRepository
                 'SELECT *
                  FROM storage_locations
                  WHERE active = 1
-                 ORDER BY name COLLATE NOCASE'
+                 ORDER BY sort_order, name COLLATE NOCASE'
             )
             ->fetchAll();
     }
@@ -225,6 +225,82 @@ public function getStockByBatch(int $articleId): array
         int $locationId,
         ?string $note = null
     ): array {
+        $batch = $this->findOldestBatchWithStock($articleId, $locationId);
+
+        $this->move(
+            $articleId,
+            $locationId,
+            1,
+            'issue',
+            $note,
+            $batch['batch_id']
+        );
+
+        return $batch;
+    }
+
+    /**
+     * Bucht ein Stück der ältesten Charge von einem Lagerort auf einen
+     * anderen um, statt es auszubuchen. Beide Bewegungen teilen sich
+     * dieselbe Charge, damit das MHD beim Zielort erhalten bleibt.
+     */
+    public function transferOldest(
+        int $articleId,
+        int $fromLocationId,
+        int $toLocationId,
+        ?string $note = null
+    ): array {
+        if ($fromLocationId === $toLocationId) {
+            throw new RuntimeException(
+                'Quell- und Ziellagerort dürfen nicht identisch sein.'
+            );
+        }
+
+        $batch = $this->findOldestBatchWithStock($articleId, $fromLocationId);
+
+        $this->db->beginTransaction();
+
+        try {
+            $this->move(
+                $articleId,
+                $fromLocationId,
+                1,
+                'transfer_out',
+                $note,
+                $batch['batch_id']
+            );
+
+            $this->move(
+                $articleId,
+                $toLocationId,
+                1,
+                'transfer_in',
+                $note,
+                $batch['batch_id']
+            );
+
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            throw $exception;
+        }
+
+        return $batch;
+    }
+
+    /**
+     * Ermittelt die Charge mit dem ältesten MHD, die an einem Lagerort
+     * noch positiven Bestand hat. Wird sowohl beim Ausbuchen als auch
+     * beim Umbuchen verwendet, damit stets zuerst das älteste MHD
+     * bewegt wird.
+     */
+    private function findOldestBatchWithStock(
+        int $articleId,
+        int $locationId
+    ): array {
         $statement = $this->db->prepare(
             'SELECT
                 sm.batch_id,
@@ -261,21 +337,10 @@ public function getStockByBatch(int $articleId): array
             );
         }
 
-        $batchId = $batch['batch_id'] !== null
-            ? (int) $batch['batch_id']
-            : null;
-
-        $this->move(
-            $articleId,
-            $locationId,
-            1,
-            'issue',
-            $note,
-            $batchId
-        );
-
         return [
-            'batch_id' => $batchId,
+            'batch_id' => $batch['batch_id'] !== null
+                ? (int) $batch['batch_id']
+                : null,
             'expiry_date' => $batch['expiry_date'],
         ];
     }
@@ -296,7 +361,7 @@ public function getStockByBatch(int $articleId): array
 
         if (!in_array(
             $type,
-            ['receipt', 'issue', 'correction'],
+            ['receipt', 'issue', 'correction', 'transfer_out', 'transfer_in'],
             true
         )) {
             throw new RuntimeException(
@@ -304,7 +369,7 @@ public function getStockByBatch(int $articleId): array
             );
         }
 
-        if ($type === 'issue') {
+        if (in_array($type, ['issue', 'transfer_out'], true)) {
             $current = $this->getStockAtLocation(
                 $articleId,
                 $locationId,

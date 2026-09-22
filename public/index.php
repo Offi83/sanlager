@@ -288,11 +288,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                 }
 
-                $result = $stock->issueOldest(
-                    (int) $article['id'],
-                    (int) $mainLocation,
-                    'Scanner-Ausbuchung'
-                );
+                $mainLocationId = (int) $mainLocation;
+
+                $target = trim($_POST['target'] ?? 'issue');
+
+                if ($target === '' || $target === 'issue') {
+
+                    $result = $stock->issueOldest(
+                        (int) $article['id'],
+                        $mainLocationId,
+                        'Scanner-Ausbuchung'
+                    );
+
+                    $actionLabel = 'ausgebucht';
+
+                } else {
+
+                    $targetLocationId = (int) $target;
+
+                    if (
+                        $targetLocationId <= 0
+                        || $targetLocationId === $mainLocationId
+                    ) {
+                        throw new RuntimeException(
+                            'Ungültiges Buchungsziel.'
+                        );
+                    }
+
+                    $targetLocation = $locationRepository->find(
+                        $targetLocationId
+                    );
+
+                    if (!$targetLocation) {
+                        throw new RuntimeException(
+                            'Der ausgewählte Lagerort wurde nicht gefunden.'
+                        );
+                    }
+
+                    $result = $stock->transferOldest(
+                        (int) $article['id'],
+                        $mainLocationId,
+                        $targetLocationId,
+                        'Scanner-Umbuchung nach ' . $targetLocation['name']
+                    );
+
+                    $actionLabel = 'umgebucht nach ' . $targetLocation['name'];
+                }
 
                 $expiryText = $result['expiry_date']
                     ? formatDate($result['expiry_date'])
@@ -309,7 +350,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'article_name' => $article['name'],
                         'article_number' => $articleNumber,
                         'unit' => $article['unit'],
-                        'expiry_date' => $expiryText
+                        'expiry_date' => $expiryText,
+                        'action_label' => $actionLabel
                     ]);
 
                     exit;
@@ -321,7 +363,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $article['name'] .
                         ' – 1 ' .
                         $article['unit'] .
-                        ' ausgebucht (' .
+                        ' ' .
+                        $actionLabel .
+                        ' (' .
                         $expiryText .
                         ')'
                     )
@@ -574,6 +618,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
+        | Lagerorte sortieren
+        |--------------------------------------------------------------------------
+        */
+        if ($action === 'reorder_locations') {
+
+            header('Content-Type: application/json; charset=utf-8');
+
+            try {
+
+                $ids = $_POST['ids'] ?? [];
+
+                if (!is_array($ids)) {
+                    throw new RuntimeException(
+                        'Ungültige Lagerortreihenfolge.'
+                    );
+                }
+
+                $locationRepository->reorder($ids);
+
+                echo json_encode([
+                    'success' => true
+                ]);
+
+            } catch (Throwable $exception) {
+
+                http_response_code(400);
+
+                echo json_encode([
+                    'success' => false,
+                    'error' => $exception->getMessage()
+                ]);
+            }
+
+            exit;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
         | Bestand buchen
         |--------------------------------------------------------------------------
         */
@@ -785,6 +867,16 @@ if ($page === 'today_issues') {
     $todayIssueCount = $stock->getTodayIssueCount();
 }
 
+$bookableLocations = [];
+
+if ($page === 'issue') {
+
+    $bookableLocations = array_values(array_filter(
+        $locationRepository->all(),
+        static fn (array $location): bool => $location['name'] !== 'Hauptlager'
+    ));
+}
+
 if ($page === 'article' || $page === 'label') {
 
     $articleId = (int) ($_GET['id'] ?? 0);
@@ -859,7 +951,7 @@ if ($page === 'article' || $page === 'label') {
 
 <nav>
     <a href="?page=issue" class="<?= $page === 'issue' ? 'active' : '' ?>">
-        Ausbuchen
+        Buchen
     </a>
     <a href="?page=today_issues" class="<?= $page === 'today_issues' ? 'active' : '' ?>">
         Heute ausgebucht
@@ -1270,131 +1362,154 @@ if ($page === 'article' || $page === 'label') {
                 <h1>Lagerorte</h1>
 
                 <p>
-                    Lagerorte für die Bestandsverwaltung anlegen und bearbeiten.
+                    Lagerorte für die Bestandsverwaltung anlegen, bearbeiten
+                    und sortieren.
                 </p>
 
             </div>
 
         </div>
 
-        <section class="card">
 
-            <div class="card-header">
+        <div class="category-layout">
 
-                <h2>
-                    <?= $editLocation ? 'Lagerort bearbeiten' : 'Neuer Lagerort' ?>
-                </h2>
+            <section class="card">
 
-            </div>
+                <div class="card-header">
 
-            <form method="post" class="form">
+                    <h2>
+                        <?= $editLocation ? 'Lagerort bearbeiten' : 'Neuer Lagerort' ?>
+                    </h2>
 
-                <input
-                    type="hidden"
-                    name="action"
-                    value="<?= $editLocation ? 'update_location' : 'create_location' ?>"
-                >
+                </div>
 
-                <?php if ($editLocation): ?>
+                <form method="post" class="form">
 
                     <input
                         type="hidden"
-                        name="id"
-                        value="<?= (int) $editLocation['id'] ?>"
+                        name="action"
+                        value="<?= $editLocation ? 'update_location' : 'create_location' ?>"
                     >
-
-                <?php endif; ?>
-
-                <label>
-
-                    <span>Name</span>
-
-                    <input
-                        type="text"
-                        name="name"
-                        required
-                        maxlength="100"
-                        value="<?= h($editLocation['name'] ?? '') ?>"
-                        placeholder="z. B. Hauptlager"
-                    >
-
-                </label>
-
-                <label>
-
-                    <span>Beschreibung</span>
-
-                    <textarea
-                        name="description"
-                        rows="2"
-                        placeholder="Optional"
-                    ><?= h($editLocation['description'] ?? '') ?></textarea>
-
-                </label>
-
-                <div class="form-actions">
-
-                    <button
-                        type="submit"
-                        class="button button-primary"
-                    >
-                        <?= $editLocation ? 'Lagerort speichern' : 'Lagerort anlegen' ?>
-                    </button>
 
                     <?php if ($editLocation): ?>
 
-                        <a
-                            href="?page=locations"
-                            class="button button-secondary"
+                        <input
+                            type="hidden"
+                            name="id"
+                            value="<?= (int) $editLocation['id'] ?>"
                         >
-                            Abbrechen
-                        </a>
 
                     <?php endif; ?>
 
+                    <label>
+
+                        <span>Name</span>
+
+                        <input
+                            type="text"
+                            name="name"
+                            required
+                            maxlength="100"
+                            value="<?= h($editLocation['name'] ?? '') ?>"
+                            placeholder="z. B. Hauptlager"
+                        >
+
+                    </label>
+
+                    <label>
+
+                        <span>Beschreibung</span>
+
+                        <textarea
+                            name="description"
+                            rows="2"
+                            placeholder="Optional"
+                        ><?= h($editLocation['description'] ?? '') ?></textarea>
+
+                    </label>
+
+                    <div class="form-actions">
+
+                        <button
+                            type="submit"
+                            class="button button-primary"
+                        >
+                            <?= $editLocation ? 'Lagerort speichern' : 'Lagerort anlegen' ?>
+                        </button>
+
+                        <?php if ($editLocation): ?>
+
+                            <a
+                                href="?page=locations"
+                                class="button button-secondary"
+                            >
+                                Abbrechen
+                            </a>
+
+                        <?php endif; ?>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+
+            <section class="card">
+
+                <div class="card-header">
+
+                    <h2>Lagerorte</h2>
+
                 </div>
 
-            </form>
+                <div class="card-body">
 
-        </section>
+                    <p class="form-help">
+                        Lagerorte per Drag &amp; Drop in die gewünschte Reihenfolge ziehen.
+                        Diese Reihenfolge bestimmt auch die Auswahl beim Buchen.
+                    </p>
 
-        <div class="card">
+                    <?php if (!$locationList): ?>
 
-            <?php if (!$locationList): ?>
+                        <div class="empty-state compact">
+                            Noch keine Lagerorte vorhanden.
+                        </div>
 
-                <div class="empty-state compact">
-                    Noch keine Lagerorte vorhanden.
-                </div>
+                    <?php else: ?>
 
-            <?php else: ?>
+                        <div
+                            id="location-list"
+                            class="category-list"
+                        >
 
-                <table>
+                            <?php foreach ($locationList as $location): ?>
 
-                    <thead>
+                                <div
+                                    class="location-sort-row"
+                                    draggable="true"
+                                    data-location-id="<?= (int) $location['id'] ?>"
+                                >
 
-                        <tr>
-                            <th>Name</th>
-                            <th>Beschreibung</th>
-                            <th></th>
-                        </tr>
+                                    <div class="category-drag">
+                                        ⋮⋮
+                                    </div>
 
-                    </thead>
+                                    <div class="location-sort-info">
 
-                    <tbody>
+                                        <strong>
+                                            <?= h($location['name']) ?>
+                                        </strong>
 
-                        <?php foreach ($locationList as $location): ?>
+                                        <?php if (!empty($location['description'])): ?>
 
-                            <tr>
+                                            <span>
+                                                <?= h($location['description']) ?>
+                                            </span>
 
-                                <td>
-                                    <strong><?= h($location['name']) ?></strong>
-                                </td>
+                                        <?php endif; ?>
 
-                                <td>
-                                    <?= h($location['description'] ?? '') ?>
-                                </td>
-
-                                <td>
+                                    </div>
 
                                     <div class="category-actions">
 
@@ -1433,19 +1548,150 @@ if ($page === 'article' || $page === 'label') {
 
                                     </div>
 
-                                </td>
+                                </div>
 
-                            </tr>
+                            <?php endforeach; ?>
 
-                        <?php endforeach; ?>
+                        </div>
 
-                    </tbody>
+                    <?php endif; ?>
 
-                </table>
+                </div>
 
-            <?php endif; ?>
+            </section>
 
         </div>
+
+
+        <script>
+
+            (() => {
+
+                const list = document.getElementById('location-list');
+
+                if (!list) {
+                    return;
+                }
+
+                let dragged = null;
+
+
+                list.addEventListener('dragstart', event => {
+
+                    const row = event.target.closest('.location-sort-row');
+
+                    if (!row) {
+                        return;
+                    }
+
+                    dragged = row;
+                    row.classList.add('dragging');
+
+                    event.dataTransfer.effectAllowed = 'move';
+
+                });
+
+
+                list.addEventListener('dragend', event => {
+
+                    const row = event.target.closest('.location-sort-row');
+
+                    if (row) {
+                        row.classList.remove('dragging');
+                    }
+
+                    dragged = null;
+
+                    saveOrder();
+
+                });
+
+
+                list.addEventListener('dragover', event => {
+
+                    event.preventDefault();
+
+                    if (!dragged) {
+                        return;
+                    }
+
+                    const target = event.target.closest('.location-sort-row');
+
+                    if (!target || target === dragged) {
+                        return;
+                    }
+
+                    const rect = target.getBoundingClientRect();
+
+                    const before =
+                        event.clientY <
+                        rect.top + rect.height / 2;
+
+                    if (before) {
+                        list.insertBefore(dragged, target);
+                    } else {
+                        list.insertBefore(
+                            dragged,
+                            target.nextSibling
+                        );
+                    }
+
+                });
+
+
+                function saveOrder() {
+
+                    const ids = [
+                        ...list.querySelectorAll('.location-sort-row')
+                    ].map(row => row.dataset.locationId);
+
+
+                    const formData = new FormData();
+
+                    formData.append(
+                        'action',
+                        'reorder_locations'
+                    );
+
+
+                    ids.forEach(id => {
+                        formData.append('ids[]', id);
+                    });
+
+
+                    fetch('', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+
+                        if (!data.success) {
+
+                            alert(
+                                data.error ||
+                                'Die Reihenfolge konnte nicht gespeichert werden.'
+                            );
+
+                        }
+
+                    })
+                    .catch(() => {
+
+                        alert(
+                            'Die Reihenfolge konnte nicht gespeichert werden.'
+                        );
+
+                    });
+
+                }
+
+            })();
+
+        </script>
 
     <?php elseif ($page === 'articles'): ?>
 
@@ -1824,12 +2070,13 @@ if ($page === 'article' || $page === 'label') {
 
                 <div>
 
-                    <h1>Ausbuchen</h1>
+                    <h1>Buchen</h1>
 
                     <p>
-                        Artikelnummer scannen oder eingeben.
+                        Artikelnummer scannen oder eingeben und Ziel wählen.
                         Es wird automatisch ein Stück mit dem ältesten MHD
-                        aus dem Hauptlager entnommen.
+                        aus dem Hauptlager ausgebucht oder an den
+                        gewählten Lagerort umgebucht.
                     </p>
 
                 </div>
@@ -1912,9 +2159,37 @@ if ($page === 'article' || $page === 'label') {
 
                     </label>
 
+                    <label class="issue-target-field">
+
+                        <span>
+                            Ziel
+                        </span>
+
+                        <select
+                            name="target"
+                            id="issue-target"
+                        >
+
+                            <option value="issue" selected>
+                                Ausbuchen
+                            </option>
+
+                            <?php foreach ($bookableLocations as $bookableLocation): ?>
+
+                                <option value="<?= (int) $bookableLocation['id'] ?>">
+                                    <?= h($bookableLocation['name']) ?>
+                                </option>
+
+                            <?php endforeach; ?>
+
+                        </select>
+
+                    </label>
+
                     <button
                         type="submit"
                         class="button button-primary"
+                        id="issue-submit"
                     >
                         Ausbuchen
                     </button>
@@ -2975,6 +3250,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const articleNumber =
         document.getElementById('issue-article-number');
 
+    const targetSelect =
+        document.getElementById('issue-target');
+
+    const submitButton =
+        document.getElementById('issue-submit');
+
 
     if (
         !scanButton
@@ -2982,9 +3263,41 @@ document.addEventListener('DOMContentLoaded', function () {
         || !scanStatus
         || !scanResult
         || !articleNumber
+        || !targetSelect
+        || !submitButton
     ) {
         return;
     }
+
+
+    function targetLabel() {
+
+        const option =
+            targetSelect.options[targetSelect.selectedIndex];
+
+        return option
+            ? option.textContent.trim()
+            : 'Ausbuchen';
+
+    }
+
+
+    function updateSubmitButton() {
+
+        submitButton.textContent =
+            targetSelect.value === 'issue'
+                ? 'Ausbuchen'
+                : 'Nach ' + targetLabel() + ' umbuchen';
+
+    }
+
+
+    targetSelect.addEventListener(
+        'change',
+        updateSubmitButton
+    );
+
+    updateSubmitButton();
 
 
     let scanner = null;
@@ -3153,6 +3466,11 @@ document.addEventListener('DOMContentLoaded', function () {
                             code
                         );
 
+                        formData.append(
+                            'target',
+                            targetSelect.value
+                        );
+
 
                         const response =
                             await fetch(
@@ -3190,15 +3508,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         /*
                          * Aufeinanderfolgende Buchungen
-                         * desselben Artikels zusammenfassen.
+                         * desselben Artikels mit demselben Ziel
+                         * zusammenfassen.
                          */
-                        if (lastResult === code) {
+                        const resultKey =
+                            code + '|' + targetSelect.value;
+
+                        if (lastResult === resultKey) {
 
                             lastResultCount++;
 
                         } else {
 
-                            lastResult = code;
+                            lastResult = resultKey;
                             lastResultCount = 1;
 
                         }
@@ -3210,7 +3532,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             + lastResultCount
                             + ' '
                             + data.unit
-                            + ' ausgebucht – MHD '
+                            + ' '
+                            + data.action_label
+                            + ' – MHD '
                             + data.expiry_date
                         );
 

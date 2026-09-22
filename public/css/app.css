@@ -632,6 +632,10 @@ tbody tr:last-child td {
     flex: 1;
 }
 
+.issue-form .issue-target-field {
+    flex: 0 1 200px;
+}
+
 .issue-form label > span {
     color: #444;
     font-size: 14px;
@@ -872,6 +876,11 @@ tbody tr:last-child td {
     .form-actions,
     .issue-form {
         flex-direction: column;
+        align-items: stretch;
+    }
+
+    .issue-form .issue-target-field {
+        flex: 0 0 auto;
     }
 
     .form-actions .button,
@@ -1012,9 +1021,9 @@ nav a.active {
     gap: 8px;
 }
 
-.category-row {
+.category-row,
+.location-sort-row {
     display: grid;
-    grid-template-columns: 24px 10px minmax(0, 1fr) auto;
     align-items: center;
     gap: 14px;
     min-height: 58px;
@@ -1029,12 +1038,22 @@ nav a.active {
         transform 0.15s ease;
 }
 
-.category-row:hover {
+.category-row {
+    grid-template-columns: 24px 10px minmax(0, 1fr) auto;
+}
+
+.location-sort-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+}
+
+.category-row:hover,
+.location-sort-row:hover {
     border-color: var(--border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.category-row.dragging {
+.category-row.dragging,
+.location-sort-row.dragging {
     opacity: 0.45;
     transform: scale(0.99);
 }
@@ -1086,6 +1105,30 @@ nav a.active {
     text-align: center;
 }
 
+.location-sort-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.location-sort-info strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+}
+
+.location-sort-info span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .category-actions {
     display: flex;
     align-items: center;
@@ -1112,17 +1155,34 @@ nav a.active {
         grid-template-columns: 24px 10px minmax(0, 1fr);
     }
 
-    .category-actions {
+    .location-sort-row {
+        grid-template-columns: 24px minmax(0, 1fr);
+    }
+
+    .category-row .category-actions {
         grid-column: 3;
+        justify-content: flex-start;
+    }
+
+    .location-sort-row .category-actions {
+        grid-column: 2;
         justify-content: flex-start;
     }
 }
 
 @media (max-width: 520px) {
 
+    .category-row,
+    .location-sort-row {
+        gap: 10px;
+    }
+
     .category-row {
         grid-template-columns: 20px 8px minmax(0, 1fr);
-        gap: 10px;
+    }
+
+    .location-sort-row {
+        grid-template-columns: 20px minmax(0, 1fr);
     }
 
     .category-info {
