@@ -5,6 +5,13 @@ namespace LagerApp;
 use PDO;
 use RuntimeException;
 
+/**
+ * Öffnet die SQLite-Verbindung und wendet beim Start automatisch alle
+ * noch fehlenden Migrationen aus `database/migrations/` an.
+ *
+ * Es gibt bewusst kein separates Migrations-Kommando: Jeder Seitenaufruf
+ * prüft und aktualisiert das Schema selbst (siehe runMigrations()).
+ */
 class Database
 {
     private PDO $connection;

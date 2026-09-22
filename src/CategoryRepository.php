@@ -5,6 +5,9 @@ namespace LagerApp;
 use PDO;
 use RuntimeException;
 
+/**
+ * Datenbankzugriff für Artikelkategorien (Tabelle `article_categories`).
+ */
 class CategoryRepository
 {
     public function __construct(
@@ -12,6 +15,10 @@ class CategoryRepository
     ) {
     }
 
+    /**
+     * Liefert alle aktiven Kategorien in ihrer per Drag & Drop
+     * festgelegten Reihenfolge (`sort_order`).
+     */
     public function all(): array
     {
         return $this->db
@@ -24,6 +31,9 @@ class CategoryRepository
             ->fetchAll();
     }
 
+    /**
+     * Liefert eine einzelne aktive Kategorie.
+     */
     public function find(int $id): ?array
     {
         $statement = $this->db->prepare(
@@ -42,6 +52,11 @@ class CategoryRepository
         return $category ?: null;
     }
 
+    /**
+     * Legt eine neue Kategorie an und hängt sie ans Ende der Sortierung an.
+     *
+     * @throws RuntimeException wenn der Name bereits vergeben ist
+     */
     public function create(
         string $name,
         string $shortName,
@@ -70,6 +85,10 @@ class CategoryRepository
         return (int) $this->db->lastInsertId();
     }
 
+    /**
+     * @throws RuntimeException wenn der Name bereits von einer anderen
+     *                          Kategorie verwendet wird
+     */
     public function update(
         int $id,
         string $name,
@@ -99,6 +118,15 @@ class CategoryRepository
         ]);
     }
 
+    /**
+     * Löscht eine Kategorie unwiderruflich (Hard-Delete).
+     *
+     * Anders als bei Artikeln/Lagerorten ist das hier unbedenklich, da
+     * `articles.category_id` per ON DELETE SET NULL abgesichert ist und
+     * keine Lagerbewegungen an Kategorien hängen. Der Aufrufer sollte
+     * vorher mit articleCount() prüfen, dass keine Artikel mehr
+     * zugeordnet sind.
+     */
     public function delete(int $id): void
     {
         $statement = $this->db->prepare(
@@ -112,6 +140,10 @@ class CategoryRepository
         ]);
     }
 
+    /**
+     * Zählt die aktiven Artikel dieser Kategorie – dient als Schutz vor
+     * dem Löschen einer noch benutzten Kategorie.
+     */
     public function articleCount(int $id): int
     {
         $statement = $this->db->prepare(
@@ -128,6 +160,11 @@ class CategoryRepository
         return (int) $statement->fetchColumn();
     }
 
+    /**
+     * Setzt die Sortierreihenfolge anhand der übergebenen ID-Liste neu
+     * (Reihenfolge der IDs = neue Reihenfolge). Wird vom Drag & Drop auf
+     * der Kategorien-Seite aufgerufen.
+     */
     public function reorder(array $ids): void
     {
         $statement = $this->db->prepare(
@@ -159,6 +196,9 @@ class CategoryRepository
         }
     }
 
+    /**
+     * @param int|null $excludeId eigene ID beim Bearbeiten ausschließen
+     */
     private function existsWithName(string $name, ?int $excludeId = null): bool
     {
         $statement = $this->db->prepare(

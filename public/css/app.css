@@ -355,6 +355,29 @@ tbody tr:last-child td {
     font-weight: 600;
 }
 
+.location-hint {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.location-hint.is-low {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.minimum-stock-field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.minimum-stock-input {
+    width: 120px;
+    text-align: right;
+}
+
 .expired-stock-warning {
     margin-top: 5px;
 }
@@ -893,6 +916,7 @@ tbody tr:last-child td {
         padding: 13px 12px;
     }
 
+    .article-top-row,
     .article-detail-page .article-top-row {
         grid-template-columns: 1fr;
     }
@@ -1305,9 +1329,9 @@ nav a.active {
         font-size: 10px;
     }
 
-    /* Artikelnummer auf kleinen Displays ausblenden */
-    table th:nth-child(2),
-    table td:nth-child(2) {
+    /* Artikelnummer (2. Spalte) auf kleinen Displays ausblenden */
+    .table-with-article-number th:nth-child(2),
+    .table-with-article-number td:nth-child(2) {
         display: none;
     }
 

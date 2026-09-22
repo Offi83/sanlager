@@ -25,7 +25,6 @@ Enthält die Stammdaten der Lagerartikel.
 | `name`           | Bezeichnung des Artikels   |
 | `description`    | Beschreibung                |
 | `unit`           | Einheit, z. B. Stück       |
-| `minimum_stock`  | Mindestbestand             |
 | `category_id`    | Zugehörige Kategorie       |
 | `active`         | Status des Artikels (Soft-Delete beim Löschen) |
 | `created_at`     | Erstellungszeitpunkt       |
@@ -55,7 +54,20 @@ Enthält die Lagerorte (z. B. Hauptlager, Fahrzeuge, Außenlager).
 | `sort_order`  | Reihenfolge in der Anwendung, per Drag & Drop änderbar |
 | `active`      | Status des Lagerorts (Soft-Delete beim Deaktivieren) |
 
-Der Lagerort mit dem Namen **`Hauptlager`** hat eine besondere Bedeutung: Er ist die feste Quelle für Ausbuchungen und Umbuchungen über die Buchen-Seite (Scanner und manuelle Eingabe). Es muss außerdem stets mindestens ein aktiver Lagerort vorhanden sein.
+Der Lagerort mit dem Namen **`Hauptlager`** hat eine besondere Bedeutung: Er ist der voreingestellte Quell-Lagerort für Ausbuchungen und Umbuchungen über die Buchen-Seite (Scanner und manuelle Eingabe), dort aber frei auf einen anderen Lagerort umstellbar. Es muss außerdem stets mindestens ein aktiver Lagerort vorhanden sein.
+
+### `article_location_minimums`
+
+Enthält die Mindestbestände eines Artikels, jeweils bezogen auf einen einzelnen Lagerort (z. B. die Soll-Ausstattung eines Sanitätsrucksacks oder die Nachbestückungs-Reserve im Hauptlager).
+
+| Feld            | Beschreibung                                              |
+| --------------- | ----------------------------------------------------------- |
+| `id`            | Eindeutige ID des Eintrags                                 |
+| `article_id`    | Betroffener Artikel                                        |
+| `location_id`   | Betroffener Lagerort                                       |
+| `minimum_stock` | Mindestbestand für diesen Artikel an diesem Lagerort       |
+
+Nicht jeder Artikel/Lagerort-Kombination muss ein Mindestbestand hinterlegt sein: Nur explizit gepflegte Kombinationen (je Kombination höchstens ein Eintrag, siehe `UNIQUE(article_id, location_id)`) werden überwacht und lösen bei Unterschreitung eine Warnung aus.
 
 ### `batches`
 

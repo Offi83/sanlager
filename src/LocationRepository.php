@@ -5,6 +5,14 @@ namespace LagerApp;
 use PDO;
 use RuntimeException;
 
+/**
+ * Datenbankzugriff für Lagerorte (Tabelle `storage_locations`).
+ *
+ * Lagerorte werden nie hart gelöscht, sondern über deactivate() als
+ * Soft-Delete markiert: `stock_movements.location_id` ist per
+ * ON DELETE CASCADE mit dieser Tabelle verknüpft, ein echtes DELETE
+ * würde also die komplette Bewegungshistorie dieses Lagerorts mitlöschen.
+ */
 class LocationRepository
 {
     public function __construct(
@@ -12,6 +20,12 @@ class LocationRepository
     ) {
     }
 
+    /**
+     * Liefert alle aktiven Lagerorte in ihrer per Drag & Drop festgelegten
+     * Reihenfolge (`sort_order`). Diese Reihenfolge bestimmt auch die
+     * Ziel-Auswahl auf der Buchen-Seite und das Lagerort-Dropdown beim
+     * Bestand buchen.
+     */
     public function all(): array
     {
         return $this->db
@@ -24,6 +38,9 @@ class LocationRepository
             ->fetchAll();
     }
 
+    /**
+     * Liefert einen einzelnen aktiven Lagerort.
+     */
     public function find(int $id): ?array
     {
         $statement = $this->db->prepare(
@@ -42,6 +59,36 @@ class LocationRepository
         return $location ?: null;
     }
 
+    /**
+     * Sucht einen aktiven Lagerort anhand seines Namens.
+     *
+     * Wird u. a. verwendet, um den festen Quell-Lagerort "Hauptlager"
+     * für die Buchen-Seite zu ermitteln.
+     */
+    public function findByName(string $name): ?array
+    {
+        $statement = $this->db->prepare(
+            'SELECT *
+             FROM storage_locations
+             WHERE name = :name
+             AND active = 1
+             LIMIT 1'
+        );
+
+        $statement->execute([
+            'name' => $name
+        ]);
+
+        $location = $statement->fetch();
+
+        return $location ?: null;
+    }
+
+    /**
+     * Legt einen neuen Lagerort an und hängt ihn ans Ende der Sortierung an.
+     *
+     * @throws RuntimeException wenn der Name bereits vergeben ist
+     */
     public function create(string $name, string $description): int
     {
         if ($this->existsWithName($name)) {
@@ -66,6 +113,10 @@ class LocationRepository
         return (int) $this->db->lastInsertId();
     }
 
+    /**
+     * @throws RuntimeException wenn der Name bereits von einem anderen
+     *                          Lagerort verwendet wird
+     */
     public function update(int $id, string $name, string $description): void
     {
         if ($this->existsWithName($name, $id)) {
@@ -89,6 +140,16 @@ class LocationRepository
         ]);
     }
 
+    /**
+     * Deaktiviert einen Lagerort (Soft-Delete), siehe Klassenkommentar.
+     *
+     * Ob dort noch Bestand vorhanden ist, muss der Aufrufer vorher selbst
+     * prüfen (siehe StockRepository::locationHasStock()) – diese Methode
+     * verhindert nur, dass der letzte verbleibende aktive Lagerort
+     * deaktiviert wird.
+     *
+     * @throws RuntimeException wenn es der letzte aktive Lagerort ist
+     */
     public function deactivate(int $id): void
     {
         if ($this->activeCount() <= 1) {
@@ -109,6 +170,9 @@ class LocationRepository
         ]);
     }
 
+    /**
+     * Anzahl der aktuell aktiven Lagerorte.
+     */
     public function activeCount(): int
     {
         return (int) $this->db
@@ -120,6 +184,11 @@ class LocationRepository
             ->fetchColumn();
     }
 
+    /**
+     * Setzt die Sortierreihenfolge anhand der übergebenen ID-Liste neu
+     * (Reihenfolge der IDs = neue Reihenfolge). Wird vom Drag & Drop auf
+     * der Lagerorte-Seite aufgerufen.
+     */
     public function reorder(array $ids): void
     {
         $statement = $this->db->prepare(

@@ -13,7 +13,10 @@
     "autoload": {
         "psr-4": {
             "LagerApp\\": "src/"
-        }
+        },
+        "files": [
+            "src/helpers.php"
+        ]
     },
     "scripts": {
         "dev": "php -S localhost:8080 -t public",

@@ -5,6 +5,12 @@ namespace LagerApp;
 use PDO;
 use RuntimeException;
 
+/**
+ * Datenbankzugriff für Artikelstammdaten (Tabelle `articles`).
+ *
+ * Bestände selbst werden nicht hier, sondern über StockRepository anhand
+ * der Lagerbewegungen ermittelt.
+ */
 class ArticleRepository
 {
     public function __construct(
@@ -12,6 +18,10 @@ class ArticleRepository
     ) {
     }
 
+    /**
+     * Liefert alle aktiven Artikel inkl. Kategorie-Infos, optional gefiltert
+     * nach Suchbegriff (Name/Artikelnummer/Beschreibung) und Kategorie.
+     */
     public function all(string $search = '', ?int $categoryId = null): array
     {
         $conditions = [
@@ -55,6 +65,11 @@ class ArticleRepository
         return $statement->fetchAll();
     }
 
+    /**
+     * Liefert einen einzelnen Artikel inkl. Kategorie-Infos, unabhängig
+     * vom `active`-Status (z. B. für die Bearbeiten-Seite eines gerade
+     * deaktivierten Artikels).
+     */
     public function find(int $id): ?array
     {
         $statement = $this->db->prepare(
@@ -78,49 +93,20 @@ class ArticleRepository
         return $article ?: null;
     }
 
+    /**
+     * Legt einen neuen Artikel an.
+     *
+     * @throws RuntimeException wenn Artikelnummer oder Name bereits vergeben sind
+     */
     public function create(
         ?string $articleNumber,
         string $name,
         string $description,
         string $unit,
-        int $minimumStock,
         ?int $categoryId
     ): int {
-        if ($articleNumber !== null && $articleNumber !== '') {
-            $existingArticleNumber = $this->db->prepare(
-                'SELECT id
-                 FROM articles
-                 WHERE article_number = :article_number
-                 LIMIT 1'
-            );
-
-            $existingArticleNumber->execute([
-                'article_number' => $articleNumber
-            ]);
-
-            if ($existingArticleNumber->fetchColumn() !== false) {
-                throw new RuntimeException(
-                    'Diese Artikelnummer wird bereits verwendet'
-                );
-            }
-        }
-
-        $existingArticle = $this->db->prepare(
-            'SELECT id
-             FROM articles
-             WHERE name = :name
-             LIMIT 1'
-        );
-
-        $existingArticle->execute([
-            'name' => $name
-        ]);
-
-        if ($existingArticle->fetchColumn() !== false) {
-            throw new RuntimeException(
-                'Ein Artikel mit diesem Namen existiert bereits.'
-            );
-        }
+        $this->assertArticleNumberAvailable($articleNumber);
+        $this->assertNameAvailable($name);
 
         $statement = $this->db->prepare(
             'INSERT INTO articles
@@ -129,7 +115,6 @@ class ArticleRepository
                     name,
                     description,
                     unit,
-                    minimum_stock,
                     category_id
                 )
              VALUES
@@ -138,7 +123,6 @@ class ArticleRepository
                     :name,
                     :description,
                     :unit,
-                    :minimum_stock,
                     :category_id
                 )'
         );
@@ -148,61 +132,28 @@ class ArticleRepository
             'name' => $name,
             'description' => $description ?: null,
             'unit' => $unit,
-            'minimum_stock' => $minimumStock,
             'category_id' => $categoryId
         ]);
 
         return (int) $this->db->lastInsertId();
     }
 
+    /**
+     * Aktualisiert einen bestehenden Artikel.
+     *
+     * @throws RuntimeException wenn Artikelnummer oder Name bereits von
+     *                          einem anderen Artikel verwendet werden
+     */
     public function update(
         int $id,
         ?string $articleNumber,
         string $name,
         string $description,
         string $unit,
-        int $minimumStock,
         ?int $categoryId
     ): void {
-        if ($articleNumber !== null && $articleNumber !== '') {
-            $existingArticleNumber = $this->db->prepare(
-                'SELECT id
-                 FROM articles
-                 WHERE article_number = :article_number
-                 AND id != :id
-                 LIMIT 1'
-            );
-
-            $existingArticleNumber->execute([
-                'article_number' => $articleNumber,
-                'id' => $id
-            ]);
-
-            if ($existingArticleNumber->fetchColumn() !== false) {
-                throw new RuntimeException(
-                    'Diese Artikelnummer wird bereits verwendet'
-                );
-            }
-        }
-
-        $existingArticle = $this->db->prepare(
-            'SELECT id
-             FROM articles
-             WHERE name = :name
-             AND id != :id
-             LIMIT 1'
-        );
-
-        $existingArticle->execute([
-            'name' => $name,
-            'id' => $id
-        ]);
-
-        if ($existingArticle->fetchColumn() !== false) {
-            throw new RuntimeException(
-                'Ein Artikel mit diesem Namen existiert bereits.'
-            );
-        }
+        $this->assertArticleNumberAvailable($articleNumber, $id);
+        $this->assertNameAvailable($name, $id);
 
         $statement = $this->db->prepare(
             'UPDATE articles
@@ -210,7 +161,6 @@ class ArticleRepository
                  name = :name,
                  description = :description,
                  unit = :unit,
-                 minimum_stock = :minimum_stock,
                  category_id = :category_id
              WHERE id = :id'
         );
@@ -221,11 +171,15 @@ class ArticleRepository
             'name' => $name,
             'description' => $description,
             'unit' => $unit,
-            'minimum_stock' => $minimumStock,
             'category_id' => $categoryId
         ]);
     }
 
+    /**
+     * Sucht einen aktiven Artikel anhand seiner Artikelnummer.
+     *
+     * Wird vom Scanner/der manuellen Eingabe auf der Buchen-Seite verwendet.
+     */
     public function findByArticleNumber(
         string $articleNumber
     ): ?array {
@@ -250,6 +204,11 @@ class ArticleRepository
         return $article ?: null;
     }
 
+    /**
+     * Deaktiviert einen Artikel (Soft-Delete). Vorhandene Lagerbewegungen
+     * bleiben dabei unangetastet, der Artikel verschwindet lediglich aus
+     * den aktiven Listen.
+     */
     public function deactivate(int $id): void
     {
         $statement = $this->db->prepare(
@@ -261,5 +220,63 @@ class ArticleRepository
         $statement->execute([
             'id' => $id
         ]);
+    }
+
+    /**
+     * @throws RuntimeException wenn die Artikelnummer bereits vergeben ist
+     */
+    private function assertArticleNumberAvailable(
+        ?string $articleNumber,
+        ?int $excludeId = null
+    ): void {
+        if ($articleNumber === null || $articleNumber === '') {
+            return;
+        }
+
+        $statement = $this->db->prepare(
+            'SELECT id
+             FROM articles
+             WHERE article_number = :article_number
+             AND id != :exclude_id
+             LIMIT 1'
+        );
+
+        $statement->execute([
+            'article_number' => $articleNumber,
+            'exclude_id' => $excludeId ?? 0
+        ]);
+
+        if ($statement->fetchColumn() !== false) {
+            throw new RuntimeException(
+                'Diese Artikelnummer wird bereits verwendet'
+            );
+        }
+    }
+
+    /**
+     * @throws RuntimeException wenn der Name bereits vergeben ist
+     */
+    private function assertNameAvailable(
+        string $name,
+        ?int $excludeId = null
+    ): void {
+        $statement = $this->db->prepare(
+            'SELECT id
+             FROM articles
+             WHERE name = :name
+             AND id != :exclude_id
+             LIMIT 1'
+        );
+
+        $statement->execute([
+            'name' => $name,
+            'exclude_id' => $excludeId ?? 0
+        ]);
+
+        if ($statement->fetchColumn() !== false) {
+            throw new RuntimeException(
+                'Ein Artikel mit diesem Namen existiert bereits.'
+            );
+        }
     }
 }

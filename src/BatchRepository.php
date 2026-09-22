@@ -4,6 +4,13 @@ namespace LagerApp;
 
 use PDO;
 
+/**
+ * Datenbankzugriff für Chargen/Mindesthaltbarkeitsdaten (Tabelle `batches`).
+ *
+ * Eine Charge gehört immer zu genau einem Artikel und repräsentiert ein
+ * MHD (oder dessen Fehlen). Der Bestand einer Charge selbst wird nicht
+ * hier, sondern über StockRepository anhand der Lagerbewegungen ermittelt.
+ */
 class BatchRepository
 {
     public function __construct(
@@ -11,6 +18,10 @@ class BatchRepository
     ) {
     }
 
+    /**
+     * Alle Chargen eines Artikels mit ihrem aktuellen Bestand
+     * (über alle Lagerorte hinweg), älteste MHD zuerst.
+     */
     public function allForArticle(int $articleId): array
     {
         $statement = $this->db->prepare(
@@ -42,6 +53,9 @@ class BatchRepository
         return $statement->fetchAll();
     }
 
+    /**
+     * Liefert eine einzelne Charge unabhängig vom Artikel.
+     */
     public function find(int $id): ?array
     {
         $statement = $this->db->prepare(
@@ -59,6 +73,12 @@ class BatchRepository
         return $batch ?: null;
     }
 
+    /**
+     * Findet die Charge eines Artikels zu einem MHD oder legt sie neu an.
+     * Ein leeres MHD steht für "ohne MHD" und liefert `null` zurück,
+     * ohne eine Charge anzulegen (Bestand ohne MHD referenziert stets
+     * `batch_id = null`, nie eine eigene Charge).
+     */
     public function findOrCreate(
         int $articleId,
         ?string $expiryDate

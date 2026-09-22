@@ -1,15 +1,43 @@
 <?php
 
+/*
+|--------------------------------------------------------------------------
+| SanLager – zentraler Einstiegspunkt
+|--------------------------------------------------------------------------
+|
+| Bewusst als einzelne Datei gehalten (kein Framework/Router). Ablauf pro
+| Request:
+|
+|   1. POST-Aktionen   – $action wird an die *Actions-Klassen aus src/
+|                        weitergereicht (siehe unten). Ungültige Eingaben
+|                        werfen eine RuntimeException, die unten als
+|                        $error abgefangen und angezeigt wird.
+|   2. GET-Datenaufbau – $page bestimmt, welche Daten für die jeweilige
+|                        Seite aus den Repositories geladen werden.
+|   3. HTML             – ein großer if/elseif-Block anhand von $page.
+|
+| Die eigentliche Datenbank- und Geschäftslogik liegt in den Klassen
+| unter src/, hier wird nur verknüpft und dargestellt:
+|   *Repository.php – reiner Datenbankzugriff je Tabelle/Bereich
+|   *Actions.php     – Validierung + Verarbeitung der POST-Aktionen
+|   helpers.php       – globale Helper (h(), redirect(), formatDate(), ...)
+|--------------------------------------------------------------------------
+*/
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Dotenv\Dotenv;
-use LagerApp\Database;
+use LagerApp\ArticleActions;
 use LagerApp\ArticleRepository;
 use LagerApp\BatchRepository;
+use LagerApp\CategoryActions;
 use LagerApp\CategoryRepository;
+use LagerApp\Database;
+use LagerApp\LocationActions;
 use LagerApp\LocationRepository;
-use LagerApp\StockRepository;
 use LagerApp\QrCodeGenerator;
+use LagerApp\StockActions;
+use LagerApp\StockRepository;
 
 $root = dirname(__DIR__);
 
@@ -31,71 +59,18 @@ $categories = new CategoryRepository($db);
 $locationRepository = new LocationRepository($db);
 $stock = new StockRepository($db);
 
-$categoryList = $categories->all();
-
-function h(?string $value): string
-{
-    return htmlspecialchars(
-        $value ?? '',
-        ENT_QUOTES | ENT_SUBSTITUTE,
-        'UTF-8'
-    );
-}
-
-function redirect(string $url): never
-{
-    header('Location: ' . $url);
-    exit;
-}
-
-function formatDate(?string $date): string
-{
-    if (!$date) {
-        return 'ohne MHD';
-    }
-
-    $timestamp = strtotime($date);
-
-    if ($timestamp === false) {
-        return $date;
-    }
-
-    return date('d.m.Y', $timestamp);
-}
-
-/**
- * Liefert CSS-Klasse und Warntext für ein MHD in einem Aufwasch,
- * statt Ablaufberechnung und Schwellwerte zweimal zu duplizieren.
- *
- * @return array{class: string, warning: string}
+/*
+ * h(), redirect(), formatDate() und expiryInfo() sind globale
+ * Helper-Funktionen aus src/helpers.php, die per "files"-Autoload-Eintrag
+ * in composer.json automatisch geladen werden.
  */
-function expiryInfo(?string $date): array
-{
-    $none = ['class' => '', 'warning' => ''];
 
-    if (!$date) {
-        return $none;
-    }
+$articleActions = new ArticleActions($articles, $categories, $stock);
+$categoryActions = new CategoryActions($categories);
+$locationActions = new LocationActions($locationRepository, $stock);
+$stockActions = new StockActions($articles, $locationRepository, $stock, $batches);
 
-    $expiry = strtotime($date);
-
-    if ($expiry === false) {
-        return $none;
-    }
-
-    $today = strtotime(date('Y-m-d'));
-    $warningThreshold = strtotime('+90 days');
-
-    if ($expiry < $today) {
-        return ['class' => 'expiry-expired', 'warning' => 'ABGELAUFEN'];
-    }
-
-    if ($expiry <= $warningThreshold) {
-        return ['class' => 'expiry-warning', 'warning' => 'MHD bald erreicht'];
-    }
-
-    return $none;
-}
+$categoryList = $categories->all();
 
 $page = $_GET['page'] ?? 'issue';
 $action = $_POST['action'] ?? null;
@@ -107,690 +82,30 @@ $message = null;
 |--------------------------------------------------------------------------
 | POST-Aktionen
 |--------------------------------------------------------------------------
+|
+| Die eigentliche Validierung und Verarbeitung liegt in den *Actions-
+| Klassen unter src/. Jede dispatch()-Methode kümmert sich nur um die
+| Aktionen, für die sie zuständig ist, und ignoriert alle anderen.
+| RuntimeExceptions (ungültige Eingaben) werden hier zentral abgefangen
+| und als $error angezeigt.
+|--------------------------------------------------------------------------
 */
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
 
-        /*
-        |--------------------------------------------------------------------------
-        | Artikel anlegen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'create_article') {
-
-            $articleNumber = trim($_POST['article_number'] ?? '');
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            $unit = trim($_POST['unit'] ?? 'Stück');
-            $minimumStock = max(
-                0,
-                (int) ($_POST['minimum_stock'] ?? 0)
-            );
-
-            $categoryId = (int) ($_POST['category_id'] ?? 0);
-
-            if ($categoryId <= 0 || !$categories->find($categoryId)) {
-                throw new RuntimeException(
-                    'Bitte eine gültige Kategorie auswählen.'
-                );
-            }
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Artikelnamen eingeben.'
-                );
-            }
-
-            if ($articleNumber === '') {
-                throw new RuntimeException(
-                    'Bitte eine Artikelnummer eingeben.'
-                );
-            }
-
-            $articles->create(
-                $articleNumber,
-                $name,
-                $description,
-                $unit !== '' ? $unit : 'Stück',
-                $minimumStock,
-                $categoryId
-            );
-
-            redirect('?page=new_article&message=Artikel+angelegt');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Artikel bearbeiten
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'update_article') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-
-            $articleNumber = trim($_POST['article_number'] ?? '');
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            $unit = trim($_POST['unit'] ?? 'Stück');
-            $minimumStock = max(
-                0,
-                (int) ($_POST['minimum_stock'] ?? 0)
-            );
-
-            $categoryId = (int) ($_POST['category_id'] ?? 0);
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültiger Artikel.'
-                );
-            }
-
-            if ($categoryId <= 0 || !$categories->find($categoryId)) {
-                throw new RuntimeException(
-                    'Bitte eine gültige Kategorie auswählen.'
-                );
-            }
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Artikelnamen eingeben.'
-                );
-            }
-
-            $articles->update(
-                $id,
-                $articleNumber !== '' ? $articleNumber : null,
-                $name,
-                $description,
-                $unit !== '' ? $unit : 'Stück',
-                $minimumStock,
-                $categoryId
-            );
-
-            redirect(
-                '?page=article&id=' . $id .
-                '&message=Artikel+gespeichert'
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Artikel deaktivieren
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'deactivate_article') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültiger Artikel.'
-                );
-            }
-
-            $articles->deactivate($id);
-
-            redirect('?page=articles&message=Artikel+gelöscht');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Artikel ausbuchen
-        |--------------------------------------------------------------------------
-        |
-        | Wird sowohl vom manuellen Formular / Hardware-Scanner
-        | als auch vom Kamera-Scanner verwendet.
-        |
-        | ajax=1 liefert JSON zurück.
-        | Ohne ajax=1 erfolgt ein normaler Redirect.
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'issue') {
-
-            $isAjax = ($_POST['ajax'] ?? '') === '1';
-
-            try {
-
-                $articleNumber = trim(
-                    $_POST['article_number'] ?? ''
-                );
-
-                if ($articleNumber === '') {
-                    throw new RuntimeException(
-                        'Bitte eine Artikelnummer eingeben oder scannen.'
-                    );
-                }
-
-                $article = $articles->findByArticleNumber(
-                    $articleNumber
-                );
-
-                if (!$article) {
-                    throw new RuntimeException(
-                        'Artikelnummer nicht gefunden: ' .
-                        $articleNumber
-                    );
-                }
-
-                $mainLocation = $db->query(
-                    "SELECT id
-                     FROM storage_locations
-                     WHERE name = 'Hauptlager'
-                     AND active = 1
-                     LIMIT 1"
-                )->fetchColumn();
-
-                if (!$mainLocation) {
-                    throw new RuntimeException(
-                        'Das Hauptlager wurde nicht gefunden.'
-                    );
-                }
-
-                $mainLocationId = (int) $mainLocation;
-
-                $target = trim($_POST['target'] ?? 'issue');
-
-                if ($target === '' || $target === 'issue') {
-
-                    $result = $stock->issueOldest(
-                        (int) $article['id'],
-                        $mainLocationId,
-                        'Scanner-Ausbuchung'
-                    );
-
-                    $actionLabel = 'ausgebucht';
-
-                } else {
-
-                    $targetLocationId = (int) $target;
-
-                    if (
-                        $targetLocationId <= 0
-                        || $targetLocationId === $mainLocationId
-                    ) {
-                        throw new RuntimeException(
-                            'Ungültiges Buchungsziel.'
-                        );
-                    }
-
-                    $targetLocation = $locationRepository->find(
-                        $targetLocationId
-                    );
-
-                    if (!$targetLocation) {
-                        throw new RuntimeException(
-                            'Der ausgewählte Lagerort wurde nicht gefunden.'
-                        );
-                    }
-
-                    $result = $stock->transferOldest(
-                        (int) $article['id'],
-                        $mainLocationId,
-                        $targetLocationId,
-                        'Scanner-Umbuchung nach ' . $targetLocation['name']
-                    );
-
-                    $actionLabel = 'umgebucht nach ' . $targetLocation['name'];
-                }
-
-                $expiryText = $result['expiry_date']
-                    ? formatDate($result['expiry_date'])
-                    : 'ohne MHD';
-
-                if ($isAjax) {
-
-                    header(
-                        'Content-Type: application/json; charset=utf-8'
-                    );
-
-                    echo json_encode([
-                        'success' => true,
-                        'article_name' => $article['name'],
-                        'article_number' => $articleNumber,
-                        'unit' => $article['unit'],
-                        'expiry_date' => $expiryText,
-                        'action_label' => $actionLabel
-                    ]);
-
-                    exit;
-                }
-
-                redirect(
-                    '?page=issue' .
-                    '&success=' . urlencode(
-                        $article['name'] .
-                        ' – 1 ' .
-                        $article['unit'] .
-                        ' ' .
-                        $actionLabel .
-                        ' (' .
-                        $expiryText .
-                        ')'
-                    )
-                );
-
-            } catch (Throwable $exception) {
-
-                if ($isAjax) {
-
-                    http_response_code(400);
-
-                    header(
-                        'Content-Type: application/json; charset=utf-8'
-                    );
-
-                    echo json_encode([
-                        'success' => false,
-                        'error' => $exception->getMessage()
-                    ]);
-
-                    exit;
-                }
-
-                throw $exception;
-            }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorie anlegen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'create_category') {
-
-            $name = trim($_POST['name'] ?? '');
-            $shortName = trim($_POST['short_name'] ?? '');
-            $color = trim($_POST['color'] ?? '');
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Kategorienamen eingeben.'
-                );
-            }
-
-            if ($shortName === '') {
-                throw new RuntimeException(
-                    'Bitte ein Kürzel eingeben.'
-                );
-            }
-
-            if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
-                throw new RuntimeException(
-                    'Ungültige Farbe.'
-                );
-            }
-
-            $categories->create(
-                $name,
-                mb_strtoupper($shortName),
-                $color
-            );
-
-            redirect('?page=categories&message=Kategorie+angelegt');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorie bearbeiten
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'update_category') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-            $name = trim($_POST['name'] ?? '');
-            $shortName = trim($_POST['short_name'] ?? '');
-            $color = trim($_POST['color'] ?? '');
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültige Kategorie.'
-                );
-            }
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Kategorienamen eingeben.'
-                );
-            }
-
-            if ($shortName === '') {
-                throw new RuntimeException(
-                    'Bitte ein Kürzel eingeben.'
-                );
-            }
-
-            if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
-                throw new RuntimeException(
-                    'Ungültige Farbe.'
-                );
-            }
-
-            $categories->update(
-                $id,
-                $name,
-                mb_strtoupper($shortName),
-                $color
-            );
-
-            redirect('?page=categories&message=Kategorie+gespeichert');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorie löschen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'delete_category') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültige Kategorie.'
-                );
-            }
-
-            if ($categories->articleCount($id) > 0) {
-                throw new RuntimeException(
-                    'Die Kategorie kann nicht gelöscht werden, solange Artikel dieser Kategorie zugeordnet sind.'
-                );
-            }
-
-            $categories->delete($id);
-
-            redirect('?page=categories&message=Kategorie+gelöscht');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Kategorien sortieren
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'reorder_categories') {
-
-            header('Content-Type: application/json; charset=utf-8');
-
-            try {
-
-                $ids = $_POST['ids'] ?? [];
-
-                if (!is_array($ids)) {
-                    throw new RuntimeException(
-                        'Ungültige Kategorienreihenfolge.'
-                    );
-                }
-
-                $categories->reorder($ids);
-
-                echo json_encode([
-                    'success' => true
-                ]);
-
-            } catch (Throwable $exception) {
-
-                http_response_code(400);
-
-                echo json_encode([
-                    'success' => false,
-                    'error' => $exception->getMessage()
-                ]);
-            }
-
-            exit;
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Lagerort anlegen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'create_location') {
-
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Namen für den Lagerort eingeben.'
-                );
-            }
-
-            $locationRepository->create($name, $description);
-
-            redirect('?page=locations&message=Lagerort+angelegt');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Lagerort bearbeiten
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'update_location') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültiger Lagerort.'
-                );
-            }
-
-            if ($name === '') {
-                throw new RuntimeException(
-                    'Bitte einen Namen für den Lagerort eingeben.'
-                );
-            }
-
-            $locationRepository->update($id, $name, $description);
-
-            redirect('?page=locations&message=Lagerort+gespeichert');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Lagerort deaktivieren
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'deactivate_location') {
-
-            $id = (int) ($_POST['id'] ?? 0);
-
-            if ($id <= 0) {
-                throw new RuntimeException(
-                    'Ungültiger Lagerort.'
-                );
-            }
-
-            if ($stock->locationHasStock($id)) {
-                throw new RuntimeException(
-                    'Der Lagerort kann nicht deaktiviert werden, solange dort noch Bestand vorhanden ist.'
-                );
-            }
-
-            $locationRepository->deactivate($id);
-
-            redirect('?page=locations&message=Lagerort+deaktiviert');
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Lagerorte sortieren
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'reorder_locations') {
-
-            header('Content-Type: application/json; charset=utf-8');
-
-            try {
-
-                $ids = $_POST['ids'] ?? [];
-
-                if (!is_array($ids)) {
-                    throw new RuntimeException(
-                        'Ungültige Lagerortreihenfolge.'
-                    );
-                }
-
-                $locationRepository->reorder($ids);
-
-                echo json_encode([
-                    'success' => true
-                ]);
-
-            } catch (Throwable $exception) {
-
-                http_response_code(400);
-
-                echo json_encode([
-                    'success' => false,
-                    'error' => $exception->getMessage()
-                ]);
-            }
-
-            exit;
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Bestand buchen
-        |--------------------------------------------------------------------------
-        */
-        if ($action === 'stock_move') {
-
-            $articleId = (int) ($_POST['article_id'] ?? 0);
-            $locationId = (int) ($_POST['location_id'] ?? 0);
-            $quantity = (int) ($_POST['quantity'] ?? 0);
-            $movementType = $_POST['movement_type'] ?? '';
-
-            if ($articleId <= 0) {
-                throw new RuntimeException(
-                    'Bitte einen Artikel auswählen.'
-                );
-            }
-
-            if ($locationId <= 0) {
-                throw new RuntimeException(
-                    'Bitte einen Lagerort auswählen.'
-                );
-            }
-
-            if ($quantity <= 0) {
-                throw new RuntimeException(
-                    'Die Menge muss größer als 0 sein.'
-                );
-            }
-
-            if (!in_array(
-                $movementType,
-                ['receipt', 'issue'],
-                true
-            )) {
-                throw new RuntimeException(
-                    'Ungültiger Vorgang.'
-                );
-            }
-
-            /*
-             * MHD-Auswahl:
-             *
-             * none = ohne MHD
-             * ID   = vorhandenes MHD
-             * new  = neues MHD
-             */
-            $batchSelection =
-                $_POST['batch_selection'] ?? 'none';
-
-            $batchId = null;
-
-            /*
-             * Neues MHD
-             */
-            if ($batchSelection === 'new') {
-
-                if ($movementType !== 'receipt') {
-                    throw new RuntimeException(
-                        'Bei einer Entnahme kann kein neues MHD angelegt werden.'
-                    );
-                }
-
-                $expiryDate = trim(
-                    $_POST['expiry_date'] ?? ''
-                );
-
-                if ($expiryDate === '') {
-                    throw new RuntimeException(
-                        'Bitte ein MHD eingeben.'
-                    );
-                }
-
-                $batchId = $batches->findOrCreate(
-                    $articleId,
-                    $expiryDate
-                );
-            }
-
-            /*
-             * Vorhandenes MHD
-             */
-            elseif ($batchSelection !== 'none') {
-
-                $batchId = (int) $batchSelection;
-
-                if ($batchId <= 0) {
-                    throw new RuntimeException(
-                        'Ungültige MHD-Auswahl.'
-                    );
-                }
-
-                $batch = $batches->find($batchId);
-
-                if (!$batch) {
-                    throw new RuntimeException(
-                        'Das ausgewählte MHD wurde nicht gefunden.'
-                    );
-                }
-
-                if ((int) $batch['article_id'] !== $articleId) {
-                    throw new RuntimeException(
-                        'Das MHD gehört nicht zu diesem Artikel.'
-                    );
-                }
-            }
-
-            $note = trim(
-                $_POST['note'] ?? ''
-            );
-
-            $stock->move(
-                $articleId,
-                $locationId,
-                $quantity,
-                $movementType,
-                $note !== '' ? $note : null,
-                $batchId
-            );
-
-            redirect(
-                '?page=article&id=' .
-                $articleId .
-                '&message=' .
-                urlencode(
-                    $movementType === 'receipt'
-                        ? 'Bestand eingelagert'
-                        : 'Bestand entnommen'
-                )
-            );
-        }
+        $articleActions->dispatch($action);
+        $categoryActions->dispatch($action);
+        $locationActions->dispatch($action);
+        $stockActions->dispatch($action);
 
     } catch (Throwable $exception) {
 
         $error = $exception->getMessage();
     }
 }
+
 
 if (isset($_GET['message'])) {
     $message = $_GET['message'];
@@ -836,6 +151,7 @@ if ($page === 'articles') {
 $article = null;
 $articleStock = [];
 $articleBatches = [];
+$articleBatchesByLocation = [];
 $locations = [];
 $todayIssues = [];
 $todayIssueCount = 0;
@@ -851,6 +167,8 @@ if ($page === 'categories' && isset($_GET['edit'])) {
 }
 
 $editLocation = null;
+$editLocationHasStock = false;
+$transferTargetLocations = [];
 
 if ($page === 'locations' && isset($_GET['edit'])) {
 
@@ -858,6 +176,19 @@ if ($page === 'locations' && isset($_GET['edit'])) {
 
     if ($editLocationId > 0) {
         $editLocation = $locationRepository->find($editLocationId);
+    }
+
+    if ($editLocation) {
+
+        $editLocationHasStock = $stock->locationHasStock(
+            (int) $editLocation['id']
+        );
+
+        $transferTargetLocations = array_values(array_filter(
+            $locationRepository->all(),
+            static fn (array $location): bool =>
+                (int) $location['id'] !== (int) $editLocation['id']
+        ));
     }
 }
 
@@ -867,14 +198,59 @@ if ($page === 'today_issues') {
     $todayIssueCount = $stock->getTodayIssueCount();
 }
 
-$bookableLocations = [];
+$viewLocation = null;
+$locationStockRows = [];
+
+if ($page === 'location') {
+
+    $viewLocationId = (int) ($_GET['id'] ?? 0);
+
+    if ($viewLocationId <= 0) {
+        redirect('?page=locations');
+    }
+
+    $viewLocation = $locationRepository->find($viewLocationId);
+
+    if (!$viewLocation) {
+        redirect('?page=locations');
+    }
+
+    $locationStockRows = $stock->getStockAtLocationDetailed(
+        $viewLocationId
+    );
+}
+
+$expiringBatches = [];
+$expiredCount = 0;
+$expiringSoonCount = 0;
+
+if ($page === 'expiry') {
+
+    $expiringBatches = $stock->getExpiringBatches(90);
+
+    foreach ($expiringBatches as $row) {
+
+        $rowExpiry = expiryInfo($row['expiry_date']);
+
+        if ($rowExpiry['class'] === 'expiry-expired') {
+            $expiredCount++;
+        } elseif ($rowExpiry['class'] === 'expiry-warning') {
+            $expiringSoonCount++;
+        }
+    }
+}
+
+$allLocations = [];
 
 if ($page === 'issue') {
 
-    $bookableLocations = array_values(array_filter(
-        $locationRepository->all(),
-        static fn (array $location): bool => $location['name'] !== 'Hauptlager'
-    ));
+    /*
+     * Sowohl "Von" als auch "Ziel" bekommen die volle Liste; welche
+     * Kombination gültig ist (Von != Ziel), steuert das Frontend
+     * (issue-source-Auswahl blendet die gleiche Option im Ziel-Select
+     * aus) und wird zusätzlich serverseitig in StockActions geprüft.
+     */
+    $allLocations = $locationRepository->all();
 }
 
 if ($page === 'article' || $page === 'label') {
@@ -898,6 +274,10 @@ if ($page === 'article' || $page === 'label') {
         );
 
         $articleBatches = $stock->getStockByBatch(
+            $articleId
+        );
+
+        $articleBatchesByLocation = $stock->getStockByBatchAndLocation(
             $articleId
         );
 
@@ -955,6 +335,9 @@ if ($page === 'article' || $page === 'label') {
     </a>
     <a href="?page=today_issues" class="<?= $page === 'today_issues' ? 'active' : '' ?>">
         Heute ausgebucht
+    </a>
+    <a href="?page=expiry" class="<?= $page === 'expiry' ? 'active' : '' ?>">
+        MHD-Übersicht
     </a>
     <a href="?page=articles" class="<?= $page === 'articles' ? 'active' : '' ?>">
         Artikel
@@ -1137,6 +520,10 @@ if ($page === 'article' || $page === 'label') {
                     <div
                         id="category-list"
                         class="category-list"
+                        data-sortable-list
+                        data-sortable-row=".category-row"
+                        data-sortable-id-attribute="categoryId"
+                        data-sortable-action="reorder_categories"
                     >
 
                         <?php foreach ($categoryList as $category): ?>
@@ -1222,135 +609,6 @@ if ($page === 'article' || $page === 'label') {
         </div>
 
 
-        <script>
-
-            (() => {
-
-                const list = document.getElementById('category-list');
-
-                if (!list) {
-                    return;
-                }
-
-                let dragged = null;
-
-
-                list.addEventListener('dragstart', event => {
-
-                    const row = event.target.closest('.category-row');
-
-                    if (!row) {
-                        return;
-                    }
-
-                    dragged = row;
-                    row.classList.add('dragging');
-
-                    event.dataTransfer.effectAllowed = 'move';
-
-                });
-
-
-                list.addEventListener('dragend', event => {
-
-                    const row = event.target.closest('.category-row');
-
-                    if (row) {
-                        row.classList.remove('dragging');
-                    }
-
-                    dragged = null;
-
-                    saveOrder();
-
-                });
-
-
-                list.addEventListener('dragover', event => {
-
-                    event.preventDefault();
-
-                    if (!dragged) {
-                        return;
-                    }
-
-                    const target = event.target.closest('.category-row');
-
-                    if (!target || target === dragged) {
-                        return;
-                    }
-
-                    const rect = target.getBoundingClientRect();
-
-                    const before =
-                        event.clientY <
-                        rect.top + rect.height / 2;
-
-                    if (before) {
-                        list.insertBefore(dragged, target);
-                    } else {
-                        list.insertBefore(
-                            dragged,
-                            target.nextSibling
-                        );
-                    }
-
-                });
-
-
-                function saveOrder() {
-
-                    const ids = [
-                        ...list.querySelectorAll('.category-row')
-                    ].map(row => row.dataset.categoryId);
-
-
-                    const formData = new FormData();
-
-                    formData.append(
-                        'action',
-                        'reorder_categories'
-                    );
-
-
-                    ids.forEach(id => {
-                        formData.append('ids[]', id);
-                    });
-
-
-                    fetch('', {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-
-                        if (!data.success) {
-
-                            alert(
-                                data.error ||
-                                'Die Reihenfolge konnte nicht gespeichert werden.'
-                            );
-
-                        }
-
-                    })
-                    .catch(() => {
-
-                        alert(
-                            'Die Reihenfolge konnte nicht gespeichert werden.'
-                        );
-
-                    });
-
-                }
-
-            })();
-
-        </script>
 
 
     <?php elseif ($page === 'locations'): ?>
@@ -1481,6 +739,10 @@ if ($page === 'article' || $page === 'label') {
                         <div
                             id="location-list"
                             class="category-list"
+                            data-sortable-list
+                            data-sortable-row=".location-sort-row"
+                            data-sortable-id-attribute="locationId"
+                            data-sortable-action="reorder_locations"
                         >
 
                             <?php foreach ($locationList as $location): ?>
@@ -1497,9 +759,11 @@ if ($page === 'article' || $page === 'label') {
 
                                     <div class="location-sort-info">
 
-                                        <strong>
-                                            <?= h($location['name']) ?>
-                                        </strong>
+                                        <a href="?page=location&id=<?= (int) $location['id'] ?>">
+                                            <strong>
+                                                <?= h($location['name']) ?>
+                                            </strong>
+                                        </a>
 
                                         <?php if (!empty($location['description'])): ?>
 
@@ -1562,136 +826,246 @@ if ($page === 'article' || $page === 'label') {
 
         </div>
 
+        <?php if ($editLocation): ?>
 
-        <script>
+            <div class="card">
 
-            (() => {
+                <div class="card-header">
+                    <h2>Bestand verschieben</h2>
+                </div>
 
-                const list = document.getElementById('location-list');
+                <div class="card-body">
 
-                if (!list) {
-                    return;
-                }
+                    <?php if (!$editLocationHasStock): ?>
 
-                let dragged = null;
+                        <p class="form-help">
+                            Dieser Lagerort hat aktuell keinen Bestand
+                            zum Verschieben.
+                        </p>
 
+                    <?php elseif (!$transferTargetLocations): ?>
 
-                list.addEventListener('dragstart', event => {
+                        <p class="form-help">
+                            Es gibt keinen weiteren Lagerort, an den
+                            der Bestand verschoben werden könnte.
+                        </p>
 
-                    const row = event.target.closest('.location-sort-row');
+                    <?php else: ?>
 
-                    if (!row) {
-                        return;
-                    }
+                        <p class="form-help">
+                            Verschiebt den kompletten Bestand von
+                            "<?= h($editLocation['name']) ?>" auf einen
+                            anderen Lagerort – z. B. um eine Kiste nach
+                            einem Dienst wieder vollständig zurück ins
+                            Lager zu räumen, ohne jeden Artikel einzeln
+                            umbuchen zu müssen.
+                        </p>
 
-                    dragged = row;
-                    row.classList.add('dragging');
+                        <form
+                            method="post"
+                            class="form"
+                            onsubmit="return confirm('Kompletten Bestand nach ' + this.to_location_id.options[this.to_location_id.selectedIndex].text + ' verschieben?');"
+                        >
 
-                    event.dataTransfer.effectAllowed = 'move';
+                            <input
+                                type="hidden"
+                                name="action"
+                                value="transfer_all_stock"
+                            >
 
-                });
+                            <input
+                                type="hidden"
+                                name="from_location_id"
+                                value="<?= (int) $editLocation['id'] ?>"
+                            >
 
+                            <label>
 
-                list.addEventListener('dragend', event => {
+                                <span>Nach</span>
 
-                    const row = event.target.closest('.location-sort-row');
+                                <select name="to_location_id">
 
-                    if (row) {
-                        row.classList.remove('dragging');
-                    }
+                                    <?php foreach ($transferTargetLocations as $transferTargetLocation): ?>
 
-                    dragged = null;
+                                        <option value="<?= (int) $transferTargetLocation['id'] ?>">
+                                            <?= h($transferTargetLocation['name']) ?>
+                                        </option>
 
-                    saveOrder();
+                                    <?php endforeach; ?>
 
-                });
+                                </select>
 
+                            </label>
 
-                list.addEventListener('dragover', event => {
+                            <div class="form-actions">
 
-                    event.preventDefault();
+                                <button
+                                    type="submit"
+                                    class="button button-primary"
+                                >
+                                    Kompletten Bestand verschieben
+                                </button>
 
-                    if (!dragged) {
-                        return;
-                    }
+                            </div>
 
-                    const target = event.target.closest('.location-sort-row');
+                        </form>
 
-                    if (!target || target === dragged) {
-                        return;
-                    }
+                    <?php endif; ?>
 
-                    const rect = target.getBoundingClientRect();
+                </div>
 
-                    const before =
-                        event.clientY <
-                        rect.top + rect.height / 2;
+            </div>
 
-                    if (before) {
-                        list.insertBefore(dragged, target);
-                    } else {
-                        list.insertBefore(
-                            dragged,
-                            target.nextSibling
-                        );
-                    }
+        <?php endif; ?>
 
-                });
+    <?php elseif ($page === 'location' && $viewLocation): ?>
 
+        <div class="page-header">
 
-                function saveOrder() {
+            <div>
 
-                    const ids = [
-                        ...list.querySelectorAll('.location-sort-row')
-                    ].map(row => row.dataset.locationId);
+                <a
+                    href="?page=locations"
+                    class="back-link"
+                >
+                    ← Lagerorte
+                </a>
 
+                <h1>
+                    <?= h($viewLocation['name']) ?>
+                </h1>
 
-                    const formData = new FormData();
+                <?php if ($viewLocation['description']): ?>
 
-                    formData.append(
-                        'action',
-                        'reorder_locations'
-                    );
+                    <p>
+                        <?= h($viewLocation['description']) ?>
+                    </p>
 
+                <?php endif; ?>
 
-                    ids.forEach(id => {
-                        formData.append('ids[]', id);
-                    });
+            </div>
 
+            <div class="actions">
 
-                    fetch('', {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
+                <a
+                    href="?page=locations&edit=<?= (int) $viewLocation['id'] ?>"
+                    class="button"
+                >
+                    Lagerort bearbeiten
+                </a>
 
-                        if (!data.success) {
+            </div>
 
-                            alert(
-                                data.error ||
-                                'Die Reihenfolge konnte nicht gespeichert werden.'
-                            );
+        </div>
 
-                        }
+        <div class="card">
 
-                    })
-                    .catch(() => {
+            <?php if (!$locationStockRows): ?>
 
-                        alert(
-                            'Die Reihenfolge konnte nicht gespeichert werden.'
-                        );
+                <div class="empty-state compact">
+                    An diesem Lagerort ist aktuell kein Bestand
+                    vorhanden.
+                </div>
 
-                    });
+            <?php else: ?>
 
-                }
+                <table class="table-with-article-number">
 
-            })();
+                    <thead>
 
-        </script>
+                        <tr>
+                            <th>Artikel</th>
+                            <th>Artikelnummer</th>
+                            <th>MHD</th>
+                            <th>Bestand</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        <?php $currentLocationCategoryId = null; ?>
+
+                        <?php foreach ($locationStockRows as $row): ?>
+
+                            <?php
+                            $rowCategoryId = $row['category_name'] !== null
+                                ? $row['category_name']
+                                : '';
+                            ?>
+
+                            <?php if ($currentLocationCategoryId !== $rowCategoryId): ?>
+
+                                <?php $currentLocationCategoryId = $rowCategoryId; ?>
+
+                                <tr
+                                    class="article-category-row"
+                                    style="background-color: <?= h($row['category_color'] ?? '#64748b') ?>;"
+                                >
+                                    <th colspan="4">
+                                        <span class="article-category-name">
+                                            <?= h($row['category_name'] ?? 'Ohne Kategorie') ?>
+                                        </span>
+                                    </th>
+                                </tr>
+
+                            <?php endif; ?>
+
+                            <?php $rowExpiry = expiryInfo($row['expiry_date']); ?>
+
+                            <tr>
+
+                                <td>
+                                    <a
+                                        href="?page=article&id=<?= (int) $row['article_id'] ?>"
+                                        class="article-link"
+                                    >
+                                        <strong>
+                                            <?= h($row['article_name']) ?>
+                                        </strong>
+                                    </a>
+                                </td>
+
+                                <td>
+                                    <?= h($row['article_number'] ?? '') ?>
+                                </td>
+
+                                <td>
+
+                                    <span class="<?= $rowExpiry['class'] ?>">
+                                        <?= $row['expiry_date']
+                                            ? h(formatDate($row['expiry_date']))
+                                            : 'ohne MHD' ?>
+                                    </span>
+
+                                    <?php if ($rowExpiry['warning']): ?>
+
+                                        <span class="warning">
+                                            <?= h($rowExpiry['warning']) ?>
+                                        </span>
+
+                                    <?php endif; ?>
+
+                                </td>
+
+                                <td>
+                                    <strong>
+                                        <?= (int) $row['quantity'] ?>
+                                        <?= h($row['unit']) ?>
+                                    </strong>
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                    </tbody>
+
+                </table>
+
+            <?php endif; ?>
+
+        </div>
 
     <?php elseif ($page === 'articles'): ?>
 
@@ -1805,7 +1179,7 @@ if ($page === 'article' || $page === 'label') {
 
             <?php else: ?>
 
-                <table>
+                <table class="table-with-article-number">
 
                     <thead>
 
@@ -1813,7 +1187,6 @@ if ($page === 'article' || $page === 'label') {
                         <th>Artikel</th>
                         <th>Artikelnummer</th>
                         <th>Einheit</th>
-                        <th>Mindestbestand</th>
                         <th>Bestand</th>
                     </tr>
 
@@ -1840,7 +1213,7 @@ if ($page === 'article' || $page === 'label') {
                                 class="article-category-row"
                                 style="background-color: <?= h($item['category_color'] ?? '#64748b') ?>;"
                             >
-                                <th colspan="5">
+                                <th colspan="4">
                                     <span class="article-category-name">
                                         <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
                                     </span>
@@ -1858,9 +1231,9 @@ if ($page === 'article' || $page === 'label') {
                             (int) $item['id']
                         );
 
-                        $isLow =
-                            $total <
-                            (int) $item['minimum_stock'];
+                        $isLow = $stock->hasLowStockAtAnyLocation(
+                            (int) $item['id']
+                        );
                         ?>
 
                         <tr>
@@ -1892,10 +1265,6 @@ if ($page === 'article' || $page === 'label') {
 
                             <td>
                                 <?= h($item['unit']) ?>
-                            </td>
-
-                            <td>
-                                <?= (int) $item['minimum_stock'] ?>
                             </td>
 
                             <td class="article-stock-cell">
@@ -1989,7 +1358,7 @@ if ($page === 'article' || $page === 'label') {
 
                     <div class="table-wrapper">
 
-                        <table>
+                        <table class="table-with-article-number">
 
                             <thead>
 
@@ -2062,6 +1431,173 @@ if ($page === 'article' || $page === 'label') {
 
         </div>
 
+    <?php elseif ($page === 'expiry'): ?>
+
+        <div class="today-issues-page">
+
+            <div class="page-header">
+
+                <div>
+
+                    <h1>MHD-Übersicht</h1>
+
+                    <p>
+                        Bereits abgelaufenes und in den nächsten
+                        90 Tagen ablaufendes Material, über alle
+                        Lagerorte hinweg.
+                    </p>
+
+                </div>
+
+                <div class="actions">
+
+                    <a
+                        href="?page=expiry"
+                        class="button"
+                    >
+                        Aktualisieren
+                    </a>
+
+                </div>
+
+            </div>
+
+            <div class="article-top-row">
+
+                <div class="card">
+
+                    <div class="today-summary">
+
+                        <strong class="<?= $expiredCount > 0 ? 'stock-low' : '' ?>">
+                            <?= $expiredCount ?>
+                        </strong>
+
+                        <span>
+                            abgelaufen
+                        </span>
+
+                    </div>
+
+                </div>
+
+                <div class="card">
+
+                    <div class="today-summary">
+
+                        <strong>
+                            <?= $expiringSoonCount ?>
+                        </strong>
+
+                        <span>
+                            laufen bald ab (90 Tage)
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="card">
+
+                <?php if (!$expiringBatches): ?>
+
+                    <p class="empty-state compact">
+                        Kein Material läuft in den nächsten 90 Tagen ab.
+                    </p>
+
+                <?php else: ?>
+
+                    <div class="table-wrapper">
+
+                        <table class="table-with-article-number">
+
+                            <thead>
+
+                                <tr>
+
+                                    <th>Artikel</th>
+                                    <th>Artikelnummer</th>
+                                    <th>Lagerort</th>
+                                    <th>MHD</th>
+                                    <th>Menge</th>
+
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                <?php foreach ($expiringBatches as $row): ?>
+
+                                    <?php
+                                    $rowExpiry = expiryInfo(
+                                        $row['expiry_date']
+                                    );
+                                    ?>
+
+                                    <tr>
+
+                                        <td>
+                                            <a
+                                                href="?page=article&id=<?= (int) $row['article_id'] ?>"
+                                                class="article-link"
+                                            >
+                                                <strong>
+                                                    <?= h($row['article_name']) ?>
+                                                </strong>
+                                            </a>
+                                        </td>
+
+                                        <td>
+                                            <?= h($row['article_number'] ?? '') ?>
+                                        </td>
+
+                                        <td>
+                                            <a href="?page=location&id=<?= (int) $row['location_id'] ?>">
+                                                <?= h($row['location_name']) ?>
+                                            </a>
+                                        </td>
+
+                                        <td>
+
+                                            <strong class="<?= $rowExpiry['class'] ?>">
+                                                <?= h(formatDate($row['expiry_date'])) ?>
+                                            </strong>
+
+                                            <?php if ($rowExpiry['warning']): ?>
+
+                                                <span class="warning">
+                                                    <?= h($rowExpiry['warning']) ?>
+                                                </span>
+
+                                            <?php endif; ?>
+
+                                        </td>
+
+                                        <td>
+                                            <strong>
+                                                <?= (int) $row['quantity'] ?>
+                                                <?= h($row['unit']) ?>
+                                            </strong>
+                                        </td>
+
+                                    </tr>
+
+                                <?php endforeach; ?>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                <?php endif; ?>
+
+            </div>
+
+        </div>
+
     <?php elseif ($page === 'issue'): ?>
 
         <div class="issue-page">
@@ -2073,10 +1609,10 @@ if ($page === 'article' || $page === 'label') {
                     <h1>Buchen</h1>
 
                     <p>
-                        Artikelnummer scannen oder eingeben und Ziel wählen.
-                        Es wird automatisch ein Stück mit dem ältesten MHD
-                        aus dem Hauptlager ausgebucht oder an den
-                        gewählten Lagerort umgebucht.
+                        Artikelnummer scannen oder eingeben, Von- und
+                        Ziel-Lagerort wählen. Es wird automatisch ein
+                        Stück mit dem ältesten MHD ausgebucht oder an
+                        den gewählten Lagerort umgebucht.
                     </p>
 
                 </div>
@@ -2088,7 +1624,7 @@ if ($page === 'article' || $page === 'label') {
                 && $_GET['success'] !== ''
             ): ?>
 
-                <div class="alert success">
+                <div class="alert <?= isset($_GET['expired']) ? 'error' : 'success' ?>">
                     <?= h($_GET['success']) ?>
                 </div>
 
@@ -2162,6 +1698,32 @@ if ($page === 'article' || $page === 'label') {
                     <label class="issue-target-field">
 
                         <span>
+                            Von
+                        </span>
+
+                        <select
+                            name="source"
+                            id="issue-source"
+                        >
+
+                            <?php foreach ($allLocations as $sourceLocation): ?>
+
+                                <option
+                                    value="<?= (int) $sourceLocation['id'] ?>"
+                                    <?= $sourceLocation['name'] === 'Hauptlager' ? 'selected' : '' ?>
+                                >
+                                    <?= h($sourceLocation['name']) ?>
+                                </option>
+
+                            <?php endforeach; ?>
+
+                        </select>
+
+                    </label>
+
+                    <label class="issue-target-field">
+
+                        <span>
                             Ziel
                         </span>
 
@@ -2174,10 +1736,10 @@ if ($page === 'article' || $page === 'label') {
                                 Ausbuchen
                             </option>
 
-                            <?php foreach ($bookableLocations as $bookableLocation): ?>
+                            <?php foreach ($allLocations as $targetLocation): ?>
 
-                                <option value="<?= (int) $bookableLocation['id'] ?>">
-                                    <?= h($bookableLocation['name']) ?>
+                                <option value="<?= (int) $targetLocation['id'] ?>">
+                                    <?= h($targetLocation['name']) ?>
                                 </option>
 
                             <?php endforeach; ?>
@@ -2378,22 +1940,6 @@ if ($page === 'article' || $page === 'label') {
 
                     </label>
 
-
-                    <label>
-
-                        <span>
-                            Mindestbestand
-                        </span>
-
-                        <input
-                            type="number"
-                            name="minimum_stock"
-                            min="0"
-                            value="0"
-                        >
-
-                    </label>
-
                 </div>
 
 
@@ -2445,8 +1991,6 @@ if ($page === 'article' || $page === 'label') {
             (int) $article['id']
         );
 
-        $minimumStock = (int) $article['minimum_stock'];
-
         $qrCode = null;
 
         if (!empty($article['article_number'])) {
@@ -2456,7 +2000,9 @@ if ($page === 'article' || $page === 'label') {
             );
         }
 
-        $isLow = $totalStock < $minimumStock;
+        $isLow = $stock->hasLowStockAtAnyLocation(
+            (int) $article['id']
+        );
 
         $mainLocationId = null;
 
@@ -2582,12 +2128,6 @@ if ($page === 'article' || $page === 'label') {
                     <?= h($article['unit']) ?>
                 </strong>
 
-                <small class="mindestbestand-hint<?= $isLow ? ' is-low' : '' ?>">
-                    Mindestbestand:
-                    <?= $minimumStock ?>
-                    <?= h($article['unit']) ?>
-                </small>
-
             </div>
 
         </div>
@@ -2602,38 +2142,103 @@ if ($page === 'article' || $page === 'label') {
 
             </div>
 
+            <form
+                method="post"
+                class="form"
+            >
 
-            <div class="location-list">
+                <input
+                    type="hidden"
+                    name="action"
+                    value="set_article_minimums"
+                >
 
-                <?php foreach ($articleStock as $location): ?>
+                <input
+                    type="hidden"
+                    name="article_id"
+                    value="<?= (int) $article['id'] ?>"
+                >
 
-                    <?php
-                    $locationQuantity =
-                        (int) $location['quantity'];
-                    ?>
+                <table>
 
-                    <div class="location-row">
+                    <thead>
+                        <tr>
+                            <th>Lagerort</th>
+                            <th>Bestand</th>
+                            <th>Mindestbestand</th>
+                        </tr>
+                    </thead>
 
-                        <div>
+                    <tbody>
 
-                            <strong>
-                                <?= h($location['location_name']) ?>
-                            </strong>
+                        <?php foreach ($articleStock as $location): ?>
 
-                        </div>
+                            <?php
+                            $locationId = (int) $location['location_id'];
 
-                        <div
-                            class="stock-value <?= $locationQuantity < 0 ? 'stock-low' : '' ?>"
-                        >
-                            <?= $locationQuantity ?>
-                            <?= h($article['unit']) ?>
-                        </div>
+                            $locationQuantity =
+                                (int) $location['quantity'];
 
-                    </div>
+                            $locationMinimum = $location['minimum_stock'] !== null
+                                ? (int) $location['minimum_stock']
+                                : null;
 
-                <?php endforeach; ?>
+                            $locationIsLow = $locationMinimum !== null
+                                && (int) $location['usable_quantity'] < $locationMinimum;
+                            ?>
 
-            </div>
+                            <tr>
+
+                                <td>
+                                    <strong>
+                                        <?= h($location['location_name']) ?>
+                                    </strong>
+                                </td>
+
+                                <td class="<?= ($locationQuantity < 0 || $locationIsLow) ? 'stock-low' : '' ?>">
+                                    <?= $locationQuantity ?>
+                                    <?= h($article['unit']) ?>
+                                </td>
+
+                                <td>
+
+                                    <div class="minimum-stock-field">
+
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            class="minimum-stock-input"
+                                            name="minimum_stock[<?= $locationId ?>]"
+                                            placeholder="optional"
+                                            value="<?= $locationMinimum !== null ? $locationMinimum : '' ?>"
+                                        >
+
+                                        <?= h($article['unit']) ?>
+
+                                    </div>
+
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                    </tbody>
+
+                </table>
+
+                <div class="form-actions">
+
+                    <button
+                        type="submit"
+                        class="button button-primary"
+                    >
+                        Speichern
+                    </button>
+
+                </div>
+
+            </form>
 
         </div>
 
@@ -2650,55 +2255,24 @@ if ($page === 'article' || $page === 'label') {
 
             <div class="location-list">
 
-                <?php
+                <?php if (!$articleBatchesByLocation): ?>
 
-                $unbatchedStock =
-                    $stock->getStockAtLocation(
-                        (int) $article['id'],
-                        $mainLocationId ?? 0,
-                        null
-                    );
-
-                ?>
-
-
-                <?php if ($unbatchedStock > 0): ?>
-
-                    <div class="location-row">
-
-                        <div>
-
-                            <strong>
-                                Ohne MHD
-                            </strong>
-
-                        </div>
-
-                        <div class="stock-value">
-
-                            <?= $unbatchedStock ?>
-                            <?= h($article['unit']) ?>
-
-                        </div>
-
+                    <div class="empty-state compact">
+                        Kein Bestand vorhanden.
                     </div>
 
                 <?php endif; ?>
 
-
-                <?php foreach ($articleBatches as $batch): ?>
+                <?php foreach ($articleBatchesByLocation as $row): ?>
 
                     <?php
-                    $quantity =
-                        (int) $batch['quantity'];
+                    $quantity = (int) $row['quantity'];
 
                     if ($quantity <= 0) {
                         continue;
                     }
 
-                    $expiry = expiryInfo(
-                        $batch['expiry_date']
-                    );
+                    $expiry = expiryInfo($row['expiry_date']);
                     ?>
 
                     <div class="location-row">
@@ -2708,9 +2282,14 @@ if ($page === 'article' || $page === 'label') {
                             <strong
                                 class="<?= $expiry['class'] ?>"
                             >
-                                MHD:
-                                <?= formatDate($batch['expiry_date']) ?>
+                                <?= $row['expiry_date']
+                                    ? 'MHD: ' . h(formatDate($row['expiry_date']))
+                                    : 'Ohne MHD' ?>
                             </strong>
+
+                            <span class="location-hint">
+                                <?= h($row['location_name']) ?>
+                            </span>
 
                             <?php if ($expiry['warning']): ?>
 
@@ -2732,30 +2311,6 @@ if ($page === 'article' || $page === 'label') {
                     </div>
 
                 <?php endforeach; ?>
-
-
-                <?php
-                $hasBatchStock = false;
-
-                foreach ($articleBatches as $batch) {
-                    if ((int) $batch['quantity'] > 0) {
-                        $hasBatchStock = true;
-                        break;
-                    }
-                }
-                ?>
-
-
-                <?php if (
-                    $unbatchedStock <= 0
-                    && !$hasBatchStock
-                ): ?>
-
-                    <div class="empty-state compact">
-                        Kein Bestand vorhanden.
-                    </div>
-
-                <?php endif; ?>
 
             </div>
 
@@ -3118,22 +2673,6 @@ if ($page === 'article' || $page === 'label') {
 
                     </label>
 
-
-                    <label>
-
-                        <span>
-                            Mindestbestand
-                        </span>
-
-                        <input
-                            type="number"
-                            name="minimum_stock"
-                            min="0"
-                            value="<?= (int) $editArticle['minimum_stock'] ?>"
-                        >
-
-                    </label>
-
                 </div>
 
 
@@ -3230,733 +2769,14 @@ if ($page === 'article' || $page === 'label') {
 
 
 <script src="/js/vendor/html5-qrcode.min.js" defer></script>
+<script src="/js/sortable-list.js" defer></script>
+<script src="/js/booking.js" defer></script>
+<script src="/js/stock-form.js" defer></script>
+<script src="/js/article-number-suggestion.js" defer></script>
 
-<script>
 
-document.addEventListener('DOMContentLoaded', function () {
 
-    const scanButton =
-        document.getElementById('issue-start-scan');
 
-    const scannerElement =
-        document.getElementById('issue-scanner');
-
-    const scanStatus =
-        document.getElementById('issue-scan-status');
-
-    const scanResult =
-        document.getElementById('issue-scan-result');
-
-    const articleNumber =
-        document.getElementById('issue-article-number');
-
-    const targetSelect =
-        document.getElementById('issue-target');
-
-    const submitButton =
-        document.getElementById('issue-submit');
-
-
-    if (
-        !scanButton
-        || !scannerElement
-        || !scanStatus
-        || !scanResult
-        || !articleNumber
-        || !targetSelect
-        || !submitButton
-    ) {
-        return;
-    }
-
-
-    function targetLabel() {
-
-        const option =
-            targetSelect.options[targetSelect.selectedIndex];
-
-        return option
-            ? option.textContent.trim()
-            : 'Ausbuchen';
-
-    }
-
-
-    function updateSubmitButton() {
-
-        submitButton.textContent =
-            targetSelect.value === 'issue'
-                ? 'Ausbuchen'
-                : 'Nach ' + targetLabel() + ' umbuchen';
-
-    }
-
-
-    targetSelect.addEventListener(
-        'change',
-        updateSubmitButton
-    );
-
-    updateSubmitButton();
-
-
-    let scanner = null;
-    let scanning = false;
-    let processing = false;
-
-    let lastScannedCode = null;
-    let ignoreLastScannedUntil = 0;
-
-    let lastResult = null;
-    let lastResultCount = 0;
-
-
-    function focusArticleNumber() {
-
-        setTimeout(function () {
-
-            articleNumber.focus();
-            articleNumber.select();
-
-        }, 50);
-
-    }
-
-
-    function showStatus(message) {
-
-        scanStatus.textContent = message;
-        scanStatus.hidden = false;
-
-    }
-
-
-    function showResult(message, error = false) {
-
-        scanResult.textContent = message;
-        scanResult.hidden = false;
-
-        scanResult.classList.toggle(
-            'error',
-            error
-        );
-
-    }
-
-
-    async function stopScanner() {
-
-        if (!scanner) {
-            return;
-        }
-
-        try {
-
-            if (scanning) {
-                await scanner.stop();
-            }
-
-            scanner.clear();
-
-        } catch (error) {
-
-            console.warn(
-                'Scanner konnte nicht gestoppt werden:',
-                error
-            );
-
-        }
-
-        scanner = null;
-        scanning = false;
-
-        scannerElement.hidden = true;
-
-        scanButton.textContent =
-            'Scanner starten';
-
-        focusArticleNumber();
-
-    }
-
-
-    async function startScanner() {
-
-        if (typeof Html5Qrcode === 'undefined') {
-
-            showStatus(
-                'Scanner-Bibliothek konnte nicht geladen werden.'
-            );
-
-            return;
-        }
-
-
-        scannerElement.hidden = false;
-
-        scanButton.textContent =
-            'Scanner beenden';
-
-        showStatus(
-            'Kamera wird gestartet …'
-        );
-
-
-        scanner = new Html5Qrcode(
-            'issue-scanner'
-        );
-
-
-        try {
-
-            await scanner.start(
-                {
-                    facingMode: 'environment'
-                },
-                {
-                    fps: 10,
-                    qrbox: {
-                        width: 250,
-                        height: 250
-                    }
-                },
-                async function (decodedText) {
-
-                    if (processing) {
-                        return;
-                    }
-
-
-                    const code =
-                        decodedText.trim();
-
-
-                    if (
-                        code === lastScannedCode
-                        && Date.now() < ignoreLastScannedUntil
-                    ) {
-                        return;
-                    }
-
-
-                    processing = true;
-
-                    showStatus(
-                        'Buchung läuft …'
-                    );
-
-
-                    try {
-
-                        const formData =
-                            new FormData();
-
-                        formData.append(
-                            'action',
-                            'issue'
-                        );
-
-                        formData.append(
-                            'ajax',
-                            '1'
-                        );
-
-                        formData.append(
-                            'article_number',
-                            code
-                        );
-
-                        formData.append(
-                            'target',
-                            targetSelect.value
-                        );
-
-
-                        const response =
-                            await fetch(
-                                window.location.href,
-                                {
-                                    method: 'POST',
-                                    body: formData
-                                }
-                            );
-
-
-                        const data =
-                            await response.json();
-
-
-                        if (!data.success) {
-
-                            throw new Error(
-                                data.error
-                                    || 'Buchung fehlgeschlagen.'
-                            );
-
-                        }
-
-
-                        /*
-                         * Gleichen QR-Code für 7 Sekunden
-                         * nicht erneut buchen.
-                         */
-                        lastScannedCode = code;
-
-                        ignoreLastScannedUntil =
-                            Date.now() + 7000;
-
-
-                        /*
-                         * Aufeinanderfolgende Buchungen
-                         * desselben Artikels mit demselben Ziel
-                         * zusammenfassen.
-                         */
-                        const resultKey =
-                            code + '|' + targetSelect.value;
-
-                        if (lastResult === resultKey) {
-
-                            lastResultCount++;
-
-                        } else {
-
-                            lastResult = resultKey;
-                            lastResultCount = 1;
-
-                        }
-
-
-                        showResult(
-                            data.article_name
-                            + ' – '
-                            + lastResultCount
-                            + ' '
-                            + data.unit
-                            + ' '
-                            + data.action_label
-                            + ' – MHD '
-                            + data.expiry_date
-                        );
-
-
-                        showStatus(
-                            'Bereit für den nächsten Scan.'
-                        );
-
-
-                    } catch (error) {
-
-                        showResult(
-                            error.message,
-                            true
-                        );
-
-                        showStatus(
-                            'Fehler – nächster Scan möglich.'
-                        );
-
-                    }
-
-
-                    processing = false;
-
-                },
-                function () {
-                    // Kein QR-Code erkannt.
-                }
-            );
-
-
-            scanning = true;
-
-            showStatus(
-                'QR-Code vor die Kamera halten.'
-            );
-
-
-        } catch (error) {
-
-            console.error(
-                'Scanner konnte nicht gestartet werden:',
-                error
-            );
-
-            await stopScanner();
-
-            showStatus(
-                'Kamera konnte nicht gestartet werden.'
-            );
-
-        }
-
-    }
-
-
-    scanButton.addEventListener(
-        'click',
-        async function () {
-
-            if (scanning) {
-
-                await stopScanner();
-
-                showStatus(
-                    'Scanner beendet.'
-                );
-
-                return;
-            }
-
-            await startScanner();
-
-        }
-    );
-
-
-    /*
-     * Beim Öffnen der Seite ist das Feld sofort aktiv.
-     * Dadurch kann ein Hardware-Barcode-Scanner direkt
-     * scannen und mit Enter absenden.
-     */
-    focusArticleNumber();
-
-});
-
-</script>
-
-
-<script>
-
-document.addEventListener('DOMContentLoaded', function () {
-
-    const movementType =
-        document.getElementById('movement_type');
-
-    const batchSelection =
-        document.getElementById('batch_selection');
-
-    const newExpiryField =
-        document.getElementById('new-expiry-field');
-
-    const expiryInput =
-        document.getElementById('expiry_date');
-
-    const submitButton =
-        document.getElementById('submit-stock');
-
-
-    if (
-        !movementType
-        || !batchSelection
-    ) {
-        return;
-    }
-
-
-    function updateForm() {
-
-        const movement =
-            movementType.value;
-
-        let selection =
-            batchSelection.value;
-
-
-        /*
-         * "Neues MHD" nur beim Einlagern erlauben.
-         */
-        const newOption =
-            batchSelection.querySelector(
-                'option[value="new"]'
-            );
-
-        if (newOption) {
-
-            const isIssue =
-                movement === 'issue';
-
-            newOption.disabled = isIssue;
-            newOption.hidden = isIssue;
-
-            if (
-                isIssue
-                && selection === 'new'
-            ) {
-
-                batchSelection.value = 'none';
-
-                selection = 'none';
-            }
-
-        }
-
-
-        /*
-         * Bei Entnahme nur MHDs
-         * mit positivem Bestand anzeigen.
-         */
-        Array.from(
-            batchSelection.options
-        ).forEach(function (option) {
-
-            if (
-                option.value === ''
-                || option.value === 'none'
-                || option.value === 'new'
-            ) {
-                return;
-            }
-
-            const quantity =
-                parseInt(
-                    option.dataset.quantity || '0',
-                    10
-                );
-
-            option.hidden =
-                movement === 'issue'
-                && quantity <= 0;
-        });
-
-
-        /*
-         * Eingabefeld für neues MHD.
-         */
-        newExpiryField.hidden =
-            !(
-                movement === 'receipt'
-                && selection === 'new'
-            );
-
-
-        if (expiryInput) {
-
-            expiryInput.required =
-                movement === 'receipt'
-                && selection === 'new';
-        }
-
-
-        /*
-         * Button-Beschriftung.
-         */
-        if (submitButton) {
-
-            submitButton.textContent =
-                movement === 'receipt'
-                    ? 'Einlagern'
-                    : 'Entnehmen';
-        }
-
-    }
-
-
-    movementType.addEventListener(
-        'change',
-        updateForm
-    );
-
-    batchSelection.addEventListener(
-        'change',
-        updateForm
-    );
-
-
-    updateForm();
-
-});
-
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    /*
-     * Diese Logik gilt ausschließlich für das Formular
-     * "Artikel anlegen".
-     *
-     * Das Bearbeiten-Formular verwendet update_article
-     * und wird hier bewusst nicht angesprochen.
-     */
-
-    const actionInput =
-        document.querySelector(
-            'input[name="action"][value="create_article"]'
-        );
-
-    if (!actionInput) {
-        return;
-    }
-
-
-    const form =
-        actionInput.closest('form');
-
-    if (!form) {
-        return;
-    }
-
-
-    const nameInput =
-        form.querySelector(
-            'input[name="name"]'
-        );
-
-    const articleNumberInput =
-        form.querySelector(
-            'input[name="article_number"]'
-        );
-
-    const categorySelect =
-        form.querySelector(
-            'select[name="category_id"]'
-        );
-
-
-    if (
-        !nameInput
-        || !articleNumberInput
-        || !categorySelect
-    ) {
-        return;
-    }
-
-
-    /*
-     * Hier merken wir uns den zuletzt automatisch
-     * erzeugten Wert.
-     *
-     * Solange der Benutzer diesen Wert nicht verändert,
-     * darf die Anwendung ihn aktualisieren.
-     */
-    let generatedValue = '';
-
-
-    function slugify(value) {
-
-        return value
-            .trim()
-            .toLowerCase()
-
-            /*
-             * Deutsche Umlaute vor normalize() umwandeln,
-             * damit daraus ae/oe/ue statt nur a/o/u wird.
-             */
-            .replace(/ä/g, 'ae')
-            .replace(/ö/g, 'oe')
-            .replace(/ü/g, 'ue')
-            .replace(/ß/g, 'ss')
-
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-
-            /*
-             * Alles außer Buchstaben und Zahlen
-             * wird zu einem Bindestrich.
-             */
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-
-    }
-
-
-    function updateArticleNumberSuggestion() {
-
-        /*
-         * Wenn der Benutzer die automatisch erzeugte
-         * Artikelnummer selbst geändert hat, nichts
-         * mehr automatisch überschreiben.
-         */
-        if (
-            articleNumberInput.value !== ''
-            && articleNumberInput.value !== generatedValue
-        ) {
-            return;
-        }
-
-
-        const selectedOption =
-            categorySelect.options[
-                categorySelect.selectedIndex
-            ];
-
-
-        const shortName =
-            selectedOption
-                ? selectedOption.dataset.shortName || ''
-                : '';
-
-
-        const name =
-            nameInput.value.trim();
-
-
-        const categoryPart =
-            slugify(shortName);
-
-
-        const namePart =
-            slugify(name);
-
-
-        let suggestion = '';
-
-
-        if (categoryPart && namePart) {
-
-            suggestion =
-                categoryPart
-                + '-'
-                + namePart;
-
-        } else if (categoryPart) {
-
-            suggestion = categoryPart;
-
-        } else {
-
-            suggestion = namePart;
-
-        }
-
-
-        generatedValue =
-            suggestion;
-
-
-        articleNumberInput.value =
-            suggestion;
-
-    }
-
-
-    /*
-     * Artikelname geändert:
-     * Artikelnummer-Vorschlag aktualisieren.
-     */
-    nameInput.addEventListener(
-        'input',
-        updateArticleNumberSuggestion
-    );
-
-
-    /*
-     * Kategorie geändert:
-     * Artikelnummer-Vorschlag aktualisieren.
-     */
-    categorySelect.addEventListener(
-        'change',
-        updateArticleNumberSuggestion
-    );
-
-
-    /*
-     * Initialen Vorschlag erzeugen.
-     */
-    updateArticleNumberSuggestion();
-
-});
-</script>
 
 </body>
 </html>

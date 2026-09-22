@@ -18,18 +18,24 @@ sanlager/
 │   ├── css/
 │   ├── images/
 │   ├── js/
-│   │   └── vendor/
+│   │   ├── vendor/
+│   │   └── *.js
 │   └── index.php
 ├── script/
 │   ├── pull.sh
 │   └── push.sh
 ├── src/
+│   ├── ArticleActions.php
 │   ├── ArticleRepository.php
 │   ├── BatchRepository.php
+│   ├── CategoryActions.php
 │   ├── CategoryRepository.php
 │   ├── Database.php
+│   ├── helpers.php
+│   ├── LocationActions.php
 │   ├── LocationRepository.php
 │   ├── QrCodeGenerator.php
+│   ├── StockActions.php
 │   └── StockRepository.php
 ├── vendor/
 ├── .gitignore
@@ -42,15 +48,21 @@ sanlager/
 
 Enthält die öffentlich erreichbaren Dateien der Anwendung.
 
-Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung.
+Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung. Pro Request passiert dort:
 
-`public/js/vendor/` enthält extern bezogene JavaScript-Bibliotheken (z. B. den QR-Code-Scanner `html5-qrcode`), die lokal mitgeliefert werden, damit SanLager ohne Internetzugriff funktioniert.
+1. **POST-Aktionen** – `$action` wird an die passende `*Actions`-Klasse aus `src/` weitergereicht (siehe unten).
+2. **GET-Datenaufbau** – anhand von `$page` werden die für die jeweilige Seite nötigen Daten aus den `*Repository`-Klassen geladen.
+3. **HTML** – ein großer if/elseif-Block anhand von `$page` rendert die passende Seite.
+
+`public/js/` enthält das Frontend-JavaScript als eigenständige Dateien (kein PHP-Templating nötig, da sie ausschließlich über DOM-IDs/Klassen und `fetch()` mit der Anwendung interagieren). `public/js/vendor/` enthält zusätzlich extern bezogene Bibliotheken (aktuell den QR-Code-Scanner `html5-qrcode`), die lokal mitgeliefert werden, damit SanLager ohne Internetzugriff funktioniert.
 
 ### `src/`
 
-Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik.
+Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale Helper-Funktionen. Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
-Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
+* **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
+* **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden, Redirect/JSON-Antwort). Jede `dispatch(string $action)`-Methode kümmert sich nur um die Aktionen, für die sie zuständig ist, und ignoriert alle anderen – `index.php` ruft dadurch einfach alle Action-Klassen nacheinander auf.
+* **`helpers.php`** – kleine globale Funktionen (`h()`, `redirect()`, `formatDate()`, `expiryInfo()`), die sowohl im HTML-Template als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen.
 
 ### `database/`
 
