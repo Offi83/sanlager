@@ -141,6 +141,12 @@ Die Tests liegen unter `tests/` und decken vor allem die Bestandslogik in `Stock
 
 **Hinweis zu Datumswerten:** MHDs werden immer im Format `JJJJ-MM-TT` gespeichert, da alle Ablaufprüfungen in SQL als Textvergleich laufen. Benutzereingaben daher stets über `normalizeDate()` prüfen. Das Datum „heute“ wird in PHP (Zeitzone `APP_TIMEZONE`) ermittelt und als Parameter an SQL übergeben, nicht per `date('now')` in SQLite (UTC).
 
+## Sicherheit von Formularen
+
+- **Herkunftsprüfung (CSRF-Schutz):** Jede POST-Anfrage muss von der Anwendung selbst stammen (`Origin`- bzw. `Referer`-Header passt zum Host), sonst wird sie mit 403 abgelehnt, siehe `isSameOriginRequest()` in `src/helpers.php`. Browser senden diese Header automatisch. Wer zum Testen per `curl` bucht, muss ihn selbst mitgeben, z. B. `curl -H "Origin: http://localhost:8080" -d "action=…" http://localhost:8080/`.
+- **Meldungen nach einer Aktion** laufen über die Session (`flash()`/`takeFlash()`), nicht über die Adresse. Actions geben sie als zweiten Parameter von `ActionResult::redirect()` zurück, nie als `?message=`.
+- **Fehlermeldungen:** Eingabefehler (`RuntimeException`) werden angezeigt, technische Fehler nur allgemein und ins Fehlerprotokoll geschrieben, siehe `userMessage()`.
+
 ## Screenshots aktualisieren
 
 Die Screenshots im README (`images/*.png`) werden automatisch erzeugt:

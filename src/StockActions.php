@@ -51,7 +51,7 @@ class StockActions
      * Lagerort um (`target=<location_id>`).
      *
      * `ajax=1` liefert JSON zurück (Kamera-Scanner), sonst erfolgt ein
-     * normaler Redirect mit Erfolgs-/Fehlermeldung als GET-Parameter.
+     * normaler Redirect mit Erfolgsmeldung (per Session, siehe flash()).
      * Fehler werden hier abschließend behandelt (nicht an den Aufrufer
      * weitergereicht), damit der Scanner nach einem Fehlversuch sofort
      * für den nächsten Scan bereit ist.
@@ -166,32 +166,25 @@ class StockActions
             }
 
             return ActionResult::redirect(
-                '?page=issue' .
-                '&success=' . urlencode(
-                    $article['name'] .
-                    ' – 1 ' .
-                    $article['unit'] .
-                    ' ' .
-                    $actionLabel .
-                    ' (' .
-                    $expiryText .
-                    ')'
-                ) .
-                ($expiryWarning !== '' ? '&expired=1' : '') .
                 /*
-                 * Von/Ziel mitgeben, damit die nächste Buchung (z. B. per
+                 * Von/Nach mitgeben, damit die nächste Buchung (z. B. per
                  * Hand-Barcodescanner mit Enter) wieder in dieselbe
                  * Richtung geht, statt auf "Standard-Lagerort/Ausbuchen"
                  * zurückzufallen – wie beim Kamera-Scan ohne Neuladen.
                  */
-                '&source=' . $sourceLocationId .
-                '&target=' . urlencode($target === '' ? 'issue' : $target)
+                '?page=issue'
+                    . '&source=' . $sourceLocationId
+                    . '&target=' . urlencode($target === '' ? 'issue' : $target),
+                $article['name'] . ' – 1 ' . $article['unit'] . ' '
+                    . $actionLabel . ' (' . $expiryText . ')',
+                // Abgelaufene Charge gebucht: rot statt grün hervorheben.
+                $expiryWarning !== '' ? 'error' : 'success'
             );
         } catch (Throwable $exception) {
             if ($isAjax) {
                 return ActionResult::json([
                     'success' => false,
-                    'error' => $exception->getMessage()
+                    'error' => userMessage($exception)
                 ], 400);
             }
 
@@ -380,8 +373,8 @@ class StockActions
         return ActionResult::redirect(
             '?page=article&id=' . $articleId
             . '&from=' . urlencode($from)
-            . '&to=' . urlencode($to)
-            . '&message=' . urlencode($message)
+            . '&to=' . urlencode($to),
+            $message
         );
     }
 
@@ -425,13 +418,11 @@ class StockActions
         );
 
         return ActionResult::redirect(
-            '?page=locations&edit=' . $fromLocationId .
-            '&message=' . urlencode(
-                $movedUnits > 0
-                    ? 'Bestand nach ' . $toLocation['name']
-                        . ' verschoben (' . $movedUnits . ' Stück).'
-                    : 'Es war kein Bestand zum Verschieben vorhanden.'
-            )
+            '?page=locations&edit=' . $fromLocationId,
+            $movedUnits > 0
+                ? 'Bestand nach ' . $toLocation['name']
+                    . ' verschoben (' . $movedUnits . ' Stück).'
+                : 'Es war kein Bestand zum Verschieben vorhanden.'
         );
     }
 
@@ -490,10 +481,9 @@ class StockActions
         }
 
         return ActionResult::redirect(
-            '?page=today_issues&message=' . urlencode(
-                $article['name'] . ' – ' . $quantity . ' '
+            '?page=today_issues',
+            $article['name'] . ' – ' . $quantity . ' '
                 . $article['unit'] . ' ' . $done
-            )
         );
     }
 
@@ -530,11 +520,10 @@ class StockActions
         };
 
         return ActionResult::redirect(
-            $return . '&message=' . urlencode(
-                $article['name'] . ' – ' . $quantity . ' ' . $article['unit']
+            $return,
+            $article['name'] . ' – ' . $quantity . ' ' . $article['unit']
                 . ' aus ' . $location['name'] . ' entsorgt'
                 . ' (rückgängig unter „Heute ausgebucht“)'
-            )
         );
     }
 }

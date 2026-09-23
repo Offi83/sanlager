@@ -35,10 +35,33 @@ use LagerApp\QrCodeGenerator;
 use LagerApp\StockActions;
 use LagerApp\StockRepository;
 
+require_once __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * Auffangnetz für unerwartete Fehler (z. B. Datenbank nicht erreichbar):
+ * keine technischen Details anzeigen, sondern protokollieren, siehe
+ * userMessage().
+ */
+set_exception_handler(static function (Throwable $exception): void {
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: text/html; charset=utf-8');
+    }
+
+    echo '<p style="font-family: sans-serif; padding: 24px;">'
+        . h(userMessage($exception))
+        . ' <a href="?">Zur Startseite</a></p>';
+});
+
 /*
  * .env, Zeitzone und Datenbank – gemeinsam mit den Skripten unter bin/.
  */
 $db = require __DIR__ . '/../bootstrap.php';
+
+/*
+ * Session nur für Meldungen nach einer Aktion (siehe flash()).
+ */
+startSession();
 
 $articles = new ArticleRepository($db);
 $batches = new BatchRepository($db);
@@ -64,6 +87,7 @@ $action = $_POST['action'] ?? null;
 
 $error = null;
 $message = null;
+$messageType = 'success';
 
 /*
 |--------------------------------------------------------------------------
@@ -75,12 +99,30 @@ $message = null;
 | Aktionen, für die sie zuständig ist, und liefert für alle anderen null.
 | Die zuständige Klasse gibt ein ActionResult (Redirect oder JSON) zurück,
 | das erst hier per send() ausgegeben wird.
-| RuntimeExceptions (ungültige Eingaben) werden hier zentral abgefangen
-| und als $error angezeigt.
+| Fehler werden hier zentral abgefangen und als $error angezeigt – Eingabe-
+| fehler im Klartext, technische Fehler nur allgemein (siehe userMessage()).
+|
+| Vorher wird geprüft, dass die Anfrage von dieser Anwendung stammt
+| (Schutz vor Cross-Site Request Forgery, siehe isSameOriginRequest()).
 |--------------------------------------------------------------------------
 */
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isSameOriginRequest($_SERVER)) {
+
+    $rejected = 'Anfrage abgelehnt: Sie stammt nicht von dieser Anwendung. '
+        . 'Bitte die Seite neu laden und noch einmal versuchen.';
+
+    /*
+     * Scanner (ajax=1) und Drag & Drop (reorder_*) erwarten JSON.
+     */
+    if (($_POST['ajax'] ?? '') === '1' || str_starts_with((string) $action, 'reorder_')) {
+        LagerApp\ActionResult::json(['success' => false, 'error' => $rejected], 403)->send();
+    }
+
+    http_response_code(403);
+    $error = $rejected;
+
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
 
@@ -93,13 +135,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } catch (Throwable $exception) {
 
-        $error = $exception->getMessage();
+        $error = userMessage($exception);
     }
 }
 
+/*
+ * Meldung der vorherigen Aktion (Redirect-nach-POST). Kommt aus der
+ * Session, nicht aus der Adresse – so lässt sich kein fremder Text als
+ * Systemmeldung unterschieben.
+ */
+$flash = takeFlash();
 
-if (isset($_GET['message'])) {
-    $message = $_GET['message'];
+if ($flash !== null) {
+    $message = $flash['text'];
+    $messageType = $flash['type'] === 'error' ? 'error' : 'success';
 }
 
 /*
@@ -479,7 +528,7 @@ if ($page === 'article' || $page === 'label') {
 
     <?php if ($message): ?>
 
-        <div class="alert success">
+        <div class="alert <?= $messageType ?>">
             <?= h($message) ?>
         </div>
 
@@ -1891,17 +1940,6 @@ if ($page === 'article' || $page === 'label') {
                 </div>
 
             </div>
-
-            <?php if (
-                isset($_GET['success'])
-                && $_GET['success'] !== ''
-            ): ?>
-
-                <div class="alert <?= isset($_GET['expired']) ? 'error' : 'success' ?>">
-                    <?= h($_GET['success']) ?>
-                </div>
-
-            <?php endif; ?>
 
             <div class="card issue-card">
 

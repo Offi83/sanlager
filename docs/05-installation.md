@@ -52,6 +52,8 @@ DB_DATABASE=database/database.sqlite
 APP_TIMEZONE=Europe/Berlin
 ```
 
+Auf dem Produktivserver `APP_DEBUG=false` setzen: Technische Fehler (z. B. der Datenbank) werden dann nur allgemein angezeigt und mit allen Details ins PHP-Fehlerprotokoll des Webservers geschrieben.
+
 `APP_TIMEZONE` legt fest, welcher Tag als „heute“ gilt (MHD-Ablauf, heute ausgebuchte Artikel). Ohne Angabe wird `Europe/Berlin` verwendet.
 
 Für den optionalen Wochenbericht per E-Mail kommen weitere Einträge hinzu, siehe [Wochenbericht](12-wochenbericht.md).

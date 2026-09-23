@@ -337,8 +337,20 @@ document.addEventListener('DOMContentLoaded', function () {
                             );
 
 
+                        /*
+                         * Kommt kein JSON zurück (z. B. abgelaufene
+                         * Anmeldung, Serverfehler), verständlich melden
+                         * statt "Unexpected token '<' ...".
+                         */
                         const data =
-                            await response.json();
+                            await response.json().catch(function () {
+                                return {
+                                    success: false,
+                                    error: 'Unerwartete Antwort vom Server ('
+                                        + response.status
+                                        + '). Bitte Seite neu laden.'
+                                };
+                            });
 
 
                         if (!data.success) {

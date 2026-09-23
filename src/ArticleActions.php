@@ -76,7 +76,7 @@ class ArticleActions
             $categoryId
         );
 
-        return ActionResult::redirect('?page=new_article&message=Artikel+angelegt');
+        return ActionResult::redirect('?page=new_article', 'Artikel angelegt');
     }
 
     private function update(array $input): ActionResult
@@ -118,8 +118,8 @@ class ArticleActions
         );
 
         return ActionResult::redirect(
-            '?page=article&id=' . $id .
-            '&message=Artikel+gespeichert'
+            '?page=article&id=' . $id,
+            'Artikel gespeichert'
         );
     }
 
@@ -152,7 +152,7 @@ class ArticleActions
 
         $this->articles->deactivate($id);
 
-        return ActionResult::redirect('?page=articles&message=Artikel+gelöscht');
+        return ActionResult::redirect('?page=articles', 'Artikel gelöscht');
     }
 
     /**
@@ -187,8 +187,8 @@ class ArticleActions
         $this->stock->saveMinimums($articleId, $minimums);
 
         return ActionResult::redirect(
-            '?page=article&id=' . $articleId .
-            '&message=' . urlencode('Mindestbestände gespeichert')
+            '?page=article&id=' . $articleId,
+            'Mindestbestände gespeichert'
         );
     }
 }

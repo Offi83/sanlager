@@ -145,3 +145,121 @@ function icon(string $name): string
         . 'stroke-linejoin="round" aria-hidden="true" focusable="false">'
         . $paths . '</svg>';
 }
+
+/**
+ * Text, der dem Nutzer zu einer Ausnahme angezeigt werden darf.
+ *
+ * Eingabe- und Fachfehler (RuntimeException aus den Actions/Repositories,
+ * z. B. "Nicht genügend Bestand") sind für den Nutzer gedacht und werden
+ * unverändert angezeigt. Alles andere – vor allem Datenbankfehler mit
+ * SQL-Details – wird ins PHP-Fehlerprotokoll geschrieben und durch einen
+ * allgemeinen Hinweis ersetzt. Mit APP_DEBUG=true in der .env wird der
+ * Originaltext angezeigt (Entwicklung).
+ */
+function userMessage(Throwable $exception): string
+{
+    $isTechnical = $exception instanceof PDOException
+        || !$exception instanceof RuntimeException;
+
+    if (!$isTechnical) {
+        return $exception->getMessage();
+    }
+
+    error_log('SanLager: ' . $exception);
+
+    if (filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOL)) {
+        return get_class($exception) . ': ' . $exception->getMessage();
+    }
+
+    if ($exception instanceof PDOException && str_contains($exception->getMessage(), 'database is locked')) {
+        return 'Die Datenbank ist gerade beschäftigt. Bitte noch einmal versuchen.';
+    }
+
+    return 'Es ist ein technischer Fehler aufgetreten. Bitte noch einmal versuchen '
+        . 'oder den Administrator informieren.';
+}
+
+/**
+ * Schutz vor Cross-Site Request Forgery: Stammt eine POST-Anfrage von
+ * einer Seite dieser Anwendung? Browser senden bei POST-Anfragen den
+ * Origin-Header (sonst Referer); fehlen beide oder zeigen sie auf einen
+ * anderen Host, wird die Anfrage abgelehnt.
+ *
+ * Die HTTP-Basic-Authentifizierung schützt davor nicht, weil der Browser
+ * die Zugangsdaten auch bei Anfragen von fremden Seiten mitschickt.
+ * Verglichen wird nur Host (inkl. Port), nicht das Schema – so klappt es
+ * auch hinter einem Proxy, der HTTPS entgegennimmt.
+ *
+ * @param array<string, mixed> $server in der Anwendung $_SERVER
+ */
+function isSameOriginRequest(array $server): bool
+{
+    $host = strtolower((string) ($server['HTTP_HOST'] ?? ''));
+
+    $source = $server['HTTP_ORIGIN'] ?? $server['HTTP_REFERER'] ?? '';
+
+    if ($host === '' || !is_string($source) || $source === '' || $source === 'null') {
+        return false;
+    }
+
+    $parts = parse_url($source);
+
+    if (!isset($parts['host'])) {
+        return false;
+    }
+
+    $sourceHost = strtolower($parts['host']) . (isset($parts['port']) ? ':' . $parts['port'] : '');
+
+    return $sourceHost === $host;
+}
+
+/**
+ * Startet die PHP-Session (nur für Meldungen nach einer Aktion, siehe
+ * flash()). Cookie nur per HTTP, nicht für fremde Seiten mitgesendet.
+ */
+function startSession(): void
+{
+    if (session_status() !== PHP_SESSION_NONE) {
+        return;
+    }
+
+    session_name('sanlager');
+
+    session_set_cookie_params([
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off',
+    ]);
+
+    session_start();
+}
+
+/**
+ * Merkt eine Meldung für die nächste Seite vor (Redirect-nach-POST).
+ * Anders als ein Text in der Adresse (?message=...) kann sie nicht von
+ * außen untergeschoben werden.
+ *
+ * @param string $type success|error
+ */
+function flash(string $text, string $type = 'success'): void
+{
+    startSession();
+
+    $_SESSION['flash'] = ['text' => $text, 'type' => $type];
+}
+
+/**
+ * Liefert die vorgemerkte Meldung und entfernt sie (einmalige Anzeige).
+ *
+ * @return array{text: string, type: string}|null
+ */
+function takeFlash(): ?array
+{
+    startSession();
+
+    $flash = $_SESSION['flash'] ?? null;
+    unset($_SESSION['flash']);
+
+    return is_array($flash) ? $flash : null;
+}

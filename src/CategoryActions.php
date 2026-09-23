@@ -66,7 +66,7 @@ class CategoryActions
             $color
         );
 
-        return ActionResult::redirect('?page=categories&message=Kategorie+angelegt');
+        return ActionResult::redirect('?page=categories', 'Kategorie angelegt');
     }
 
     private function update(array $input): ActionResult
@@ -107,7 +107,7 @@ class CategoryActions
             $color
         );
 
-        return ActionResult::redirect('?page=categories&message=Kategorie+gespeichert');
+        return ActionResult::redirect('?page=categories', 'Kategorie gespeichert');
     }
 
     private function delete(array $input): ActionResult
@@ -128,7 +128,7 @@ class CategoryActions
 
         $this->categories->delete($id);
 
-        return ActionResult::redirect('?page=categories&message=Kategorie+gelöscht');
+        return ActionResult::redirect('?page=categories', 'Kategorie gelöscht');
     }
 
     /**
@@ -152,7 +152,7 @@ class CategoryActions
         } catch (Throwable $exception) {
             return ActionResult::json([
                 'success' => false,
-                'error' => $exception->getMessage()
+                'error' => userMessage($exception)
             ], 400);
         }
 

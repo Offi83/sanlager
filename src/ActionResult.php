@@ -17,13 +17,23 @@ final class ActionResult
     private function __construct(
         public readonly ?string $redirectUrl,
         public readonly ?array $json,
-        public readonly int $status
+        public readonly int $status,
+        public readonly ?string $message = null,
+        public readonly string $messageType = 'success'
     ) {
     }
 
-    public static function redirect(string $url): self
-    {
-        return new self($url, null, 302);
+    /**
+     * @param string|null $message Meldung für die Zielseite (per Session,
+     *                             nicht in der Adresse, siehe flash())
+     * @param string $messageType success|error
+     */
+    public static function redirect(
+        string $url,
+        ?string $message = null,
+        string $messageType = 'success'
+    ): self {
+        return new self($url, null, 302, $message, $messageType);
     }
 
     public static function json(array $data, int $status = 200): self
@@ -34,6 +44,10 @@ final class ActionResult
     public function send(): never
     {
         if ($this->redirectUrl !== null) {
+            if ($this->message !== null) {
+                flash($this->message, $this->messageType);
+            }
+
             redirect($this->redirectUrl);
         }
 

@@ -50,7 +50,7 @@ class LocationActions
 
         $this->locations->create($name, $description);
 
-        return ActionResult::redirect('?page=locations&message=Lagerort+angelegt');
+        return ActionResult::redirect('?page=locations', 'Lagerort angelegt');
     }
 
     private function update(array $input): ActionResult
@@ -73,7 +73,7 @@ class LocationActions
 
         $this->locations->update($id, $name, $description);
 
-        return ActionResult::redirect('?page=locations&message=Lagerort+gespeichert');
+        return ActionResult::redirect('?page=locations', 'Lagerort gespeichert');
     }
 
     private function deactivate(array $input): ActionResult
@@ -94,7 +94,7 @@ class LocationActions
 
         $this->locations->deactivate($id);
 
-        return ActionResult::redirect('?page=locations&message=Lagerort+deaktiviert');
+        return ActionResult::redirect('?page=locations', 'Lagerort deaktiviert');
     }
 
     /**
@@ -118,7 +118,7 @@ class LocationActions
         } catch (Throwable $exception) {
             return ActionResult::json([
                 'success' => false,
-                'error' => $exception->getMessage()
+                'error' => userMessage($exception)
             ], 400);
         }
 

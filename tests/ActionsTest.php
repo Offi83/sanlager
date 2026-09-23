@@ -102,7 +102,9 @@ class ActionsTest extends TestCase
         $result = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
 
         $this->assertNull($result->json);
-        $this->assertStringStartsWith('?page=issue&success=', $result->redirectUrl);
+        $this->assertStringStartsWith('?page=issue&source=', $result->redirectUrl);
+        $this->assertStringStartsWith('Mullbinde – 1 Stück ausgebucht', $result->message);
+        $this->assertSame('success', $result->messageType);
 
         $this->expectException(RuntimeException::class);
 
@@ -249,7 +251,8 @@ class ActionsTest extends TestCase
             'quantity' => '2',
         ]);
 
-        $this->assertStringStartsWith('?page=today_issues&message=', $result->redirectUrl);
+        $this->assertSame('?page=today_issues', $result->redirectUrl);
+        $this->assertSame('Mullbinde – 2 Stück zurück nach Hauptlager gebucht', $result->message);
         $this->assertSame(3, $this->stock->getTotalStock($this->articleId));
     }
 
@@ -265,8 +268,8 @@ class ActionsTest extends TestCase
             'return' => 'location',
         ]);
 
-        $this->assertStringStartsWith('?page=location&id=' . $this->mainId . '&message=', $result->redirectUrl);
-        $this->assertStringContainsString(urlencode('2 Stück aus Hauptlager entsorgt'), $result->redirectUrl);
+        $this->assertSame('?page=location&id=' . $this->mainId, $result->redirectUrl);
+        $this->assertStringContainsString('2 Stück aus Hauptlager entsorgt', $result->message);
         $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
 
         $this->expectException(RuntimeException::class);
@@ -292,7 +295,7 @@ class ActionsTest extends TestCase
             'quantity' => '1',
         ]);
 
-        $this->assertStringContainsString(urlencode('von Kiste 1 zurück nach Hauptlager'), $result->redirectUrl);
+        $this->assertStringContainsString('von Kiste 1 zurück nach Hauptlager', $result->message);
         $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
 
         $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-2 days')));
@@ -334,7 +337,7 @@ class ActionsTest extends TestCase
             '&from=' . $this->mainId . '&to=' . $boxId,
             $result->redirectUrl
         );
-        $this->assertStringContainsString(urlencode('3 Stück umgebucht: Hauptlager → Kiste 1'), $result->redirectUrl);
+        $this->assertSame('3 Stück umgebucht: Hauptlager → Kiste 1', $result->message);
 
         // Erscheint in "Heute umgebucht" und lässt sich zurücknehmen.
         $this->assertSame(3, (int) $this->stock->getTodayTransfers()[0]['quantity']);
@@ -358,7 +361,7 @@ class ActionsTest extends TestCase
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
         $this->assertSame(1, $this->stock->getTodayIssueCount());
-        $this->assertStringContainsString(urlencode('1 Stück ausgebucht aus Hauptlager'), $result->redirectUrl);
+        $this->assertSame('1 Stück ausgebucht aus Hauptlager', $result->message);
         $this->assertStringContainsString('&from=' . $this->mainId . '&to=issue', $result->redirectUrl);
     }
 
@@ -412,7 +415,8 @@ class ActionsTest extends TestCase
 
         $result = $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
 
-        $this->assertStringStartsWith('?page=articles&message=', $result->redirectUrl);
+        $this->assertSame('?page=articles', $result->redirectUrl);
+        $this->assertSame('Artikel gelöscht', $result->message);
         $this->assertSame(0, (int) $this->articles->find($this->articleId)['active']);
     }
 
@@ -431,5 +435,24 @@ class ActionsTest extends TestCase
 
         $this->assertStringContainsString('&source=' . $boxId, $result->redirectUrl);
         $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $boxId));
+    }
+
+    public function testBookingExpiredBatchIsReportedAsError(): void
+    {
+        $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
+        $this->stock->move($this->articleId, $this->mainId, 1, 'receipt', null, $expired);
+
+        $result = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
+
+        $this->assertStringContainsString('ABGELAUFEN', $result->message);
+        $this->assertSame('error', $result->messageType);
+        $this->assertStringNotContainsString('ABGELAUFEN', $result->redirectUrl);
+    }
+
+    public function testNoActionPutsMessagesIntoTheUrl(): void
+    {
+        $sources = implode('', array_map('file_get_contents', glob(__DIR__ . '/../src/*Actions.php')));
+
+        $this->assertDoesNotMatchRegularExpression('/[?&](message|success|expired)=/', $sources);
     }
 }
