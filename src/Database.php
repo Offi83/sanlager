@@ -10,7 +10,7 @@ use RuntimeException;
  * noch fehlenden Migrationen aus `database/migrations/` an.
  *
  * Es gibt bewusst kein separates Migrations-Kommando: Jeder Seitenaufruf
- * prüft und aktualisiert das Schema selbst (siehe runMigrations()).
+ * prüft und aktualisiert das Schema selbst (siehe migrate()).
  */
 class Database
 {
@@ -35,12 +35,100 @@ class Database
 
         $this->connection->exec('PRAGMA foreign_keys = ON');
 
-        $this->runMigrations();
+        $this->migrate();
     }
 
     public function connection(): PDO
     {
         return $this->connection;
+    }
+
+    /**
+     * Schneller Weg für den Normalfall "Schema ist aktuell".
+     *
+     * Die Nummer der neuesten angewendeten Migration steht in der
+     * SQLite-Kopfzeile (`PRAGMA user_version`). Stimmt sie mit der
+     * neuesten Migrationsdatei überein, ist nichts zu tun – das kostet
+     * pro Seitenaufruf nur ein Verzeichnislisting und eine Abfrage,
+     * statt jede Migration einzeln gegen schema_migrations zu prüfen.
+     *
+     * Nur wenn eine neuere Migrationsdatei vorliegt (oder die Datenbank
+     * neu bzw. noch ohne user_version ist), läuft der vollständige
+     * Abgleich in runMigrations().
+     */
+    private function migrate(): void
+    {
+        $migrationFiles = $this->migrationFiles();
+
+        $latestVersion = $migrationFiles === []
+            ? 0
+            : max(array_keys($migrationFiles));
+
+        $currentVersion = (int) $this->connection
+            ->query('PRAGMA user_version')
+            ->fetchColumn();
+
+        if ($currentVersion === $latestVersion) {
+            return;
+        }
+
+        $this->runMigrations($migrationFiles);
+
+        /*
+         * PRAGMA erlaubt keine gebundenen Parameter; $latestVersion ist
+         * eine per max() ermittelte Ganzzahl.
+         */
+        $this->connection->exec('PRAGMA user_version = ' . $latestVersion);
+    }
+
+    /**
+     * Liefert alle Migrationsdateien, indiziert nach ihrer Nummer
+     * (`008_xyz.sql` => 8) und aufsteigend sortiert.
+     *
+     * @return array<int, string>
+     */
+    private function migrationFiles(): array
+    {
+        if (!is_dir($this->migrationsPath)) {
+            throw new RuntimeException(
+                'Migrations-Verzeichnis nicht gefunden: ' . $this->migrationsPath
+            );
+        }
+
+        $paths = glob($this->migrationsPath . '/*.sql');
+
+        if ($paths === false) {
+            throw new RuntimeException(
+                'Migration-Dateien konnten nicht gelesen werden.'
+            );
+        }
+
+        $migrationFiles = [];
+
+        foreach ($paths as $path) {
+            $migration = basename($path);
+
+            if (!preg_match('/^(\d+)_/', $migration, $matches)) {
+                throw new RuntimeException(
+                    'Migration ohne Nummer im Dateinamen: ' . $migration
+                );
+            }
+
+            $version = (int) $matches[1];
+
+            if (isset($migrationFiles[$version])) {
+                throw new RuntimeException(
+                    'Migrationsnummer doppelt vergeben: ' . $migration
+                    . ' und ' . basename($migrationFiles[$version])
+                );
+            }
+
+            $migrationFiles[$version] = $path;
+        }
+
+        ksort($migrationFiles);
+
+        return $migrationFiles;
     }
 
     /**
@@ -51,14 +139,8 @@ class Database
      * wurde. Dadurch können ältere Datenbanken auf das neue
      * schema_migrations-System übernommen werden, ohne Daten zu verlieren.
      */
-    private function runMigrations(): void
+    private function runMigrations(array $migrationFiles): void
     {
-        if (!is_dir($this->migrationsPath)) {
-            throw new RuntimeException(
-                'Migrations-Verzeichnis nicht gefunden: ' . $this->migrationsPath
-            );
-        }
-
         /*
          * Migration-Historie anlegen.
          *
@@ -85,16 +167,6 @@ class Database
                 applied_at TEXT NOT NULL
             )
         ');
-
-        $migrationFiles = glob($this->migrationsPath . '/*.sql');
-
-        if ($migrationFiles === false) {
-            throw new RuntimeException(
-                'Migration-Dateien konnten nicht gelesen werden.'
-            );
-        }
-
-        sort($migrationFiles, SORT_STRING);
 
         foreach ($migrationFiles as $migrationFile) {
             $migration = basename($migrationFile);

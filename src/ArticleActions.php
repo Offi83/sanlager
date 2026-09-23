@@ -14,6 +14,8 @@ use RuntimeException;
  */
 class ArticleActions
 {
+    use ReadsInput;
+
     public function __construct(
         private ArticleRepository $articles,
         private CategoryRepository $categories,
@@ -22,29 +24,31 @@ class ArticleActions
     }
 
     /**
-     * Führt die zu $action passende Aktion aus, falls diese Klasse dafür
-     * zuständig ist. Nicht zuständige Aktionen werden ignoriert, damit
-     * der Aufrufer einfach alle Action-Klassen nacheinander aufrufen kann.
+     * Führt die zu $action passende Aktion mit den Formularwerten aus
+     * $input (in der Anwendung $_POST) aus, falls diese Klasse dafür
+     * zuständig ist. Für nicht zuständige Aktionen wird null geliefert,
+     * damit der Aufrufer einfach alle Action-Klassen nacheinander fragen
+     * kann. Ungültige Eingaben werfen eine RuntimeException.
      */
-    public function dispatch(?string $action): void
+    public function dispatch(?string $action, array $input): ?ActionResult
     {
-        match ($action) {
-            'create_article' => $this->create(),
-            'update_article' => $this->update(),
-            'deactivate_article' => $this->deactivate(),
-            'set_article_minimums' => $this->setMinimums(),
+        return match ($action) {
+            'create_article' => $this->create($input),
+            'update_article' => $this->update($input),
+            'deactivate_article' => $this->deactivate($input),
+            'set_article_minimums' => $this->setMinimums($input),
             default => null,
         };
     }
 
-    private function create(): void
+    private function create(array $input): ActionResult
     {
-        $articleNumber = trim($_POST['article_number'] ?? '');
-        $name = trim($_POST['name'] ?? '');
-        $description = trim($_POST['description'] ?? '');
-        $unit = trim($_POST['unit'] ?? 'Stück');
+        $articleNumber = $this->string($input, 'article_number');
+        $name = $this->string($input, 'name');
+        $description = $this->string($input, 'description');
+        $unit = $this->string($input, 'unit', 'Stück');
 
-        $categoryId = (int) ($_POST['category_id'] ?? 0);
+        $categoryId = $this->int($input, 'category_id');
 
         if ($categoryId <= 0 || !$this->categories->find($categoryId)) {
             throw new RuntimeException(
@@ -72,19 +76,19 @@ class ArticleActions
             $categoryId
         );
 
-        redirect('?page=new_article&message=Artikel+angelegt');
+        return ActionResult::redirect('?page=new_article&message=Artikel+angelegt');
     }
 
-    private function update(): void
+    private function update(array $input): ActionResult
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id = $this->int($input, 'id');
 
-        $articleNumber = trim($_POST['article_number'] ?? '');
-        $name = trim($_POST['name'] ?? '');
-        $description = trim($_POST['description'] ?? '');
-        $unit = trim($_POST['unit'] ?? 'Stück');
+        $articleNumber = $this->string($input, 'article_number');
+        $name = $this->string($input, 'name');
+        $description = $this->string($input, 'description');
+        $unit = $this->string($input, 'unit', 'Stück');
 
-        $categoryId = (int) ($_POST['category_id'] ?? 0);
+        $categoryId = $this->int($input, 'category_id');
 
         if ($id <= 0) {
             throw new RuntimeException(
@@ -113,15 +117,15 @@ class ArticleActions
             $categoryId
         );
 
-        redirect(
+        return ActionResult::redirect(
             '?page=article&id=' . $id .
             '&message=Artikel+gespeichert'
         );
     }
 
-    private function deactivate(): void
+    private function deactivate(array $input): ActionResult
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id = $this->int($input, 'id');
 
         if ($id <= 0) {
             throw new RuntimeException(
@@ -131,7 +135,7 @@ class ArticleActions
 
         $this->articles->deactivate($id);
 
-        redirect('?page=articles&message=Artikel+gelöscht');
+        return ActionResult::redirect('?page=articles&message=Artikel+gelöscht');
     }
 
     /**
@@ -140,9 +144,9 @@ class ArticleActions
      * überwacht; ein leeres Feld entfernt eine ggf. vorhandene Überwachung
      * für diesen Lagerort wieder.
      */
-    private function setMinimums(): void
+    private function setMinimums(array $input): ActionResult
     {
-        $articleId = (int) ($_POST['article_id'] ?? 0);
+        $articleId = $this->int($input, 'article_id');
 
         if ($articleId <= 0 || !$this->articles->find($articleId)) {
             throw new RuntimeException(
@@ -150,13 +154,13 @@ class ArticleActions
             );
         }
 
-        $submittedMinimums = $_POST['minimum_stock'] ?? [];
+        $submittedMinimums = $this->array($input, 'minimum_stock');
 
         $minimums = [];
 
         foreach ($this->stock->locations() as $location) {
             $locationId = (int) $location['id'];
-            $rawValue = trim((string) ($submittedMinimums[$locationId] ?? ''));
+            $rawValue = $this->string($submittedMinimums, (string) $locationId);
 
             $minimums[$locationId] = $rawValue === ''
                 ? null
@@ -165,7 +169,7 @@ class ArticleActions
 
         $this->stock->saveMinimums($articleId, $minimums);
 
-        redirect(
+        return ActionResult::redirect(
             '?page=article&id=' . $articleId .
             '&message=' . urlencode('Mindestbestände gespeichert')
         );

@@ -8,6 +8,8 @@ Die wichtigsten Verzeichnisse des Projekts:
 
 ```text
 sanlager/
+├── bin/
+│   └── weekly-report.php
 ├── database/
 │   ├── database.sqlite
 │   └── migrations/
@@ -25,6 +27,7 @@ sanlager/
 │   ├── pull.sh
 │   └── push.sh
 ├── src/
+│   ├── ActionResult.php
 │   ├── ArticleActions.php
 │   ├── ArticleRepository.php
 │   ├── BatchRepository.php
@@ -35,14 +38,23 @@ sanlager/
 │   ├── LocationActions.php
 │   ├── LocationRepository.php
 │   ├── QrCodeGenerator.php
+│   ├── ReadsInput.php
+│   ├── ReportConfig.php
 │   ├── StockActions.php
-│   └── StockRepository.php
+│   ├── StockRepository.php
+│   └── WeeklyReport.php
+├── tests/
 ├── vendor/
 ├── .gitignore
+├── bootstrap.php
 ├── composer.json
 ├── composer.lock
 └── start.sh
 ```
+
+### `bin/`
+
+Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind, z. B. der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](12-wochenbericht.md)). Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
 
 ### `public/`
 
@@ -61,7 +73,9 @@ Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung. Pro Request pa
 Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale Helper-Funktionen. Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
 * **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
-* **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden, Redirect/JSON-Antwort). Jede `dispatch(string $action)`-Methode kümmert sich nur um die Aktionen, für die sie zuständig ist, und ignoriert alle anderen – `index.php` ruft dadurch einfach alle Action-Klassen nacheinander auf.
+* **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
+* **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
+* **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.
 * **`helpers.php`** – kleine globale Funktionen (`h()`, `redirect()`, `formatDate()`, `expiryInfo()`, `normalizeDate()`), die sowohl im HTML-Template als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen.
 
 ### `database/`
@@ -119,7 +133,7 @@ Die automatisierten Tests (PHPUnit) laufen gegen eine frische In-Memory-Datenban
 composer test
 ```
 
-Die Tests liegen unter `tests/` und decken vor allem die Bestandslogik in `StockRepository` ab (FIFO-Ausbuchung, Umbuchen, abgelaufene Chargen, Mindestbestand, heutige Ausbuchungen) sowie die Datums-Helper.
+Die Tests liegen unter `tests/` und decken vor allem die Bestandslogik in `StockRepository` ab (FIFO-Ausbuchung, Umbuchen, abgelaufene Chargen, Mindestbestand, heutige Ausbuchungen) sowie die Datums-Helper, die POST-Aktionen (`ActionsTest`) und das automatische Anwenden der Migrationen (`DatabaseTest`).
 
 **Hinweis zu Datumswerten:** MHDs werden immer im Format `JJJJ-MM-TT` gespeichert, da alle Ablaufprüfungen in SQL als Textvergleich laufen. Benutzereingaben daher stets über `normalizeDate()` prüfen. Das Datum „heute“ wird in PHP (Zeitzone `APP_TIMEZONE`) ermittelt und als Parameter an SQL übergeben, nicht per `date('now')` in SQLite (UTC).
 

@@ -11,32 +11,36 @@ use Throwable;
  */
 class CategoryActions
 {
+    use ReadsInput;
+
     public function __construct(
         private CategoryRepository $categories
     ) {
     }
 
     /**
-     * Führt die zu $action passende Aktion aus, falls diese Klasse dafür
-     * zuständig ist. Nicht zuständige Aktionen werden ignoriert, damit
-     * der Aufrufer einfach alle Action-Klassen nacheinander aufrufen kann.
+     * Führt die zu $action passende Aktion mit den Formularwerten aus
+     * $input (in der Anwendung $_POST) aus, falls diese Klasse dafür
+     * zuständig ist. Für nicht zuständige Aktionen wird null geliefert,
+     * damit der Aufrufer einfach alle Action-Klassen nacheinander fragen
+     * kann. Ungültige Eingaben werfen eine RuntimeException.
      */
-    public function dispatch(?string $action): void
+    public function dispatch(?string $action, array $input): ?ActionResult
     {
-        match ($action) {
-            'create_category' => $this->create(),
-            'update_category' => $this->update(),
-            'delete_category' => $this->delete(),
-            'reorder_categories' => $this->reorder(),
+        return match ($action) {
+            'create_category' => $this->create($input),
+            'update_category' => $this->update($input),
+            'delete_category' => $this->delete($input),
+            'reorder_categories' => $this->reorder($input),
             default => null,
         };
     }
 
-    private function create(): void
+    private function create(array $input): ActionResult
     {
-        $name = trim($_POST['name'] ?? '');
-        $shortName = trim($_POST['short_name'] ?? '');
-        $color = trim($_POST['color'] ?? '');
+        $name = $this->string($input, 'name');
+        $shortName = $this->string($input, 'short_name');
+        $color = $this->string($input, 'color');
 
         if ($name === '') {
             throw new RuntimeException(
@@ -62,15 +66,15 @@ class CategoryActions
             $color
         );
 
-        redirect('?page=categories&message=Kategorie+angelegt');
+        return ActionResult::redirect('?page=categories&message=Kategorie+angelegt');
     }
 
-    private function update(): void
+    private function update(array $input): ActionResult
     {
-        $id = (int) ($_POST['id'] ?? 0);
-        $name = trim($_POST['name'] ?? '');
-        $shortName = trim($_POST['short_name'] ?? '');
-        $color = trim($_POST['color'] ?? '');
+        $id = $this->int($input, 'id');
+        $name = $this->string($input, 'name');
+        $shortName = $this->string($input, 'short_name');
+        $color = $this->string($input, 'color');
 
         if ($id <= 0) {
             throw new RuntimeException(
@@ -103,12 +107,12 @@ class CategoryActions
             $color
         );
 
-        redirect('?page=categories&message=Kategorie+gespeichert');
+        return ActionResult::redirect('?page=categories&message=Kategorie+gespeichert');
     }
 
-    private function delete(): void
+    private function delete(array $input): ActionResult
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id = $this->int($input, 'id');
 
         if ($id <= 0) {
             throw new RuntimeException(
@@ -124,41 +128,36 @@ class CategoryActions
 
         $this->categories->delete($id);
 
-        redirect('?page=categories&message=Kategorie+gelöscht');
+        return ActionResult::redirect('?page=categories&message=Kategorie+gelöscht');
     }
 
     /**
      * Liefert im Gegensatz zu den anderen Aktionen immer JSON zurück
      * (wird per fetch() vom Drag-&-Drop-Skript der Kategorien-Seite
-     * aufgerufen) und beendet die Ausführung selbst.
+     * aufgerufen), auch im Fehlerfall.
      */
-    private function reorder(): void
+    private function reorder(array $input): ActionResult
     {
-        header('Content-Type: application/json; charset=utf-8');
+        $ids = $input['ids'] ?? null;
 
-        try {
-            $ids = $_POST['ids'] ?? [];
-
-            if (!is_array($ids)) {
-                throw new RuntimeException(
-                    'Ungültige Kategorienreihenfolge.'
-                );
-            }
-
-            $this->categories->reorder($ids);
-
-            echo json_encode([
-                'success' => true
-            ]);
-        } catch (Throwable $exception) {
-            http_response_code(400);
-
-            echo json_encode([
+        if (!is_array($ids)) {
+            return ActionResult::json([
                 'success' => false,
-                'error' => $exception->getMessage()
-            ]);
+                'error' => 'Ungültige Kategorienreihenfolge.'
+            ], 400);
         }
 
-        exit;
+        try {
+            $this->categories->reorder($ids);
+        } catch (Throwable $exception) {
+            return ActionResult::json([
+                'success' => false,
+                'error' => $exception->getMessage()
+            ], 400);
+        }
+
+        return ActionResult::json([
+            'success' => true
+        ]);
     }
 }

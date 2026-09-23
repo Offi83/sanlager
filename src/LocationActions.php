@@ -11,6 +11,8 @@ use Throwable;
  */
 class LocationActions
 {
+    use ReadsInput;
+
     public function __construct(
         private LocationRepository $locations,
         private StockRepository $stock
@@ -18,25 +20,27 @@ class LocationActions
     }
 
     /**
-     * Führt die zu $action passende Aktion aus, falls diese Klasse dafür
-     * zuständig ist. Nicht zuständige Aktionen werden ignoriert, damit
-     * der Aufrufer einfach alle Action-Klassen nacheinander aufrufen kann.
+     * Führt die zu $action passende Aktion mit den Formularwerten aus
+     * $input (in der Anwendung $_POST) aus, falls diese Klasse dafür
+     * zuständig ist. Für nicht zuständige Aktionen wird null geliefert,
+     * damit der Aufrufer einfach alle Action-Klassen nacheinander fragen
+     * kann. Ungültige Eingaben werfen eine RuntimeException.
      */
-    public function dispatch(?string $action): void
+    public function dispatch(?string $action, array $input): ?ActionResult
     {
-        match ($action) {
-            'create_location' => $this->create(),
-            'update_location' => $this->update(),
-            'deactivate_location' => $this->deactivate(),
-            'reorder_locations' => $this->reorder(),
+        return match ($action) {
+            'create_location' => $this->create($input),
+            'update_location' => $this->update($input),
+            'deactivate_location' => $this->deactivate($input),
+            'reorder_locations' => $this->reorder($input),
             default => null,
         };
     }
 
-    private function create(): void
+    private function create(array $input): ActionResult
     {
-        $name = trim($_POST['name'] ?? '');
-        $description = trim($_POST['description'] ?? '');
+        $name = $this->string($input, 'name');
+        $description = $this->string($input, 'description');
 
         if ($name === '') {
             throw new RuntimeException(
@@ -46,14 +50,14 @@ class LocationActions
 
         $this->locations->create($name, $description);
 
-        redirect('?page=locations&message=Lagerort+angelegt');
+        return ActionResult::redirect('?page=locations&message=Lagerort+angelegt');
     }
 
-    private function update(): void
+    private function update(array $input): ActionResult
     {
-        $id = (int) ($_POST['id'] ?? 0);
-        $name = trim($_POST['name'] ?? '');
-        $description = trim($_POST['description'] ?? '');
+        $id = $this->int($input, 'id');
+        $name = $this->string($input, 'name');
+        $description = $this->string($input, 'description');
 
         if ($id <= 0) {
             throw new RuntimeException(
@@ -69,12 +73,12 @@ class LocationActions
 
         $this->locations->update($id, $name, $description);
 
-        redirect('?page=locations&message=Lagerort+gespeichert');
+        return ActionResult::redirect('?page=locations&message=Lagerort+gespeichert');
     }
 
-    private function deactivate(): void
+    private function deactivate(array $input): ActionResult
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id = $this->int($input, 'id');
 
         if ($id <= 0) {
             throw new RuntimeException(
@@ -90,41 +94,36 @@ class LocationActions
 
         $this->locations->deactivate($id);
 
-        redirect('?page=locations&message=Lagerort+deaktiviert');
+        return ActionResult::redirect('?page=locations&message=Lagerort+deaktiviert');
     }
 
     /**
      * Liefert im Gegensatz zu den anderen Aktionen immer JSON zurück
      * (wird per fetch() vom Drag-&-Drop-Skript der Lagerorte-Seite
-     * aufgerufen) und beendet die Ausführung selbst.
+     * aufgerufen), auch im Fehlerfall.
      */
-    private function reorder(): void
+    private function reorder(array $input): ActionResult
     {
-        header('Content-Type: application/json; charset=utf-8');
+        $ids = $input['ids'] ?? null;
 
-        try {
-            $ids = $_POST['ids'] ?? [];
-
-            if (!is_array($ids)) {
-                throw new RuntimeException(
-                    'Ungültige Lagerortreihenfolge.'
-                );
-            }
-
-            $this->locations->reorder($ids);
-
-            echo json_encode([
-                'success' => true
-            ]);
-        } catch (Throwable $exception) {
-            http_response_code(400);
-
-            echo json_encode([
+        if (!is_array($ids)) {
+            return ActionResult::json([
                 'success' => false,
-                'error' => $exception->getMessage()
-            ]);
+                'error' => 'Ungültige Lagerortreihenfolge.'
+            ], 400);
         }
 
-        exit;
+        try {
+            $this->locations->reorder($ids);
+        } catch (Throwable $exception) {
+            return ActionResult::json([
+                'success' => false,
+                'error' => $exception->getMessage()
+            ], 400);
+        }
+
+        return ActionResult::json([
+            'success' => true
+        ]);
     }
 }

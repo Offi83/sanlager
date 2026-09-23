@@ -23,6 +23,7 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 * Verwaltung und Sortierung von Kategorien
 * Verwaltung und Sortierung von Lagerorten
 * Buchen: Ausbuchen oder Umbuchen an einen anderen Lagerort per Scan oder manueller Eingabe
+* Wöchentlicher Bericht per E-Mail: abgelaufenes und bald ablaufendes Material, Unterschreitung der Mindestbestände, Entnahmen der Woche
 * QR-Code je Artikel und Etikettendruck
 * einfache und übersichtliche Bedienung
 * optimiert für die Nutzung per Touchscreen
@@ -33,10 +34,6 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 
 ## ToDo
 
-* Weekly Reporting:
-  * Warnung 90 Tage vor dem Ablauf von Material
-  * Warnung bei Unterschreiten der Mindestmengen
-  * Übersicht Entnahme von Artikeln
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
 * Ausbuchen mit Anzahl >1
@@ -118,6 +115,12 @@ Einrichtung des Raspberry Pi als festes SanLager-Terminal:
 * Fehlerbehebung
 
 ➡️ **[Raspberry-Pi-Terminal einrichten](docs/90-raspberry-pi.md)**
+
+### 📧 Wochenbericht
+
+Einrichtung des wöchentlichen Berichts per E-Mail (SMTP-Zugang, Empfänger, Cron-Job):
+
+➡️ **[Wochenbericht einrichten](docs/12-wochenbericht.md)**
 
 ### 🔧 Entwicklung
 

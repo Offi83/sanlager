@@ -15,6 +15,15 @@ use RuntimeException;
  */
 class StockRepository
 {
+    /**
+     * Kennzahlen eines Artikels ohne Bewegungen, siehe getStockSummaries().
+     */
+    public const EMPTY_SUMMARY = [
+        'total' => 0,
+        'expired' => 0,
+        'is_low' => false,
+    ];
+
     public function __construct(
         private PDO $db
     ) {
@@ -222,34 +231,7 @@ class StockRepository
      */
     public function hasLowStockAtAnyLocation(int $articleId): bool
     {
-        $statement = $this->db->prepare(
-            'SELECT 1
-             FROM article_location_minimums alm
-             LEFT JOIN stock_movements sm
-                ON sm.article_id = alm.article_id
-                AND sm.location_id = alm.location_id
-             LEFT JOIN batches b
-                ON b.id = sm.batch_id
-             WHERE alm.article_id = :article_id
-             GROUP BY alm.id, alm.minimum_stock
-             HAVING COALESCE(SUM(
-                CASE
-                    WHEN sm.batch_id IS NULL
-                        OR b.expiry_date IS NULL
-                        OR b.expiry_date >= :today
-                    THEN sm.quantity
-                    ELSE 0
-                END
-             ), 0) < alm.minimum_stock
-             LIMIT 1'
-        );
-
-        $statement->execute([
-            'article_id' => $articleId,
-            'today' => $this->today()
-        ]);
-
-        return $statement->fetchColumn() !== false;
+        return $this->getStockSummary($articleId)['is_low'];
     }
 
     /**
@@ -351,25 +333,7 @@ class StockRepository
      */
     public function getTotalStock(int $articleId): int
     {
-        $statement = $this->db->prepare(
-            'SELECT COALESCE(SUM(sm.quantity), 0)
-             FROM stock_movements sm
-             LEFT JOIN batches b
-                 ON b.id = sm.batch_id
-             WHERE sm.article_id = :article_id
-             AND (
-                 sm.batch_id IS NULL
-                 OR b.expiry_date IS NULL
-                 OR b.expiry_date >= :today
-             )'
-        );
-
-        $statement->execute([
-            'article_id' => $articleId,
-            'today' => $this->today()
-        ]);
-
-        return (int) $statement->fetchColumn();
+        return $this->getStockSummary($articleId)['total'];
     }
 
     /**
@@ -440,21 +404,224 @@ class StockRepository
      */
     public function getExpiredStock(int $articleId): int
     {
+        return $this->getStockSummary($articleId)['expired'];
+    }
+
+    /**
+     * Bestandskennzahlen eines einzelnen Artikels, siehe getStockSummaries().
+     *
+     * @return array{total: int, expired: int, is_low: bool}
+     */
+    public function getStockSummary(int $articleId): array
+    {
+        return $this->getStockSummaries($articleId)[$articleId]
+            ?? self::EMPTY_SUMMARY;
+    }
+
+    /**
+     * Bestandskennzahlen für alle Artikel auf einmal (bzw. nur für
+     * $articleId), indiziert nach Artikel-ID:
+     *
+     * - `total`   verwendbarer Bestand ohne abgelaufene Chargen
+     *             (siehe getTotalStock())
+     * - `expired` Bestand mit überschrittenem MHD (siehe getExpiredStock())
+     * - `is_low`  an mindestens einem überwachten Lagerort unter dem
+     *             Mindestbestand (siehe hasLowStockAtAnyLocation())
+     *
+     * Die Artikelliste braucht diese drei Werte für jeden Artikel. Statt
+     * drei Abfragen pro Artikel werden sie hier mit zwei Abfragen für
+     * alle Artikel gemeinsam ermittelt. Artikel ohne Bewegungen und ohne
+     * Unterschreitung fehlen im Ergebnis; dafür gilt self::EMPTY_SUMMARY.
+     *
+     * @return array<int, array{total: int, expired: int, is_low: bool}>
+     */
+    public function getStockSummaries(?int $articleId = null): array
+    {
+        $articleFilter = $articleId !== null
+            ? 'WHERE sm.article_id = :article_id'
+            : '';
+
         $statement = $this->db->prepare(
-            'SELECT COALESCE(SUM(sm.quantity), 0)
+            'SELECT
+                sm.article_id,
+                COALESCE(SUM(
+                    CASE
+                        WHEN b.expiry_date IS NULL
+                            OR b.expiry_date >= :today
+                        THEN sm.quantity
+                        ELSE 0
+                    END
+                ), 0) AS total,
+                COALESCE(SUM(
+                    CASE
+                        WHEN b.expiry_date < :today
+                        THEN sm.quantity
+                        ELSE 0
+                    END
+                ), 0) AS expired
              FROM stock_movements sm
-             INNER JOIN batches b
-                 ON b.id = sm.batch_id
-             WHERE sm.article_id = :article_id
-             AND b.expiry_date < :today'
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             ' . $articleFilter . '
+             GROUP BY sm.article_id'
+        );
+
+        $parameters = ['today' => $this->today()];
+
+        if ($articleId !== null) {
+            $parameters['article_id'] = $articleId;
+        }
+
+        $statement->execute($parameters);
+
+        $summaries = [];
+
+        foreach ($statement->fetchAll() as $row) {
+            $summaries[(int) $row['article_id']] = [
+                'total' => (int) $row['total'],
+                'expired' => max(0, (int) $row['expired']),
+                'is_low' => false,
+            ];
+        }
+
+        /*
+         * Unterschreitung je überwachtem Lagerort (siehe saveMinimums()),
+         * ebenfalls ohne abgelaufene Chargen.
+         */
+        $statement = $this->db->prepare(
+            'SELECT DISTINCT alm.article_id
+             FROM article_location_minimums alm
+             LEFT JOIN stock_movements sm
+                ON sm.article_id = alm.article_id
+                AND sm.location_id = alm.location_id
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             ' . str_replace('sm.', 'alm.', $articleFilter) . '
+             GROUP BY alm.id, alm.article_id, alm.minimum_stock
+             HAVING COALESCE(SUM(
+                CASE
+                    WHEN b.expiry_date IS NULL
+                        OR b.expiry_date >= :today
+                    THEN sm.quantity
+                    ELSE 0
+                END
+             ), 0) < alm.minimum_stock'
+        );
+
+        $statement->execute($parameters);
+
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $lowArticleId) {
+            $summaries[(int) $lowArticleId] ??= self::EMPTY_SUMMARY;
+            $summaries[(int) $lowArticleId]['is_low'] = true;
+        }
+
+        return $summaries;
+    }
+
+    /**
+     * Ausbuchungen (`issue`) im Zeitraum [$from, $to), je Artikel und
+     * Lagerort zusammengefasst, meistentnommene zuerst. Umbuchungen
+     * zählen wie bei getTodayIssues() nicht dazu.
+     */
+    public function getIssuesBetween(
+        \DateTimeImmutable $from,
+        \DateTimeImmutable $to
+    ): array {
+        [$start, $end] = $this->utcRange($from, $to);
+
+        $statement = $this->db->prepare(
+            'SELECT
+                a.id AS article_id,
+                a.name AS article_name,
+                a.article_number,
+                a.unit,
+                sl.name AS location_name,
+                ABS(SUM(sm.quantity)) AS quantity
+             FROM stock_movements sm
+             INNER JOIN articles a
+                ON a.id = sm.article_id
+             INNER JOIN storage_locations sl
+                ON sl.id = sm.location_id
+             WHERE sm.movement_type = \'issue\'
+             AND sm.created_at >= :period_start
+             AND sm.created_at < :period_end
+             GROUP BY
+                a.id,
+                sl.id
+             ORDER BY
+                ABS(SUM(sm.quantity)) DESC,
+                a.name COLLATE NOCASE,
+                sl.sort_order'
         );
 
         $statement->execute([
-            'article_id' => $articleId,
+            'period_start' => $start,
+            'period_end' => $end,
+        ]);
+
+        return $statement->fetchAll();
+    }
+
+    /**
+     * Alle überwachten Artikel/Lagerort-Kombinationen (siehe
+     * saveMinimums()), deren verwendbarer Bestand – ohne abgelaufene
+     * Chargen – unter dem Mindestbestand liegt, inkl. Fehlmenge.
+     * Nur aktive Artikel und Lagerorte, sortiert nach Lagerort und
+     * Kategorie, damit sich daraus direkt eine Auffüll-Liste ergibt.
+     */
+    public function getLowStockItems(): array
+    {
+        $statement = $this->db->prepare(
+            'SELECT
+                a.id AS article_id,
+                a.name AS article_name,
+                a.article_number,
+                a.unit,
+                sl.id AS location_id,
+                sl.name AS location_name,
+                alm.minimum_stock,
+                COALESCE(SUM(
+                    CASE
+                        WHEN b.expiry_date IS NULL
+                            OR b.expiry_date >= :today
+                        THEN sm.quantity
+                        ELSE 0
+                    END
+                ), 0) AS usable_quantity
+             FROM article_location_minimums alm
+             INNER JOIN articles a
+                ON a.id = alm.article_id
+             INNER JOIN storage_locations sl
+                ON sl.id = alm.location_id
+             LEFT JOIN article_categories c
+                ON c.id = a.category_id
+             LEFT JOIN stock_movements sm
+                ON sm.article_id = alm.article_id
+                AND sm.location_id = alm.location_id
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             WHERE a.active = 1
+             AND sl.active = 1
+             GROUP BY alm.id
+             HAVING usable_quantity < alm.minimum_stock
+             ORDER BY
+                sl.sort_order,
+                sl.name COLLATE NOCASE,
+                COALESCE(c.sort_order, 9999),
+                a.name COLLATE NOCASE'
+        );
+
+        $statement->execute([
             'today' => $this->today()
         ]);
 
-        return max(0, (int) $statement->fetchColumn());
+        return array_map(
+            static fn (array $row): array => $row + [
+                'missing_quantity' => (int) $row['minimum_stock']
+                    - (int) $row['usable_quantity'],
+            ],
+            $statement->fetchAll()
+        );
     }
 
     /**
@@ -863,23 +1030,40 @@ class StockRepository
     }
 
     /**
-     * Beginn und Ende des heutigen (lokalen) Tages als UTC-Zeitstempel.
-     *
-     * `created_at` wird per CURRENT_TIMESTAMP in UTC gespeichert. Statt
-     * jede Zeile per date(..., 'localtime') umzurechnen, wird der lokale
-     * Tag einmal in einen UTC-Bereich übersetzt – das nutzt zudem den
-     * Index auf `created_at`.
+     * Beginn und Ende des heutigen (lokalen) Tages als UTC-Zeitstempel,
+     * siehe utcRange().
      *
      * @return array{day_start: string, day_end: string}
      */
     private function todayUtcRange(): array
     {
-        $utc = new \DateTimeZone('UTC');
         $start = new \DateTimeImmutable('today');
+        [$dayStart, $dayEnd] = $this->utcRange($start, $start->modify('+1 day'));
 
         return [
-            'day_start' => $start->setTimezone($utc)->format('Y-m-d H:i:s'),
-            'day_end' => $start->modify('+1 day')->setTimezone($utc)->format('Y-m-d H:i:s'),
+            'day_start' => $dayStart,
+            'day_end' => $dayEnd,
+        ];
+    }
+
+    /**
+     * Übersetzt einen Zeitraum in lokaler Zeit in UTC-Zeitstempel im
+     * Format von `created_at`.
+     *
+     * `created_at` wird per CURRENT_TIMESTAMP in UTC gespeichert. Statt
+     * jede Zeile per date(..., 'localtime') umzurechnen, wird der
+     * Zeitraum einmal übersetzt – das nutzt zudem den Index auf
+     * `created_at`.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function utcRange(\DateTimeImmutable $from, \DateTimeImmutable $to): array
+    {
+        $utc = new \DateTimeZone('UTC');
+
+        return [
+            $from->setTimezone($utc)->format('Y-m-d H:i:s'),
+            $to->setTimezone($utc)->format('Y-m-d H:i:s'),
         ];
     }
 }

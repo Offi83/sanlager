@@ -24,41 +24,21 @@
 |--------------------------------------------------------------------------
 */
 
-require_once __DIR__ . '/../vendor/autoload.php';
-
-use Dotenv\Dotenv;
 use LagerApp\ArticleActions;
 use LagerApp\ArticleRepository;
 use LagerApp\BatchRepository;
 use LagerApp\CategoryActions;
 use LagerApp\CategoryRepository;
-use LagerApp\Database;
 use LagerApp\LocationActions;
 use LagerApp\LocationRepository;
 use LagerApp\QrCodeGenerator;
 use LagerApp\StockActions;
 use LagerApp\StockRepository;
 
-$root = dirname(__DIR__);
-
-$dotenv = Dotenv::createImmutable($root);
-$dotenv->safeLoad();
-
 /*
- * Zeitzone für alle Datumsberechnungen ("heute", MHD-Ablauf, heutige
- * Ausbuchungen). Ohne diese Einstellung nutzt PHP je nach php.ini UTC,
- * wodurch rund um Mitternacht der falsche Tag als "heute" gelten würde.
+ * .env, Zeitzone und Datenbank – gemeinsam mit den Skripten unter bin/.
  */
-date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Europe/Berlin');
-
-$dbFile = $root . '/' . ($_ENV['DB_DATABASE'] ?? 'database/database.sqlite');
-
-if (!is_dir(dirname($dbFile))) {
-    mkdir(dirname($dbFile), 0775, true);
-}
-
-$database = new Database($dbFile);
-$db = $database->connection();
+$db = require __DIR__ . '/../bootstrap.php';
 
 $articles = new ArticleRepository($db);
 $batches = new BatchRepository($db);
@@ -92,7 +72,9 @@ $message = null;
 |
 | Die eigentliche Validierung und Verarbeitung liegt in den *Actions-
 | Klassen unter src/. Jede dispatch()-Methode kümmert sich nur um die
-| Aktionen, für die sie zuständig ist, und ignoriert alle anderen.
+| Aktionen, für die sie zuständig ist, und liefert für alle anderen null.
+| Die zuständige Klasse gibt ein ActionResult (Redirect oder JSON) zurück,
+| das erst hier per send() ausgegeben wird.
 | RuntimeExceptions (ungültige Eingaben) werden hier zentral abgefangen
 | und als $error angezeigt.
 |--------------------------------------------------------------------------
@@ -102,10 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
 
-        $articleActions->dispatch($action);
-        $categoryActions->dispatch($action);
-        $locationActions->dispatch($action);
-        $stockActions->dispatch($action);
+        $result = $articleActions->dispatch($action, $_POST)
+            ?? $categoryActions->dispatch($action, $_POST)
+            ?? $locationActions->dispatch($action, $_POST)
+            ?? $stockActions->dispatch($action, $_POST);
+
+        $result?->send();
 
     } catch (Throwable $exception) {
 
@@ -153,6 +137,12 @@ if ($page === 'articles') {
         $search,
         $selectedCategoryId
     );
+
+    /*
+     * Bestand, abgelaufene Menge und Mindestbestand-Warnung für alle
+     * Artikel mit zwei Abfragen statt drei Abfragen je Artikel.
+     */
+    $articleStockSummaries = $stock->getStockSummaries();
 }
 
 $article = null;
@@ -1230,17 +1220,12 @@ if ($page === 'article' || $page === 'label') {
                         <?php endif; ?>
 
                         <?php
-                        $total = $stock->getTotalStock(
-                            (int) $item['id']
-                        );
+                        $summary = $articleStockSummaries[(int) $item['id']]
+                            ?? StockRepository::EMPTY_SUMMARY;
 
-                        $expiredStock = $stock->getExpiredStock(
-                            (int) $item['id']
-                        );
-
-                        $isLow = $stock->hasLowStockAtAnyLocation(
-                            (int) $item['id']
-                        );
+                        $total = $summary['total'];
+                        $expiredStock = $summary['expired'];
+                        $isLow = $summary['is_low'];
                         ?>
 
                         <tr>
@@ -1994,9 +1979,11 @@ if ($page === 'article' || $page === 'label') {
 
         <?php
 
-        $totalStock = $stock->getTotalStock(
+        $articleSummary = $stock->getStockSummary(
             (int) $article['id']
         );
+
+        $totalStock = $articleSummary['total'];
 
         $qrCode = null;
 
@@ -2007,9 +1994,7 @@ if ($page === 'article' || $page === 'label') {
             );
         }
 
-        $isLow = $stock->hasLowStockAtAnyLocation(
-            (int) $article['id']
-        );
+        $isLow = $articleSummary['is_low'];
 
         $mainLocationId = null;
 

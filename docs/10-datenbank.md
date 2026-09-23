@@ -148,4 +148,6 @@ durchgeführt. Jede Migration ist eine eigene, fortlaufend nummerierte SQL-Datei
 
 Beim Start prüft SanLager automatisch (`src/Database.php`), welche Migrationen bereits angewendet wurden (Tabelle `schema_migrations`), und führt nur die noch fehlenden aus. Es gibt **kein separates Migration-Script** und keinen manuellen Migrationsbefehl.
 
+Damit das nicht bei jedem Seitenaufruf Zeit kostet, merkt sich SanLager die Nummer der neuesten angewendeten Migration in der Datenbank selbst (`PRAGMA user_version`). Entspricht sie der höchsten Nummer unter `database/migrations/`, wird der Abgleich übersprungen. Jede Migrationsdatei braucht deshalb eine **eindeutige Nummer am Anfang des Dateinamens**; neue Migrationen erhalten immer eine höhere Nummer als alle bestehenden.
+
 Die produktive SQLite-Datei sollte dabei **nicht gelöscht oder durch eine Version aus Git ersetzt werden**.

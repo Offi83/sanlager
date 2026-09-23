@@ -5,7 +5,8 @@
     "require": {
         "php": "^8.5",
         "vlucas/phpdotenv": "^5.7",
-        "endroid/qr-code": "^6.1"
+        "endroid/qr-code": "^6.1",
+        "symfony/mailer": "^8.1"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.3"

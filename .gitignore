@@ -7,3 +7,4 @@
 /database/*.db
 /.phpunit.result.cache
 /.phpunit.cache/
+/database/*.log

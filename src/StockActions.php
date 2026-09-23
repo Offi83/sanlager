@@ -12,6 +12,8 @@ use Throwable;
  */
 class StockActions
 {
+    use ReadsInput;
+
     public function __construct(
         private ArticleRepository $articles,
         private LocationRepository $locations,
@@ -21,16 +23,18 @@ class StockActions
     }
 
     /**
-     * Führt die zu $action passende Aktion aus, falls diese Klasse dafür
-     * zuständig ist. Nicht zuständige Aktionen werden ignoriert, damit
-     * der Aufrufer einfach alle Action-Klassen nacheinander aufrufen kann.
+     * Führt die zu $action passende Aktion mit den Formularwerten aus
+     * $input (in der Anwendung $_POST) aus, falls diese Klasse dafür
+     * zuständig ist. Für nicht zuständige Aktionen wird null geliefert,
+     * damit der Aufrufer einfach alle Action-Klassen nacheinander fragen
+     * kann. Ungültige Eingaben werfen eine RuntimeException.
      */
-    public function dispatch(?string $action): void
+    public function dispatch(?string $action, array $input): ?ActionResult
     {
-        match ($action) {
-            'issue' => $this->issue(),
-            'stock_move' => $this->stockMove(),
-            'transfer_all_stock' => $this->transferAllStock(),
+        return match ($action) {
+            'issue' => $this->issue($input),
+            'stock_move' => $this->stockMove($input),
+            'transfer_all_stock' => $this->transferAllStock($input),
             default => null,
         };
     }
@@ -47,14 +51,12 @@ class StockActions
      * weitergereicht), damit der Scanner nach einem Fehlversuch sofort
      * für den nächsten Scan bereit ist.
      */
-    private function issue(): void
+    private function issue(array $input): ActionResult
     {
-        $isAjax = ($_POST['ajax'] ?? '') === '1';
+        $isAjax = $this->string($input, 'ajax') === '1';
 
         try {
-            $articleNumber = trim(
-                $_POST['article_number'] ?? ''
-            );
+            $articleNumber = $this->string($input, 'article_number');
 
             if ($articleNumber === '') {
                 throw new RuntimeException(
@@ -73,7 +75,7 @@ class StockActions
                 );
             }
 
-            $sourceLocationId = (int) ($_POST['source'] ?? 0);
+            $sourceLocationId = $this->int($input, 'source');
 
             $sourceLocation = $sourceLocationId > 0
                 ? $this->locations->find($sourceLocationId)
@@ -87,7 +89,7 @@ class StockActions
 
             $sourceLocationId = (int) $sourceLocation['id'];
 
-            $target = trim($_POST['target'] ?? 'issue');
+            $target = $this->string($input, 'target', 'issue');
 
             if ($target === '' || $target === 'issue') {
                 $result = $this->stock->issueOldest(
@@ -147,11 +149,7 @@ class StockActions
             }
 
             if ($isAjax) {
-                header(
-                    'Content-Type: application/json; charset=utf-8'
-                );
-
-                echo json_encode([
+                return ActionResult::json([
                     'success' => true,
                     'article_name' => $article['name'],
                     'article_number' => $articleNumber,
@@ -160,11 +158,9 @@ class StockActions
                     'action_label' => $actionLabel,
                     'expired' => $expiryWarning !== ''
                 ]);
-
-                exit;
             }
 
-            redirect(
+            return ActionResult::redirect(
                 '?page=issue' .
                 '&success=' . urlencode(
                     $article['name'] .
@@ -180,30 +176,22 @@ class StockActions
             );
         } catch (Throwable $exception) {
             if ($isAjax) {
-                http_response_code(400);
-
-                header(
-                    'Content-Type: application/json; charset=utf-8'
-                );
-
-                echo json_encode([
+                return ActionResult::json([
                     'success' => false,
                     'error' => $exception->getMessage()
-                ]);
-
-                exit;
+                ], 400);
             }
 
             throw $exception;
         }
     }
 
-    private function stockMove(): void
+    private function stockMove(array $input): ActionResult
     {
-        $articleId = (int) ($_POST['article_id'] ?? 0);
-        $locationId = (int) ($_POST['location_id'] ?? 0);
-        $quantity = (int) ($_POST['quantity'] ?? 0);
-        $movementType = $_POST['movement_type'] ?? '';
+        $articleId = $this->int($input, 'article_id');
+        $locationId = $this->int($input, 'location_id');
+        $quantity = $this->int($input, 'quantity');
+        $movementType = $this->string($input, 'movement_type');
 
         if ($articleId <= 0) {
             throw new RuntimeException(
@@ -240,8 +228,11 @@ class StockActions
          * ID   = vorhandenes MHD
          * new  = neues MHD
          */
-        $batchSelection =
-            $_POST['batch_selection'] ?? 'none';
+        $batchSelection = $this->string(
+            $input,
+            'batch_selection',
+            'none'
+        );
 
         $batchId = null;
 
@@ -255,9 +246,7 @@ class StockActions
                 );
             }
 
-            $expiryDate = trim(
-                $_POST['expiry_date'] ?? ''
-            );
+            $expiryDate = $this->string($input, 'expiry_date');
 
             if ($expiryDate === '') {
                 throw new RuntimeException(
@@ -309,9 +298,7 @@ class StockActions
             }
         }
 
-        $note = trim(
-            $_POST['note'] ?? ''
-        );
+        $note = $this->string($input, 'note');
 
         $this->stock->move(
             $articleId,
@@ -322,7 +309,7 @@ class StockActions
             $batchId
         );
 
-        redirect(
+        return ActionResult::redirect(
             '?page=article&id=' .
             $articleId .
             '&message=' .
@@ -340,10 +327,10 @@ class StockActions
      * zurück ins Lager zu räumen. Wird über das Bearbeiten-Formular
      * eines Lagerorts auf der Lagerorte-Seite ausgelöst.
      */
-    private function transferAllStock(): void
+    private function transferAllStock(array $input): ActionResult
     {
-        $fromLocationId = (int) ($_POST['from_location_id'] ?? 0);
-        $toLocationId = (int) ($_POST['to_location_id'] ?? 0);
+        $fromLocationId = $this->int($input, 'from_location_id');
+        $toLocationId = $this->int($input, 'to_location_id');
 
         if ($fromLocationId <= 0 || $toLocationId <= 0) {
             throw new RuntimeException(
@@ -373,7 +360,7 @@ class StockActions
                 . ' nach ' . $toLocation['name']
         );
 
-        redirect(
+        return ActionResult::redirect(
             '?page=locations&edit=' . $fromLocationId .
             '&message=' . urlencode(
                 $movedUnits > 0
