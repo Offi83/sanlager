@@ -341,7 +341,7 @@ if ($page === 'issue') {
      * sie über den Redirect (GET, siehe StockActions::issue()), nach
      * einem Fehler aus dem abgeschickten Formular (POST). Ungültige oder
      * inzwischen deaktivierte Lagerorte fallen auf die Standardauswahl
-     * (Hauptlager, Ausbuchen) zurück.
+     * (erster Lagerort der Sortierung, Ausbuchen) zurück.
      */
     $requestValue = static fn (string $key): string =>
         is_string($_POST[$key] ?? null)
@@ -353,8 +353,7 @@ if ($page === 'issue') {
     $issueSourceId = (int) $requestValue('source');
 
     if (!isset($locationNamesById[$issueSourceId])) {
-        $issueSourceId = (int) (array_search('Hauptlager', $locationNamesById, true)
-            ?: array_key_first($locationNamesById));
+        $issueSourceId = (int) array_key_first($locationNamesById);
     }
 
     $issueTarget = $requestValue('target');
@@ -847,7 +846,8 @@ if ($page === 'article' || $page === 'label') {
 
                     <p class="form-help">
                         Lagerorte per Drag &amp; Drop in die gewünschte Reihenfolge ziehen.
-                        Diese Reihenfolge bestimmt auch die Auswahl beim Buchen.
+                        Diese Reihenfolge bestimmt auch die Auswahl beim Buchen;
+                        der oberste Lagerort ist dort vorausgewählt.
                     </p>
 
                     <?php if (!$locationList): ?>
@@ -2284,28 +2284,17 @@ if ($page === 'article' || $page === 'label') {
 
         $isLow = $articleSummary['is_low'];
 
-        $mainLocationId = null;
-
-        foreach ($locations as $location) {
-
-            if (
-                mb_strtolower(
-                    $location['name']
-                ) === 'hauptlager'
-            ) {
-                $mainLocationId = (int) $location['id'];
-                break;
-            }
-        }
-
-        if ($mainLocationId === null && $locations) {
-            $mainLocationId = (int) $locations[0]['id'];
-        }
+        /*
+         * Standard-Lagerort: der erste der festgelegten Reihenfolge
+         * ($locations ist danach sortiert), siehe
+         * LocationRepository::defaultLocation().
+         */
+        $mainLocationId = $locations ? (int) $locations[0]['id'] : null;
 
         /*
          * "Bestand buchen": Von/Nach der letzten Buchung beibehalten
          * (kommen per Redirect, siehe StockActions::stockMove()), sonst
-         * Einlagern ins Hauptlager. "receipt" = Einlagern (Von),
+         * Einlagern in den Standard-Lagerort. "receipt" = Einlagern (Von),
          * "issue" = Ausbuchen (Nach), sonst Lagerort-ID.
          */
         $locationIds = array_map('strval', array_column($locations, 'id'));
@@ -2896,6 +2885,8 @@ if ($page === 'article' || $page === 'label') {
             redirect('?page=articles');
         }
 
+        $editArticleStock = $stock->getPhysicalStock($articleId);
+
         ?>
 
         <div class="page-header">
@@ -3081,10 +3072,28 @@ if ($page === 'article' || $page === 'label') {
 
             <div class="card-body">
 
-                <p>
-                    Der Artikel wird aus der normalen
-                    Artikelübersicht entfernt.
-                </p>
+                <?php if ($editArticleStock > 0): ?>
+
+                    <p>
+                        Löschen ist erst möglich, wenn kein Bestand mehr vorhanden ist.
+                        Aktuell:
+                        <strong>
+                            <?= $editArticleStock ?>
+                            <?= h($editArticle['unit']) ?>
+                        </strong>
+                        (abgelaufene Chargen eingeschlossen) – bitte zuerst
+                        <a href="?page=article&id=<?= (int) $editArticle['id'] ?>">auf der Artikelseite</a>
+                        ausbuchen oder entsorgen.
+                    </p>
+
+                <?php else: ?>
+
+                    <p>
+                        Der Artikel wird aus der normalen
+                        Artikelübersicht entfernt.
+                    </p>
+
+                <?php endif; ?>
 
                 <form
                     method="post"
@@ -3106,6 +3115,7 @@ if ($page === 'article' || $page === 'label') {
                     <button
                         type="submit"
                         class="button button-danger"
+                        <?= $editArticleStock > 0 ? 'disabled' : '' ?>
                     >
                         Artikel löschen
                     </button>

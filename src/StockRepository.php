@@ -159,7 +159,7 @@ class StockRepository
                 AND alm.article_id = :article_id
              WHERE sl.active = 1
              GROUP BY sl.id, sl.name, alm.minimum_stock
-             ORDER BY sl.name COLLATE NOCASE'
+             ORDER BY sl.sort_order, sl.name COLLATE NOCASE'
         );
 
         $statement->execute([
@@ -180,9 +180,7 @@ class StockRepository
      */
     public function saveMinimums(int $articleId, array $minimumsByLocationId): void
     {
-        $this->db->beginTransaction();
-
-        try {
+        $this->transactional(function () use ($articleId, $minimumsByLocationId): void {
             $delete = $this->db->prepare(
                 'DELETE FROM article_location_minimums
                  WHERE article_id = :article_id
@@ -214,13 +212,7 @@ class StockRepository
                     'minimum_stock' => $minimumStock,
                 ]);
             }
-
-            $this->db->commit();
-        } catch (\Throwable $exception) {
-            $this->db->rollBack();
-
-            throw $exception;
-        }
+        });
     }
 
     /**
@@ -271,6 +263,7 @@ class StockRepository
                     ELSE 1
                 END,
                 b.expiry_date,
+                sl.sort_order,
                 sl.name COLLATE NOCASE'
         );
 
@@ -416,6 +409,26 @@ class StockRepository
     }
 
     /**
+     * Gesamter physischer Bestand eines Artikels über alle Lagerorte –
+     * anders als getTotalStock() einschließlich abgelaufener Chargen.
+     * Grundlage dafür, ob ein Artikel gelöscht (deaktiviert) werden darf.
+     */
+    public function getPhysicalStock(int $articleId): int
+    {
+        $statement = $this->db->prepare(
+            'SELECT COALESCE(SUM(quantity), 0)
+             FROM stock_movements
+             WHERE article_id = :article_id'
+        );
+
+        $statement->execute([
+            'article_id' => $articleId
+        ]);
+
+        return (int) $statement->fetchColumn();
+    }
+
+    /**
      * Bestandskennzahlen eines einzelnen Artikels, siehe getStockSummaries().
      *
      * @return array{total: int, expired: int, is_low: bool}
@@ -494,11 +507,16 @@ class StockRepository
 
         /*
          * Unterschreitung je überwachtem Lagerort (siehe saveMinimums()),
-         * ebenfalls ohne abgelaufene Chargen.
+         * ebenfalls ohne abgelaufene Chargen. Deaktivierte Lagerorte zählen
+         * nicht – ihr Mindestbestand bleibt gespeichert (für eine spätere
+         * Reaktivierung), wie in getLowStockItems().
          */
         $statement = $this->db->prepare(
             'SELECT DISTINCT alm.article_id
              FROM article_location_minimums alm
+             INNER JOIN storage_locations sl
+                ON sl.id = alm.location_id
+                AND sl.active = 1
              LEFT JOIN stock_movements sm
                 ON sm.article_id = alm.article_id
                 AND sm.location_id = alm.location_id
@@ -743,18 +761,25 @@ class StockRepository
         int $locationId,
         ?string $note = null
     ): array {
-        $batch = $this->findOldestBatchWithStock($articleId, $locationId);
+        /*
+         * Charge suchen und buchen unter derselben Sperre: Scannen zwei
+         * Geräte gleichzeitig, bekommt das zweite die nächste Charge statt
+         * eines Fehlers.
+         */
+        return $this->transactional(function () use ($articleId, $locationId, $note): array {
+            $batch = $this->findOldestBatchWithStock($articleId, $locationId);
 
-        $this->move(
-            $articleId,
-            $locationId,
-            1,
-            'issue',
-            $note,
-            $batch['batch_id']
-        );
+            $this->move(
+                $articleId,
+                $locationId,
+                1,
+                'issue',
+                $note,
+                $batch['batch_id']
+            );
 
-        return $batch;
+            return $batch;
+        });
     }
 
     /**
@@ -780,18 +805,20 @@ class StockRepository
             );
         }
 
-        $batch = $this->findOldestBatchWithStock($articleId, $fromLocationId);
+        return $this->transactional(function () use ($articleId, $fromLocationId, $toLocationId, $note): array {
+            $batch = $this->findOldestBatchWithStock($articleId, $fromLocationId);
 
-        $this->transferBatch(
-            $articleId,
-            $batch['batch_id'],
-            $fromLocationId,
-            $toLocationId,
-            1,
-            $note
-        );
+            $this->transferBatch(
+                $articleId,
+                $batch['batch_id'],
+                $fromLocationId,
+                $toLocationId,
+                1,
+                $note
+            );
 
-        return $batch;
+            return $batch;
+        });
     }
 
     /**
@@ -819,20 +846,10 @@ class StockRepository
             );
         }
 
-        $this->db->beginTransaction();
-
-        try {
+        $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note): void {
             $this->move($articleId, $fromLocationId, $quantity, 'transfer_out', $note, $batchId);
             $this->move($articleId, $toLocationId, $quantity, 'transfer_in', $note, $batchId);
-
-            $this->db->commit();
-        } catch (\Throwable $exception) {
-            if ($this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
-
-            throw $exception;
-        }
+        });
     }
 
     /**
@@ -860,30 +877,22 @@ class StockRepository
             );
         }
 
-        $statement = $this->db->prepare(
-            'SELECT article_id, batch_id, SUM(quantity) AS quantity
-             FROM stock_movements
-             WHERE location_id = :location_id
-             GROUP BY article_id, batch_id
-             HAVING SUM(quantity) > 0'
-        );
+        return $this->transactional(function () use ($fromLocationId, $toLocationId, $note): int {
+            $statement = $this->db->prepare(
+                'SELECT article_id, batch_id, SUM(quantity) AS quantity
+                 FROM stock_movements
+                 WHERE location_id = :location_id
+                 GROUP BY article_id, batch_id
+                 HAVING SUM(quantity) > 0'
+            );
 
-        $statement->execute([
-            'location_id' => $fromLocationId
-        ]);
+            $statement->execute([
+                'location_id' => $fromLocationId
+            ]);
 
-        $rows = $statement->fetchAll();
+            $totalMoved = 0;
 
-        if (!$rows) {
-            return 0;
-        }
-
-        $totalMoved = 0;
-
-        $this->db->beginTransaction();
-
-        try {
-            foreach ($rows as $row) {
+            foreach ($statement->fetchAll() as $row) {
                 $articleId = (int) $row['article_id'];
                 $batchId = $row['batch_id'] !== null
                     ? (int) $row['batch_id']
@@ -896,16 +905,8 @@ class StockRepository
                 $totalMoved += $quantity;
             }
 
-            $this->db->commit();
-        } catch (\Throwable $exception) {
-            if ($this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
-
-            throw $exception;
-        }
-
-        return $totalMoved;
+            return $totalMoved;
+        });
     }
 
     /**
@@ -979,20 +980,22 @@ class StockRepository
         int $locationId,
         int $quantity
     ): void {
-        $this->assertReversible(
-            $quantity,
-            $this->todayNetOutflow(['issue', 'issue_reversal'], $articleId, $batchId, $locationId),
-            'ausgebucht'
-        );
+        $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
+            $this->assertReversible(
+                $quantity,
+                $this->todayNetOutflow(['issue', 'issue_reversal'], $articleId, $batchId, $locationId),
+                'ausgebucht'
+            );
 
-        $this->move(
-            $articleId,
-            $locationId,
-            $quantity,
-            'issue_reversal',
-            'Ausbuchung rückgängig gemacht',
-            $batchId
-        );
+            $this->move(
+                $articleId,
+                $locationId,
+                $quantity,
+                'issue_reversal',
+                'Ausbuchung rückgängig gemacht',
+                $batchId
+            );
+        });
     }
 
     /**
@@ -1049,20 +1052,22 @@ class StockRepository
         int $locationId,
         int $quantity
     ): void {
-        $this->assertReversible(
-            $quantity,
-            $this->todayNetOutflow(['disposal', 'disposal_reversal'], $articleId, $batchId, $locationId),
-            'entsorgt'
-        );
+        $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
+            $this->assertReversible(
+                $quantity,
+                $this->todayNetOutflow(['disposal', 'disposal_reversal'], $articleId, $batchId, $locationId),
+                'entsorgt'
+            );
 
-        $this->move(
-            $articleId,
-            $locationId,
-            $quantity,
-            'disposal_reversal',
-            'Entsorgung rückgängig gemacht',
-            $batchId
-        );
+            $this->move(
+                $articleId,
+                $locationId,
+                $quantity,
+                'disposal_reversal',
+                'Entsorgung rückgängig gemacht',
+                $batchId
+            );
+        });
     }
 
     /**
@@ -1154,37 +1159,27 @@ class StockRepository
         int $toLocationId,
         int $quantity
     ): void {
-        $transferredToday = 0;
+        $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity): void {
+            $transferredToday = 0;
 
-        foreach ($this->getTodayTransfers() as $row) {
-            if (
-                (int) $row['article_id'] === $articleId
-                && ($row['batch_id'] === null ? null : (int) $row['batch_id']) === $batchId
-                && (int) $row['from_location_id'] === $fromLocationId
-                && (int) $row['to_location_id'] === $toLocationId
-            ) {
-                $transferredToday = (int) $row['quantity'];
+            foreach ($this->getTodayTransfers() as $row) {
+                if (
+                    (int) $row['article_id'] === $articleId
+                    && ($row['batch_id'] === null ? null : (int) $row['batch_id']) === $batchId
+                    && (int) $row['from_location_id'] === $fromLocationId
+                    && (int) $row['to_location_id'] === $toLocationId
+                ) {
+                    $transferredToday = (int) $row['quantity'];
+                }
             }
-        }
 
-        $this->assertReversible($quantity, $transferredToday, 'umgebucht');
+            $this->assertReversible($quantity, $transferredToday, 'umgebucht');
 
-        $this->db->beginTransaction();
-
-        try {
             $note = 'Umbuchung rückgängig gemacht';
 
             $this->move($articleId, $toLocationId, $quantity, 'transfer_reversal_out', $note, $batchId);
             $this->move($articleId, $fromLocationId, $quantity, 'transfer_reversal_in', $note, $batchId);
-
-            $this->db->commit();
-        } catch (\Throwable $exception) {
-            if ($this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
-
-            throw $exception;
-        }
+        });
     }
 
     /**
@@ -1280,24 +1275,26 @@ class StockRepository
             );
         }
 
-        $quantity = $this->getStockAtLocation($articleId, $locationId, $batchId);
+        return $this->transactional(function () use ($articleId, $batchId, $locationId, $expiryDate): int {
+            $quantity = $this->getStockAtLocation($articleId, $locationId, $batchId);
 
-        if ($quantity <= 0) {
-            throw new RuntimeException(
-                'Von dieser Charge ist an diesem Lagerort nichts mehr vorhanden.'
+            if ($quantity <= 0) {
+                throw new RuntimeException(
+                    'Von dieser Charge ist an diesem Lagerort nichts mehr vorhanden.'
+                );
+            }
+
+            $this->move(
+                $articleId,
+                $locationId,
+                $quantity,
+                'disposal',
+                'Entsorgt: MHD ' . formatDate($expiryDate) . ' abgelaufen',
+                $batchId
             );
-        }
 
-        $this->move(
-            $articleId,
-            $locationId,
-            $quantity,
-            'disposal',
-            'Entsorgt: MHD ' . formatDate($expiryDate) . ' abgelaufen',
-            $batchId
-        );
-
-        return $quantity;
+            return $quantity;
+        });
     }
 
     /**
@@ -1351,51 +1348,58 @@ class StockRepository
             );
         }
 
-        if (in_array($type, ['issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
-            $current = $this->getStockAtLocation(
-                $articleId,
-                $locationId,
-                $batchId
-            );
-
-            if ($quantity > $current) {
-                throw new RuntimeException(
-                    'Nicht genügend Bestand dieser Charge an diesem Lagerort.'
+        /*
+         * Bestandsprüfung und Speichern müssen atomar sein, siehe
+         * transactional(): Bei Einzelbuchungen eigene Transaktion mit
+         * Schreibsperre, sonst Teil der laufenden (Umbuchung, Komplettumzug).
+         */
+        $this->transactional(function () use ($articleId, $locationId, $quantity, $type, $note, $batchId): void {
+            if (in_array($type, ['issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
+                $current = $this->getStockAtLocation(
+                    $articleId,
+                    $locationId,
+                    $batchId
                 );
+
+                if ($quantity > $current) {
+                    throw new RuntimeException(
+                        'Nicht genügend Bestand dieser Charge an diesem Lagerort.'
+                    );
+                }
+
+                $quantity = -$quantity;
             }
 
-            $quantity = -$quantity;
-        }
+            $statement = $this->db->prepare(
+                'INSERT INTO stock_movements
+                    (
+                        article_id,
+                        batch_id,
+                        location_id,
+                        quantity,
+                        movement_type,
+                        note
+                    )
+                 VALUES
+                    (
+                        :article_id,
+                        :batch_id,
+                        :location_id,
+                        :quantity,
+                        :movement_type,
+                        :note
+                    )'
+            );
 
-        $statement = $this->db->prepare(
-            'INSERT INTO stock_movements
-                (
-                    article_id,
-                    batch_id,
-                    location_id,
-                    quantity,
-                    movement_type,
-                    note
-                )
-             VALUES
-                (
-                    :article_id,
-                    :batch_id,
-                    :location_id,
-                    :quantity,
-                    :movement_type,
-                    :note
-                )'
-        );
-
-        $statement->execute([
-            'article_id' => $articleId,
-            'batch_id' => $batchId,
-            'location_id' => $locationId,
-            'quantity' => $quantity,
-            'movement_type' => $type,
-            'note' => $note
-        ]);
+            $statement->execute([
+                'article_id' => $articleId,
+                'batch_id' => $batchId,
+                'location_id' => $locationId,
+                'quantity' => $quantity,
+                'movement_type' => $type,
+                'note' => $note
+            ]);
+        });
     }
 
     /**
@@ -1447,5 +1451,43 @@ class StockRepository
             $from->setTimezone($utc)->format('Y-m-d H:i:s'),
             $to->setTimezone($utc)->format('Y-m-d H:i:s'),
         ];
+    }
+
+    /**
+     * Führt $callback in einer Transaktion aus und gibt dessen Ergebnis
+     * zurück. Läuft bereits eine, wird sie mitbenutzt (so können z. B.
+     * move() und transferBatch() sowohl einzeln als auch innerhalb einer
+     * größeren Buchung aufgerufen werden).
+     *
+     * Die Verbindung arbeitet im IMMEDIATE-Modus (siehe Database): Die
+     * Schreibsperre gilt ab Transaktionsbeginn, Lesen (z. B. Bestand
+     * prüfen, älteste Charge suchen) und anschließendes Buchen können
+     * dadurch nicht von einem anderen Gerät unterbrochen werden.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    private function transactional(callable $callback): mixed
+    {
+        if ($this->db->inTransaction()) {
+            return $callback();
+        }
+
+        $this->db->beginTransaction();
+
+        try {
+            $result = $callback();
+
+            $this->db->commit();
+
+            return $result;
+        } catch (\Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            throw $exception;
+        }
     }
 }

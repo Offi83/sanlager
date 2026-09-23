@@ -199,6 +199,11 @@ a {
     color: #fff;
 }
 
+.button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
 .button.small {
     min-height: 38px;
     padding: 0 14px;

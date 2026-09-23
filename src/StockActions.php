@@ -45,7 +45,8 @@ class StockActions
 
     /**
      * Bucht ein Stück eines gescannten/eingegebenen Artikels ab einem
-     * wählbaren Quell-Lagerort (`source`, Standard: Hauptlager): entweder
+     * wählbaren Quell-Lagerort (`source`, Standard: erster Lagerort der
+     * Sortierung, siehe LocationRepository::defaultLocation()): entweder
      * klassisch aus (`target=issue`, Standard) oder an einen anderen
      * Lagerort um (`target=<location_id>`).
      *
@@ -83,7 +84,7 @@ class StockActions
 
             $sourceLocation = $sourceLocationId > 0
                 ? $this->locations->find($sourceLocationId)
-                : $this->locations->findByName('Hauptlager');
+                : $this->locations->defaultLocation();
 
             if (!$sourceLocation) {
                 throw new RuntimeException(
@@ -180,7 +181,7 @@ class StockActions
                 /*
                  * Von/Ziel mitgeben, damit die nächste Buchung (z. B. per
                  * Hand-Barcodescanner mit Enter) wieder in dieselbe
-                 * Richtung geht, statt auf "Hauptlager/Ausbuchen"
+                 * Richtung geht, statt auf "Standard-Lagerort/Ausbuchen"
                  * zurückzufallen – wie beim Kamera-Scan ohne Neuladen.
                  */
                 '&source=' . $sourceLocationId .

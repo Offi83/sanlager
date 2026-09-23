@@ -127,9 +127,26 @@ class ArticleActions
     {
         $id = $this->int($input, 'id');
 
-        if ($id <= 0) {
+        $article = $this->articles->find($id);
+
+        if (!$article) {
             throw new RuntimeException(
                 'Ungültiger Artikel.'
+            );
+        }
+
+        /*
+         * Ein gelöschter (deaktivierter) Artikel verschwindet aus allen
+         * Listen. Hätte er noch Bestand, läge dieser unsichtbar weiter im
+         * Lagerort – der ließe sich dann z. B. nicht mehr deaktivieren.
+         */
+        $physicalStock = $this->stock->getPhysicalStock($id);
+
+        if ($physicalStock > 0) {
+            throw new RuntimeException(
+                'Der Artikel kann nicht gelöscht werden, solange noch Bestand vorhanden ist ('
+                . $physicalStock . ' ' . $article['unit']
+                . ', abgelaufene Chargen eingeschlossen). Bitte zuerst ausbuchen oder entsorgen.'
             );
         }
 

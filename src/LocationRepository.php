@@ -60,10 +60,20 @@ class LocationRepository
     }
 
     /**
-     * Sucht einen aktiven Lagerort anhand seines Namens.
+     * Standard-Lagerort: der erste aktive Lagerort in der festgelegten
+     * Reihenfolge (per Drag & Drop auf der Lagerorte-Seite). Er ist beim
+     * Buchen und Einlagern vorausgewählt.
      *
-     * Wird u. a. verwendet, um den festen Quell-Lagerort "Hauptlager"
-     * für die Buchen-Seite zu ermitteln.
+     * Bewusst nicht über einen festen Namen wie "Hauptlager" – ein
+     * Umbenennen soll die Vorauswahl nicht kaputt machen.
+     */
+    public function defaultLocation(): ?array
+    {
+        return $this->all()[0] ?? null;
+    }
+
+    /**
+     * Sucht einen aktiven Lagerort anhand seines Namens.
      */
     public function findByName(string $name): ?array
     {

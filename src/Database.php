@@ -35,6 +35,24 @@ class Database
 
         $this->connection->exec('PRAGMA foreign_keys = ON');
 
+        /*
+         * Mehrere Geräte buchen gleichzeitig (Pi-Terminal, Handys):
+         *
+         * - IMMEDIATE: Transaktionen holen sich die Schreibsperre schon
+         *   beim Beginn. Eine Buchung kann so zwischen Bestandsprüfung und
+         *   Speichern nicht von einer anderen überholt werden (sonst wäre
+         *   z. B. das letzte Stück doppelt ausbuchbar, siehe
+         *   StockRepository::move()).
+         * - Timeout: Ist die Datenbank gerade gesperrt, bis zu 10 Sekunden
+         *   warten statt sofort mit "database is locked" abzubrechen.
+         */
+        $this->connection->setAttribute(
+            \Pdo\Sqlite::ATTR_TRANSACTION_MODE,
+            \Pdo\Sqlite::TRANSACTION_MODE_IMMEDIATE
+        );
+
+        $this->connection->setAttribute(PDO::ATTR_TIMEOUT, 10);
+
         $this->migrate();
     }
 

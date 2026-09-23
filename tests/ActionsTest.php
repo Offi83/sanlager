@@ -392,4 +392,44 @@ class ActionsTest extends TestCase
 
         $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
     }
+
+    public function testArticleWithStockCannotBeDeleted(): void
+    {
+        // Nur abgelaufener Bestand – zählt trotzdem, er liegt ja noch da.
+        $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
+        $this->stock->move($this->articleId, $this->mainId, 2, 'receipt', null, $expired);
+
+        try {
+            $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
+            $this->fail('Artikel mit Bestand wurde gelöscht.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('noch Bestand vorhanden ist (2 Stück', $exception->getMessage());
+        }
+
+        $this->assertSame(1, (int) $this->articles->find($this->articleId)['active']);
+
+        $this->stock->disposeExpiredBatch($this->articleId, $expired, $this->mainId);
+
+        $result = $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
+
+        $this->assertStringStartsWith('?page=articles&message=', $result->redirectUrl);
+        $this->assertSame(0, (int) $this->articles->find($this->articleId)['active']);
+    }
+
+    public function testDefaultSourceIsFirstLocationInSortOrderNotName(): void
+    {
+        $boxId = $this->locations->create('Kiste 1', '');
+        $this->stock->move($this->articleId, $boxId, 2, 'receipt');
+
+        // Umbenennen ändert nichts, die Reihenfolge entscheidet.
+        $this->locations->update($this->mainId, 'Zentrallager', '');
+        $this->locations->reorder([$boxId, $this->mainId]);
+
+        $this->assertSame($boxId, (int) $this->locations->defaultLocation()['id']);
+
+        $result = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
+
+        $this->assertStringContainsString('&source=' . $boxId, $result->redirectUrl);
+        $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $boxId));
+    }
 }

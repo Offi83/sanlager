@@ -454,4 +454,40 @@ class StockRepositoryTest extends TestCase
 
         $this->stock->reverseTodayDisposal($this->articleId, $expired, $this->mainId, 1);
     }
+
+    public function testMinimumAtDeactivatedLocationIsIgnored(): void
+    {
+        $this->receive(5, null);
+        $this->stock->saveMinimums($this->articleId, [$this->mainId => 2, $this->boxId => 3]);
+
+        $this->assertTrue($this->stock->hasLowStockAtAnyLocation($this->articleId));
+
+        // Kiste wird aufgelöst: leer, also deaktivierbar – ihr Mindestbestand
+        // bleibt gespeichert, darf aber nicht mehr zählen.
+        (new LocationRepository($this->db))->deactivate($this->boxId);
+
+        $this->assertFalse($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertFalse($this->stock->getStockSummaries()[$this->articleId]['is_low']);
+        $this->assertSame([], $this->stock->getLowStockItems());
+    }
+
+    public function testArticleStockIsListedInLocationSortOrder(): void
+    {
+        $locations = new LocationRepository($this->db);
+        $aId = $locations->create('A-Rucksack', '');
+        $locations->reorder([$this->boxId, $aId, $this->mainId]);
+
+        $this->assertSame(
+            ['Kiste 1', 'A-Rucksack', 'Hauptlager'],
+            array_column($this->stock->getStockForArticle($this->articleId), 'location_name')
+        );
+
+        $batch = $this->receive(1, $this->day('+1 year'));
+        $this->stock->move($this->articleId, $this->boxId, 1, 'receipt', null, $batch);
+
+        $this->assertSame(
+            ['Kiste 1', 'Hauptlager'],
+            array_column($this->stock->getStockByBatchAndLocation($this->articleId), 'location_name')
+        );
+    }
 }

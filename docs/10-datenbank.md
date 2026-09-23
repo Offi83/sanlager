@@ -54,7 +54,7 @@ Enthält die Lagerorte (z. B. Hauptlager, Fahrzeuge, Außenlager).
 | `sort_order`  | Reihenfolge in der Anwendung, per Drag & Drop änderbar |
 | `active`      | Status des Lagerorts (Soft-Delete beim Deaktivieren) |
 
-Der Lagerort mit dem Namen **`Hauptlager`** hat eine besondere Bedeutung: Er ist der voreingestellte Quell-Lagerort für Ausbuchungen und Umbuchungen über die Buchen-Seite (Scanner und manuelle Eingabe), dort aber frei auf einen anderen Lagerort umstellbar. Es muss außerdem stets mindestens ein aktiver Lagerort vorhanden sein.
+Der **erste Lagerort in der festgelegten Reihenfolge** (`sort_order`, per Drag & Drop auf der Lagerorte-Seite) ist der Standard-Lagerort: Er ist auf der Buchen-Seite als „Von“ und auf der Artikelseite als Ziel beim Einlagern vorausgewählt, jeweils frei umstellbar. Der Name spielt dafür keine Rolle – ein Umbenennen ändert nichts. Bei einer neuen Datenbank legt Migration 005 dafür den Lagerort `Hauptlager` an. Es muss stets mindestens ein aktiver Lagerort vorhanden sein.
 
 ### `article_location_minimums`
 
