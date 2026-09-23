@@ -9,6 +9,7 @@ Die wichtigsten Verzeichnisse des Projekts:
 ```text
 sanlager/
 ├── bin/
+│   ├── backup.php
 │   └── weekly-report.php
 ├── database/
 │   ├── database.sqlite
@@ -34,6 +35,7 @@ sanlager/
 │   ├── ActionResult.php
 │   ├── ArticleActions.php
 │   ├── ArticleRepository.php
+│   ├── Backup.php
 │   ├── BatchRepository.php
 │   ├── CategoryActions.php
 │   ├── CategoryRepository.php
@@ -58,7 +60,7 @@ sanlager/
 
 ### `bin/`
 
-Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind, z. B. der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](12-wochenbericht.md)). Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
+Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind: der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](12-wochenbericht.md)) und die Datensicherung (`backup.php`, siehe [Datensicherung](13-datensicherung.md)). Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
 
 ### `public/`
 

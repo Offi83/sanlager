@@ -56,7 +56,7 @@ Auf dem Produktivserver `APP_DEBUG=false` setzen: Technische Fehler (z. B. der D
 
 `APP_TIMEZONE` legt fest, welcher Tag als „heute“ gilt (MHD-Ablauf, heute ausgebuchte Artikel). Ohne Angabe wird `Europe/Berlin` verwendet.
 
-Für den optionalen Wochenbericht per E-Mail kommen weitere Einträge hinzu, siehe [Wochenbericht](12-wochenbericht.md).
+Für den optionalen Wochenbericht per E-Mail kommen weitere Einträge hinzu, siehe [Wochenbericht](12-wochenbericht.md). Die tägliche Datensicherung sollte bei jeder Installation eingerichtet werden, siehe [Datensicherung](13-datensicherung.md).
 
 Die `.env`-Datei ist lokal und wird nicht über Git versioniert. Sie darf zudem nicht über den Webserver öffentlich erreichbar sein.
 

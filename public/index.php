@@ -3173,8 +3173,8 @@ if ($page === 'article' || $page === 'label') {
 
 <footer class="app-footer">
     SanLager ·
-    <a href="https://github.com/Offi83/sanlager/blob/main/LICENSE">GPL-3.0</a> ·
-    <a href="https://github.com/Offi83/sanlager">Quellcode</a>
+    <a href="https://github.com/Offi83/sanlager/blob/main/LICENSE">GPL-3.0</a><span class="footer-source"> ·
+    <a href="https://github.com/Offi83/sanlager">Quellcode</a></span>
 </footer>
 
 

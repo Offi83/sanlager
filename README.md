@@ -142,6 +142,12 @@ Einrichtung des wöchentlichen Berichts per E-Mail (SMTP-Zugang, Empfänger, Cro
 
 ➡️ **[Wochenbericht einrichten](docs/12-wochenbericht.md)**
 
+### 💾 Datensicherung
+
+Tägliche, geprüfte Sicherung der Datenbank per Cron, Aufbewahrung und Wiederherstellung:
+
+➡️ **[Datensicherung einrichten](docs/13-datensicherung.md)**
+
 ### 🔧 Entwicklung
 
 **[Dokumentation zur Projektstruktur, Entwicklung und Bereitstellung der Anwendung.](docs/11-entwicklung.md)**
