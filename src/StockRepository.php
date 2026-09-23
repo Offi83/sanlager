@@ -339,12 +339,18 @@ class StockRepository
     /**
      * Heute erfolgte Ausbuchungen (`issue`), gruppiert nach
      * Artikel/Charge/Lagerort. Umbuchungen (`transfer_out`/`transfer_in`)
-     * zählen bewusst nicht dazu, da dabei kein Material verbraucht wird.
+     * und Entsorgungen (`disposal`) zählen bewusst nicht dazu, da dabei
+     * kein Material verbraucht wird. Rückgängig gemachte Ausbuchungen
+     * (`issue_reversal`, siehe reverseTodayIssue()) werden abgezogen;
+     * vollständig zurückgenommene Zeilen entfallen.
      */
     public function getTodayIssues(): array
     {
         $statement = $this->db->prepare(
             'SELECT
+                a.id AS article_id,
+                sm.batch_id,
+                sl.id AS location_id,
                 a.name AS article_name,
                 a.article_number,
                 a.unit,
@@ -358,13 +364,14 @@ class StockRepository
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl
                 ON sl.id = sm.location_id
-             WHERE sm.movement_type = \'issue\'
+             WHERE sm.movement_type IN (\'issue\', \'issue_reversal\')
              AND sm.created_at >= :day_start
              AND sm.created_at < :day_end
              GROUP BY
                 sm.article_id,
                 sm.batch_id,
                 sm.location_id
+             HAVING SUM(sm.quantity) < 0
              ORDER BY
                 a.name COLLATE NOCASE,
                 CASE
@@ -380,14 +387,15 @@ class StockRepository
     }
 
     /**
-     * Anzahl heutiger Ausbuchungen, siehe getTodayIssues().
+     * Heute ausgebuchte Menge (Stück, abzüglich Rückbuchungen), siehe
+     * getTodayIssues().
      */
     public function getTodayIssueCount(): int
     {
         $statement = $this->db->prepare(
-            'SELECT COUNT(*)
+            'SELECT COALESCE(-SUM(quantity), 0)
              FROM stock_movements
-             WHERE movement_type = \'issue\'
+             WHERE movement_type IN (\'issue\', \'issue_reversal\')
              AND created_at >= :day_start
              AND created_at < :day_end'
         );
@@ -520,8 +528,9 @@ class StockRepository
 
     /**
      * Ausbuchungen (`issue`) im Zeitraum [$from, $to), je Artikel und
-     * Lagerort zusammengefasst, meistentnommene zuerst. Umbuchungen
-     * zählen wie bei getTodayIssues() nicht dazu.
+     * Lagerort zusammengefasst, meistentnommene zuerst. Wie bei
+     * getTodayIssues() zählen Umbuchungen und Entsorgungen nicht dazu,
+     * Rückbuchungen werden abgezogen.
      */
     public function getIssuesBetween(
         \DateTimeImmutable $from,
@@ -542,12 +551,13 @@ class StockRepository
                 ON a.id = sm.article_id
              INNER JOIN storage_locations sl
                 ON sl.id = sm.location_id
-             WHERE sm.movement_type = \'issue\'
+             WHERE sm.movement_type IN (\'issue\', \'issue_reversal\')
              AND sm.created_at >= :period_start
              AND sm.created_at < :period_end
              GROUP BY
                 a.id,
                 sl.id
+             HAVING SUM(sm.quantity) < 0
              ORDER BY
                 ABS(SUM(sm.quantity)) DESC,
                 a.name COLLATE NOCASE,
@@ -641,6 +651,7 @@ class StockRepository
                 a.unit,
                 sl.id AS location_id,
                 sl.name AS location_name,
+                b.id AS batch_id,
                 b.expiry_date,
                 SUM(sm.quantity) AS quantity
              FROM stock_movements sm
@@ -771,26 +782,48 @@ class StockRepository
 
         $batch = $this->findOldestBatchWithStock($articleId, $fromLocationId);
 
+        $this->transferBatch(
+            $articleId,
+            $batch['batch_id'],
+            $fromLocationId,
+            $toLocationId,
+            1,
+            $note
+        );
+
+        return $batch;
+    }
+
+    /**
+     * Bucht eine bestimmte Menge einer bestimmten Charge (`null` = ohne
+     * MHD) von einem Lagerort auf einen anderen um – z. B. über das
+     * "Bestand buchen"-Formular der Artikelseite. Abgang und Zugang werden
+     * in einer Transaktion direkt nacheinander gespeichert, damit sie in
+     * getTodayTransfers() zusammengehören (und rückgängig gemacht werden
+     * können).
+     *
+     * @throws RuntimeException wenn Quell- und Ziellagerort identisch sind
+     *                          oder am Quell-Lagerort nicht genug Bestand liegt
+     */
+    public function transferBatch(
+        int $articleId,
+        ?int $batchId,
+        int $fromLocationId,
+        int $toLocationId,
+        int $quantity,
+        ?string $note = null
+    ): void {
+        if ($fromLocationId === $toLocationId) {
+            throw new RuntimeException(
+                'Quell- und Ziellagerort dürfen nicht identisch sein.'
+            );
+        }
+
         $this->db->beginTransaction();
 
         try {
-            $this->move(
-                $articleId,
-                $fromLocationId,
-                1,
-                'transfer_out',
-                $note,
-                $batch['batch_id']
-            );
-
-            $this->move(
-                $articleId,
-                $toLocationId,
-                1,
-                'transfer_in',
-                $note,
-                $batch['batch_id']
-            );
+            $this->move($articleId, $fromLocationId, $quantity, 'transfer_out', $note, $batchId);
+            $this->move($articleId, $toLocationId, $quantity, 'transfer_in', $note, $batchId);
 
             $this->db->commit();
         } catch (\Throwable $exception) {
@@ -800,8 +833,6 @@ class StockRepository
 
             throw $exception;
         }
-
-        return $batch;
     }
 
     /**
@@ -932,16 +963,356 @@ class StockRepository
     }
 
     /**
+     * Nimmt heutige Ausbuchungen eines Artikels (Charge + Lagerort) ganz
+     * oder teilweise zurück, z. B. nach einem Fehlscan.
+     *
+     * Es wird nichts gelöscht: Die Rücknahme ist eine Gegenbuchung vom Typ
+     * `issue_reversal` (Zugang an Lagerort und Charge der Ausbuchung),
+     * damit die Historie nachvollziehbar bleibt. Zurückgenommen werden
+     * kann höchstens, was heute netto ausgebucht wurde.
+     *
+     * @throws RuntimeException bei ungültiger Menge
+     */
+    public function reverseTodayIssue(
+        int $articleId,
+        ?int $batchId,
+        int $locationId,
+        int $quantity
+    ): void {
+        $this->assertReversible(
+            $quantity,
+            $this->todayNetOutflow(['issue', 'issue_reversal'], $articleId, $batchId, $locationId),
+            'ausgebucht'
+        );
+
+        $this->move(
+            $articleId,
+            $locationId,
+            $quantity,
+            'issue_reversal',
+            'Ausbuchung rückgängig gemacht',
+            $batchId
+        );
+    }
+
+    /**
+     * Heutige Entsorgungen (`disposal`) je Artikel/Charge/Lagerort,
+     * abzüglich Rücknahmen (`disposal_reversal`).
+     */
+    public function getTodayDisposals(): array
+    {
+        $statement = $this->db->prepare(
+            'SELECT
+                a.id AS article_id,
+                sm.batch_id,
+                sl.id AS location_id,
+                a.name AS article_name,
+                a.article_number,
+                a.unit,
+                b.expiry_date,
+                sl.name AS location_name,
+                -SUM(sm.quantity) AS quantity
+             FROM stock_movements sm
+             INNER JOIN articles a
+                ON a.id = sm.article_id
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             INNER JOIN storage_locations sl
+                ON sl.id = sm.location_id
+             WHERE sm.movement_type IN (\'disposal\', \'disposal_reversal\')
+             AND sm.created_at >= :day_start
+             AND sm.created_at < :day_end
+             GROUP BY
+                sm.article_id,
+                sm.batch_id,
+                sm.location_id
+             HAVING SUM(sm.quantity) < 0
+             ORDER BY
+                a.name COLLATE NOCASE,
+                b.expiry_date'
+        );
+
+        $statement->execute($this->todayUtcRange());
+
+        return $statement->fetchAll();
+    }
+
+    /**
+     * Nimmt eine heutige Entsorgung ganz oder teilweise zurück
+     * (Gegenbuchung `disposal_reversal`), siehe reverseTodayIssue().
+     *
+     * @throws RuntimeException bei ungültiger Menge
+     */
+    public function reverseTodayDisposal(
+        int $articleId,
+        ?int $batchId,
+        int $locationId,
+        int $quantity
+    ): void {
+        $this->assertReversible(
+            $quantity,
+            $this->todayNetOutflow(['disposal', 'disposal_reversal'], $articleId, $batchId, $locationId),
+            'entsorgt'
+        );
+
+        $this->move(
+            $articleId,
+            $locationId,
+            $quantity,
+            'disposal_reversal',
+            'Entsorgung rückgängig gemacht',
+            $batchId
+        );
+    }
+
+    /**
+     * Heutige Umbuchungen je Artikel/Charge und Richtung (von → nach),
+     * abzüglich Rücknahmen.
+     *
+     * Eine Umbuchung besteht aus zwei Bewegungen, die stets direkt
+     * nacheinander in einer Transaktion gespeichert werden (Abgang, dann
+     * Zugang mit der nächsten ID, siehe transferOldest()/transferAllStock()).
+     * Darüber werden die beiden Hälften hier einander zugeordnet. Eine
+     * Rücknahme (`transfer_reversal_out` am ursprünglichen Ziel,
+     * `transfer_reversal_in` an der ursprünglichen Quelle) wird der
+     * ursprünglichen Richtung zugerechnet und abgezogen – eine echte
+     * Rück-Umbuchung (z. B. Rucksack nach dem Dienst zurück ins Lager)
+     * dagegen bleibt als eigene Zeile stehen.
+     */
+    public function getTodayTransfers(): array
+    {
+        $statement = $this->db->prepare(
+            'SELECT
+                t.article_id,
+                t.batch_id,
+                t.from_location_id,
+                t.to_location_id,
+                a.name AS article_name,
+                a.unit,
+                b.expiry_date,
+                src.name AS from_location_name,
+                dst.name AS to_location_name,
+                SUM(t.quantity) AS quantity
+             FROM (
+                SELECT
+                    o.article_id,
+                    o.batch_id,
+                    CASE WHEN o.movement_type = \'transfer_out\'
+                        THEN o.location_id ELSE i.location_id END AS from_location_id,
+                    CASE WHEN o.movement_type = \'transfer_out\'
+                        THEN i.location_id ELSE o.location_id END AS to_location_id,
+                    CASE WHEN o.movement_type = \'transfer_out\'
+                        THEN -o.quantity ELSE o.quantity END AS quantity
+                FROM stock_movements o
+                INNER JOIN stock_movements i
+                    ON i.id = o.id + 1
+                    AND i.article_id = o.article_id
+                    AND i.batch_id IS o.batch_id
+                    AND i.quantity = -o.quantity
+                    AND (
+                        (o.movement_type = \'transfer_out\' AND i.movement_type = \'transfer_in\')
+                        OR (o.movement_type = \'transfer_reversal_out\' AND i.movement_type = \'transfer_reversal_in\')
+                    )
+                WHERE o.created_at >= :day_start
+                AND o.created_at < :day_end
+             ) t
+             INNER JOIN articles a
+                ON a.id = t.article_id
+             LEFT JOIN batches b
+                ON b.id = t.batch_id
+             INNER JOIN storage_locations src
+                ON src.id = t.from_location_id
+             INNER JOIN storage_locations dst
+                ON dst.id = t.to_location_id
+             GROUP BY
+                t.article_id,
+                t.batch_id,
+                t.from_location_id,
+                t.to_location_id
+             HAVING SUM(t.quantity) > 0
+             ORDER BY
+                a.name COLLATE NOCASE,
+                b.expiry_date'
+        );
+
+        $statement->execute($this->todayUtcRange());
+
+        return $statement->fetchAll();
+    }
+
+    /**
+     * Nimmt eine heutige Umbuchung ganz oder teilweise zurück: Das Material
+     * wandert vom Ziel zurück an die Quelle (gleiche Charge). Scheitert,
+     * wenn am Ziel davon nicht mehr genug liegt (z. B. schon verbraucht).
+     *
+     * @throws RuntimeException bei ungültiger Menge oder fehlendem Bestand
+     */
+    public function reverseTodayTransfer(
+        int $articleId,
+        ?int $batchId,
+        int $fromLocationId,
+        int $toLocationId,
+        int $quantity
+    ): void {
+        $transferredToday = 0;
+
+        foreach ($this->getTodayTransfers() as $row) {
+            if (
+                (int) $row['article_id'] === $articleId
+                && ($row['batch_id'] === null ? null : (int) $row['batch_id']) === $batchId
+                && (int) $row['from_location_id'] === $fromLocationId
+                && (int) $row['to_location_id'] === $toLocationId
+            ) {
+                $transferredToday = (int) $row['quantity'];
+            }
+        }
+
+        $this->assertReversible($quantity, $transferredToday, 'umgebucht');
+
+        $this->db->beginTransaction();
+
+        try {
+            $note = 'Umbuchung rückgängig gemacht';
+
+            $this->move($articleId, $toLocationId, $quantity, 'transfer_reversal_out', $note, $batchId);
+            $this->move($articleId, $fromLocationId, $quantity, 'transfer_reversal_in', $note, $batchId);
+
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * Heutige Netto-Abgangsmenge eines Artikels (Charge + Lagerort) über
+     * die angegebenen Bewegungstypen, z. B. Ausbuchung minus Rücknahme.
+     *
+     * @param string[] $types
+     */
+    private function todayNetOutflow(
+        array $types,
+        int $articleId,
+        ?int $batchId,
+        int $locationId
+    ): int {
+        $placeholders = implode(', ', array_fill(0, count($types), '?'));
+        [$dayStart, $dayEnd] = array_values($this->todayUtcRange());
+
+        $statement = $this->db->prepare(
+            'SELECT COALESCE(-SUM(quantity), 0)
+             FROM stock_movements
+             WHERE movement_type IN (' . $placeholders . ')
+             AND article_id = ?
+             AND location_id = ?
+             AND batch_id IS ?
+             AND created_at >= ?
+             AND created_at < ?'
+        );
+
+        $statement->execute([
+            ...$types,
+            $articleId,
+            $locationId,
+            $batchId,
+            $dayStart,
+            $dayEnd,
+        ]);
+
+        return (int) $statement->fetchColumn();
+    }
+
+    /**
+     * @throws RuntimeException wenn mehr zurückgenommen werden soll, als
+     *                          heute gebucht wurde
+     */
+    private function assertReversible(int $quantity, int $bookedToday, string $verb): void
+    {
+        if ($quantity <= 0 || $quantity > $bookedToday) {
+            throw new RuntimeException(
+                'Rückgängig nicht möglich: heute wurden davon nur '
+                . $bookedToday . ' ' . $verb . '.'
+            );
+        }
+    }
+
+    /**
+     * Entnimmt eine abgelaufene Charge an einem Lagerort vollständig
+     * (Entsorgung). Gebucht wird als `disposal` – das zählt nicht als
+     * Ausbuchung/Verbrauch (weder in "Heute ausgebucht" noch in den
+     * Entnahmen des Wochenberichts).
+     *
+     * @return int entsorgte Menge
+     * @throws RuntimeException wenn die Charge nicht zum Artikel gehört,
+     *                          nicht abgelaufen ist oder dort kein Bestand liegt
+     */
+    public function disposeExpiredBatch(
+        int $articleId,
+        int $batchId,
+        int $locationId
+    ): int {
+        $statement = $this->db->prepare(
+            'SELECT expiry_date
+             FROM batches
+             WHERE id = :id
+             AND article_id = :article_id'
+        );
+
+        $statement->execute([
+            'id' => $batchId,
+            'article_id' => $articleId,
+        ]);
+
+        $expiryDate = $statement->fetchColumn();
+
+        if ($expiryDate === false) {
+            throw new RuntimeException(
+                'Die Charge wurde nicht gefunden.'
+            );
+        }
+
+        if ($expiryDate === null || $expiryDate >= $this->today()) {
+            throw new RuntimeException(
+                'Nur abgelaufene Chargen können entsorgt werden.'
+            );
+        }
+
+        $quantity = $this->getStockAtLocation($articleId, $locationId, $batchId);
+
+        if ($quantity <= 0) {
+            throw new RuntimeException(
+                'Von dieser Charge ist an diesem Lagerort nichts mehr vorhanden.'
+            );
+        }
+
+        $this->move(
+            $articleId,
+            $locationId,
+            $quantity,
+            'disposal',
+            'Entsorgt: MHD ' . formatDate($expiryDate) . ' abgelaufen',
+            $batchId
+        );
+
+        return $quantity;
+    }
+
+    /**
      * Erzeugt eine einzelne Lagerbewegung (einen Zugang oder Abgang).
      *
      * `$quantity` wird immer positiv übergeben; bei den Abgangstypen
-     * `issue`/`transfer_out` wird sie hier intern negiert, nachdem
+     * `issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
+     * hier intern negiert, nachdem
      * geprüft wurde, dass genug Bestand der betroffenen Charge an diesem
      * Lagerort vorhanden ist. Für eine vollständige Umbuchung (Abgang an
      * einem Lagerort + Zugang an einem anderen) siehe transferOldest(),
      * das move() zweimal in einer Transaktion aufruft.
      *
-     * @param string $type receipt|issue|correction|transfer_out|transfer_in
+     * @param string $type receipt|issue|issue_reversal|disposal|disposal_reversal|correction|
+     *                     transfer_out|transfer_in|transfer_reversal_out|transfer_reversal_in
      * @throws RuntimeException bei Menge 0, ungültigem Typ oder nicht
      *                          ausreichendem Bestand bei einem Abgang
      */
@@ -961,7 +1332,18 @@ class StockRepository
 
         if (!in_array(
             $type,
-            ['receipt', 'issue', 'correction', 'transfer_out', 'transfer_in'],
+            [
+                'receipt',
+                'issue',
+                'issue_reversal',
+                'disposal',
+                'disposal_reversal',
+                'correction',
+                'transfer_out',
+                'transfer_in',
+                'transfer_reversal_out',
+                'transfer_reversal_in',
+            ],
             true
         )) {
             throw new RuntimeException(
@@ -969,7 +1351,7 @@ class StockRepository
             );
         }
 
-        if (in_array($type, ['issue', 'transfer_out'], true)) {
+        if (in_array($type, ['issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
             $current = $this->getStockAtLocation(
                 $articleId,
                 $locationId,

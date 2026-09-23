@@ -468,6 +468,55 @@ tbody tr:last-child td {
     font-size: 18px;
 }
 
+.location-row-end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+/* Formulare mit einzelnem Button in Tabellenzellen/Zeilen (Entsorgen, Rückgängig) */
+.dispose-form,
+.undo-cell form {
+    display: inline-block;
+    margin: 0;
+}
+
+.undo-cell {
+    white-space: nowrap;
+}
+
+.disposed-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #fdeaea;
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+.today-disposed {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* Buttons mit Symbol (Rückgängig-Pfeil, Mülltonne), siehe icon() */
+.icon-button {
+    gap: 6px;
+    min-width: 44px;
+}
+
+.icon-button .icon {
+    flex-shrink: 0;
+}
+
+.today-section-title {
+    margin: var(--space-5) 0 var(--space-2);
+    font-size: 18px;
+}
+
 
 /* =========================================================
    MHD

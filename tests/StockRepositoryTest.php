@@ -272,4 +272,186 @@ class StockRepositoryTest extends TestCase
 
         $this->batches->findOrCreate($this->articleId, '31.12.2027');
     }
+
+    public function testReverseTodayIssueBooksBackAndNetsTodayIssues(): void
+    {
+        $batch = $this->receive(5, $this->day('+1 year'));
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->stock->issueOldest($this->articleId, $this->mainId);
+        }
+
+        $this->stock->reverseTodayIssue($this->articleId, $batch, $this->mainId, 1);
+
+        $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
+        $this->assertSame(2, $this->stock->getTodayIssueCount());
+        $this->assertSame(2, (int) $this->stock->getTodayIssues()[0]['quantity']);
+
+        // Die Historie bleibt erhalten: nichts gelöscht, eine Gegenbuchung mehr.
+        $types = $this->db->query('SELECT movement_type FROM stock_movements ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
+        $this->assertSame(['receipt', 'issue', 'issue', 'issue', 'issue_reversal'], $types);
+
+        $this->stock->reverseTodayIssue($this->articleId, $batch, $this->mainId, 2);
+
+        $this->assertSame([], $this->stock->getTodayIssues());
+        $this->assertSame(0, $this->stock->getTodayIssueCount());
+    }
+
+    public function testReverseTodayIssueWithoutExpiryAndLimits(): void
+    {
+        $this->receive(2, null);
+        $this->stock->issueOldest($this->articleId, $this->mainId);
+
+        try {
+            $this->stock->reverseTodayIssue($this->articleId, null, $this->mainId, 2);
+            $this->fail('Mehr zurückgebucht als ausgebucht.');
+        } catch (RuntimeException) {
+        }
+
+        $this->stock->reverseTodayIssue($this->articleId, null, $this->mainId, 1);
+        $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
+
+        // Umbuchungen lassen sich hierüber nicht "zurücknehmen".
+        $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId);
+
+        $this->expectException(RuntimeException::class);
+
+        $this->stock->reverseTodayIssue($this->articleId, null, $this->mainId, 1);
+    }
+
+    public function testDisposeExpiredBatchRemovesItCompletely(): void
+    {
+        $expired = $this->receive(4, $this->day('-1 day'));
+        $this->receive(2, $this->day('+1 year'));
+        $this->receive(3, $this->day('-1 day'), $this->boxId);
+
+        $this->assertSame(4, $this->stock->disposeExpiredBatch($this->articleId, $expired, $this->mainId));
+
+        $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
+        $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $expired));
+        $this->assertSame(2, $this->stock->getTotalStock($this->articleId));
+
+        // Entsorgen ist kein Verbrauch.
+        $this->assertSame(0, $this->stock->getTodayIssueCount());
+        $this->assertSame([], $this->stock->getIssuesBetween(new \DateTimeImmutable('today'), new \DateTimeImmutable('tomorrow')));
+
+        $this->expectException(RuntimeException::class);
+
+        $this->stock->disposeExpiredBatch($this->articleId, $expired, $this->mainId);
+    }
+
+    public function testDisposeRejectsBatchThatIsNotExpired(): void
+    {
+        $fresh = $this->receive(2, $this->day('today'));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Nur abgelaufene');
+
+        $this->stock->disposeExpiredBatch($this->articleId, $fresh, $this->mainId);
+    }
+
+    public function testDisposeRejectsBatchOfOtherArticle(): void
+    {
+        $other = (new ArticleRepository($this->db))->create('A-999', 'Andere', '', 'Stück', null);
+        $expired = $this->batches->findOrCreate($other, $this->day('-1 day'));
+
+        $this->expectException(RuntimeException::class);
+
+        $this->stock->disposeExpiredBatch($this->articleId, $expired, $this->mainId);
+    }
+
+    public function testReverseTodayTransferMovesBackAndNets(): void
+    {
+        $batch = $this->receive(5, $this->day('+1 year'));
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId);
+        }
+
+        $transfers = $this->stock->getTodayTransfers();
+        $this->assertCount(1, $transfers);
+        $this->assertSame(3, (int) $transfers[0]['quantity']);
+        $this->assertSame('Hauptlager', $transfers[0]['from_location_name']);
+        $this->assertSame('Kiste 1', $transfers[0]['to_location_name']);
+
+        $this->stock->reverseTodayTransfer($this->articleId, $batch, $this->mainId, $this->boxId, 2);
+
+        $this->assertSame(4, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
+        $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $batch));
+        $this->assertSame(1, (int) $this->stock->getTodayTransfers()[0]['quantity']);
+
+        // Mehr als umgebucht geht nicht.
+        try {
+            $this->stock->reverseTodayTransfer($this->articleId, $batch, $this->mainId, $this->boxId, 2);
+            $this->fail('Mehr zurückgenommen als umgebucht.');
+        } catch (RuntimeException) {
+        }
+
+        $this->stock->reverseTodayTransfer($this->articleId, $batch, $this->mainId, $this->boxId, 1);
+        $this->assertSame([], $this->stock->getTodayTransfers());
+        $this->assertSame(0, $this->stock->getTodayIssueCount());
+    }
+
+    public function testRealBackTransferIsNotTreatedAsUndo(): void
+    {
+        $this->receive(2, null);
+
+        $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId);
+        $this->stock->transferOldest($this->articleId, $this->boxId, $this->mainId);
+
+        $directions = array_map(
+            static fn (array $row): string => $row['from_location_name'] . '>' . $row['to_location_name'],
+            $this->stock->getTodayTransfers()
+        );
+
+        sort($directions);
+
+        $this->assertSame(['Hauptlager>Kiste 1', 'Kiste 1>Hauptlager'], $directions);
+    }
+
+    public function testReverseTransferFailsWhenTargetStockIsGone(): void
+    {
+        $this->receive(1, null);
+        $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId);
+        $this->stock->issueOldest($this->articleId, $this->boxId);
+
+        $this->expectException(RuntimeException::class);
+
+        $this->stock->reverseTodayTransfer($this->articleId, null, $this->mainId, $this->boxId, 1);
+    }
+
+    public function testTransferAllStockCanBeReversedPerArticle(): void
+    {
+        $batch = $this->receive(4, $this->day('+1 year'), $this->boxId);
+        $this->receive(2, null, $this->boxId);
+
+        $this->stock->transferAllStock($this->boxId, $this->mainId);
+
+        $this->assertCount(2, $this->stock->getTodayTransfers());
+
+        $this->stock->reverseTodayTransfer($this->articleId, $batch, $this->boxId, $this->mainId, 4);
+
+        $this->assertSame(4, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $batch));
+        $this->assertCount(1, $this->stock->getTodayTransfers());
+    }
+
+    public function testReverseTodayDisposal(): void
+    {
+        $expired = $this->receive(3, $this->day('-1 day'));
+
+        $this->stock->disposeExpiredBatch($this->articleId, $expired, $this->mainId);
+
+        $disposals = $this->stock->getTodayDisposals();
+        $this->assertCount(1, $disposals);
+        $this->assertSame(3, (int) $disposals[0]['quantity']);
+
+        $this->stock->reverseTodayDisposal($this->articleId, $expired, $this->mainId, 3);
+
+        $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
+        $this->assertSame([], $this->stock->getTodayDisposals());
+
+        $this->expectException(RuntimeException::class);
+
+        $this->stock->reverseTodayDisposal($this->articleId, $expired, $this->mainId, 1);
+    }
 }

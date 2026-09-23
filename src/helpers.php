@@ -118,3 +118,26 @@ function normalizeDate(string $value): ?string
 
     return null;
 }
+
+/**
+ * Kleines Inline-SVG-Symbol für Buttons (übernimmt die Textfarbe via
+ * currentColor, funktioniert ohne Internet). Dekorativ – der Button
+ * braucht zusätzlich Text oder ein aria-label/title.
+ *
+ * @param string $name undo|trash
+ */
+function icon(string $name): string
+{
+    $paths = match ($name) {
+        'undo' => '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+        'trash' => '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
+            . '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
+            . '<path d="M10 11v6"/><path d="M14 11v6"/>',
+        default => '',
+    };
+
+    return '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" '
+        . 'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+        . 'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        . $paths . '</svg>';
+}

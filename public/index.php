@@ -152,6 +152,8 @@ $articleBatchesByLocation = [];
 $locations = [];
 $todayIssues = [];
 $todayIssueCount = 0;
+$todayTransfers = [];
+$todayDisposedCount = 0;
 $editCategory = null;
 
 if ($page === 'categories' && isset($_GET['edit'])) {
@@ -191,8 +193,36 @@ if ($page === 'locations' && isset($_GET['edit'])) {
 
 if ($page === 'today_issues') {
 
-    $todayIssues = $stock->getTodayIssues();
     $todayIssueCount = $stock->getTodayIssueCount();
+    $todayTransfers = $stock->getTodayTransfers();
+
+    /*
+     * Entsorgungen erscheinen in derselben Liste wie die Ausbuchungen
+     * (als "entsorgt" gekennzeichnet), zählen aber nicht zur Zahl der
+     * Ausbuchungen – Entsorgen ist kein Verbrauch.
+     */
+    $todayIssues = array_merge(
+        array_map(
+            static fn (array $row): array => $row + ['kind' => 'issue'],
+            $stock->getTodayIssues()
+        ),
+        array_map(
+            static fn (array $row): array => $row + ['kind' => 'disposal'],
+            $stock->getTodayDisposals()
+        )
+    );
+
+    usort(
+        $todayIssues,
+        static fn (array $a, array $b): int =>
+            strcasecmp($a['article_name'], $b['article_name'])
+            ?: strcmp((string) $a['expiry_date'], (string) $b['expiry_date'])
+    );
+
+    $todayDisposedCount = array_sum(array_map(
+        static fn (array $row): int => $row['kind'] === 'disposal' ? (int) $row['quantity'] : 0,
+        $todayIssues
+    ));
 }
 
 $viewLocation = null;
@@ -237,20 +267,77 @@ if ($page === 'expiry') {
     }
 }
 
+/**
+ * Button "Entsorgen" für eine abgelaufene Charge an einem Lagerort
+ * (MHD-Übersicht, Artikel- und Lagerort-Detailseite). Entnimmt nach
+ * Rückfrage die komplette Menge, siehe StockActions::disposeBatch().
+ *
+ * @param string $return Seite, auf die danach zurückgeleitet wird:
+ *                       expiry|article|location
+ */
+function renderDisposeForm(
+    int $articleId,
+    int $batchId,
+    int $locationId,
+    string $question,
+    string $return
+): string {
+    return '<form method="post" class="dispose-form" onsubmit="return confirm('
+        . h(json_encode($question, JSON_UNESCAPED_UNICODE)) . ');">'
+        . '<input type="hidden" name="action" value="dispose_batch">'
+        . '<input type="hidden" name="article_id" value="' . $articleId . '">'
+        . '<input type="hidden" name="batch_id" value="' . $batchId . '">'
+        . '<input type="hidden" name="location_id" value="' . $locationId . '">'
+        . '<input type="hidden" name="return" value="' . h($return) . '">'
+        . '<button type="submit" class="button button-danger small icon-button"'
+        . ' title="Entsorgen" aria-label="Entsorgen">' . icon('trash') . '</button>'
+        . '</form>';
+}
+
+/**
+ * Rückgängig-Button (Pfeil) für eine Zeile auf "Heute ausgebucht": nimmt
+ * nach Rückfrage die ganze Zeile zurück. Gegenbuchung statt Löschen,
+ * siehe StockActions::undoToday().
+ *
+ * @param string $action undo_issue|undo_transfer|undo_disposal
+ * @param array<string, int|null> $fields versteckte Felder (article_id, batch_id, ...)
+ * @param string $question Rückfrage, z. B. "3 Stück Mullbinde zurück nach Hauptlager buchen?"
+ */
+function renderUndoForm(
+    string $action,
+    array $fields,
+    int $quantity,
+    string $question
+): string {
+    $html = '<form method="post" onsubmit="return confirm('
+        . h(json_encode($question, JSON_UNESCAPED_UNICODE))
+        . ');">'
+        . '<input type="hidden" name="action" value="' . h($action) . '">';
+
+    foreach ($fields + ['quantity' => $quantity] as $name => $value) {
+        $html .= '<input type="hidden" name="' . h($name) . '" value="' . (int) $value . '">';
+    }
+
+    return $html
+        . '<button type="submit" class="button button-secondary small icon-button"'
+        . ' title="Rückgängig" aria-label="Rückgängig">' . icon('undo') . '</button>'
+        . '</form>';
+}
+
 $allLocations = [];
 
 if ($page === 'issue') {
 
     /*
-     * Sowohl "Von" als auch "Ziel" bekommen die volle Liste; welche
-     * Kombination gültig ist (Von != Ziel), steuert das Frontend
-     * (issue-source-Auswahl blendet die gleiche Option im Ziel-Select
+     * Sowohl "Von" als auch "Nach" bekommen die volle Liste; welche
+     * Kombination gültig ist (Von != Nach), steuert das Frontend
+     * (issue-source-Auswahl blendet die gleiche Option im Nach-Select
      * aus) und wird zusätzlich serverseitig in StockActions geprüft.
      */
     $allLocations = $locationRepository->all();
 
     /*
-     * Von/Ziel der vorherigen Buchung beibehalten: nach Erfolg kommen
+     * Von/Nach der vorherigen Buchung beibehalten: nach Erfolg kommen
      * sie über den Redirect (GET, siehe StockActions::issue()), nach
      * einem Fehler aus dem abgeschickten Formular (POST). Ungültige oder
      * inzwischen deaktivierte Lagerorte fallen auf die Standardauswahl
@@ -393,7 +480,7 @@ if ($page === 'article' || $page === 'label') {
 
     <?php if ($message): ?>
 
-        <div class="alert alert-success">
+        <div class="alert success">
             <?= h($message) ?>
         </div>
 
@@ -401,7 +488,7 @@ if ($page === 'article' || $page === 'label') {
 
     <?php if ($error): ?>
 
-        <div class="alert alert-error">
+        <div class="alert error">
             <?= h($error) ?>
         </div>
 
@@ -1013,6 +1100,7 @@ if ($page === 'article' || $page === 'label') {
                             <th>Artikelnummer</th>
                             <th>MHD</th>
                             <th>Bestand</th>
+                            <th></th>
                         </tr>
 
                     </thead>
@@ -1037,7 +1125,7 @@ if ($page === 'article' || $page === 'label') {
                                     class="article-category-row"
                                     style="background-color: <?= h($row['category_color'] ?? '#64748b') ?>;"
                                 >
-                                    <th colspan="4">
+                                    <th colspan="5">
                                         <span class="article-category-name">
                                             <?= h($row['category_name'] ?? 'Ohne Kategorie') ?>
                                         </span>
@@ -1088,6 +1176,24 @@ if ($page === 'article' || $page === 'label') {
                                         <?= (int) $row['quantity'] ?>
                                         <?= h($row['unit']) ?>
                                     </strong>
+                                </td>
+
+                                <td>
+
+                                    <?php if ($rowExpiry['class'] === 'expiry-expired'): ?>
+
+                                        <?= renderDisposeForm(
+                                            (int) $row['article_id'],
+                                            (int) $row['batch_id'],
+                                            (int) $viewLocation['id'],
+                                            $row['article_name'] . ': ' . (int) $row['quantity'] . ' ' . $row['unit']
+                                                . ' (MHD ' . formatDate($row['expiry_date']) . ') aus '
+                                                . $viewLocation['name'] . ' entsorgen?',
+                                            'location'
+                                        ) ?>
+
+                                    <?php endif; ?>
+
                                 </td>
 
                             </tr>
@@ -1342,7 +1448,8 @@ if ($page === 'article' || $page === 'label') {
                     <h1>Heute ausgebucht</h1>
 
                     <p>
-                        Übersicht aller heutigen Ausbuchungen.
+                        Übersicht aller heutigen Ausbuchungen, Umbuchungen und Entsorgungen –
+                        mit Rückgängig.
                     </p>
 
                 </div>
@@ -1372,6 +1479,14 @@ if ($page === 'article' || $page === 'label') {
                         Ausbuchungen heute
                     </span>
 
+                    <?php if ($todayDisposedCount > 0): ?>
+
+                        <span class="today-disposed">
+                            + <?= $todayDisposedCount ?> entsorgt
+                        </span>
+
+                    <?php endif; ?>
+
                 </div>
 
             </div>
@@ -1381,7 +1496,7 @@ if ($page === 'article' || $page === 'label') {
                 <?php if (!$todayIssues): ?>
 
                     <p class="empty-state compact">
-                        Heute wurden noch keine Artikel ausgebucht.
+                        Heute wurden noch keine Artikel ausgebucht oder entsorgt.
                     </p>
 
                 <?php else: ?>
@@ -1400,6 +1515,7 @@ if ($page === 'article' || $page === 'label') {
                                     <th>Menge</th>
                                     <th>MHD</th>
                                     <th>Lagerort</th>
+                                    <th>Rückgängig</th>
 
                                 </tr>
 
@@ -1431,6 +1547,14 @@ if ($page === 'article' || $page === 'label') {
                                                 <?= (int) $movement['quantity'] ?>
                                                 <?= h($movement['unit']) ?>
                                             </strong>
+
+                                            <?php if ($movement['kind'] === 'disposal'): ?>
+
+                                                <span class="disposed-badge">
+                                                    entsorgt
+                                                </span>
+
+                                            <?php endif; ?>
                                         </td>
 
                                         <td>
@@ -1443,6 +1567,22 @@ if ($page === 'article' || $page === 'label') {
 
                                         <td>
                                             <?= h($movement['location_name']) ?>
+                                        </td>
+
+                                        <td class="undo-cell">
+                                            <?= renderUndoForm(
+                                                $movement['kind'] === 'disposal' ? 'undo_disposal' : 'undo_issue',
+                                                [
+                                                    'article_id' => (int) $movement['article_id'],
+                                                    'batch_id' => (int) $movement['batch_id'],
+                                                    'location_id' => (int) $movement['location_id'],
+                                                ],
+                                                (int) $movement['quantity'],
+                                                (int) $movement['quantity'] . ' ' . $movement['unit'] . ' '
+                                                    . $movement['article_name'] . ' wieder in '
+                                                    . $movement['location_name'] . ' einbuchen'
+                                                    . ($movement['kind'] === 'disposal' ? ' (Entsorgung rückgängig)?' : '?')
+                                            ) ?>
                                         </td>
 
                                     </tr>
@@ -1458,6 +1598,90 @@ if ($page === 'article' || $page === 'label') {
                 <?php endif; ?>
 
             </div>
+
+            <?php if ($todayTransfers): ?>
+
+                <h2 class="today-section-title">
+                    Heute umgebucht
+                </h2>
+
+                <div class="card">
+
+                    <div class="table-wrapper">
+
+                        <table>
+
+                            <thead>
+
+                                <tr>
+                                    <th>Artikel</th>
+                                    <th>Menge</th>
+                                    <th>MHD</th>
+                                    <th>Von → Nach</th>
+                                    <th>Rückgängig</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                <?php foreach ($todayTransfers as $transfer): ?>
+
+                                    <tr>
+
+                                        <td>
+                                            <strong>
+                                                <?= h($transfer['article_name']) ?>
+                                            </strong>
+                                        </td>
+
+                                        <td>
+                                            <strong>
+                                                <?= (int) $transfer['quantity'] ?>
+                                                <?= h($transfer['unit']) ?>
+                                            </strong>
+                                        </td>
+
+                                        <td>
+                                            <?= h(formatDate($transfer['expiry_date'])) ?>
+                                        </td>
+
+                                        <td>
+                                            <?= h($transfer['from_location_name']) ?>
+                                            →
+                                            <?= h($transfer['to_location_name']) ?>
+                                        </td>
+
+                                        <td class="undo-cell">
+                                            <?= renderUndoForm(
+                                                'undo_transfer',
+                                                [
+                                                    'article_id' => (int) $transfer['article_id'],
+                                                    'batch_id' => (int) $transfer['batch_id'],
+                                                    'location_id' => (int) $transfer['from_location_id'],
+                                                    'to_location_id' => (int) $transfer['to_location_id'],
+                                                ],
+                                                (int) $transfer['quantity'],
+                                                (int) $transfer['quantity'] . ' ' . $transfer['unit'] . ' '
+                                                    . $transfer['article_name'] . ' von ' . $transfer['to_location_name']
+                                                    . ' zurück nach ' . $transfer['from_location_name'] . ' buchen?'
+                                            ) ?>
+                                        </td>
+
+                                    </tr>
+
+                                <?php endforeach; ?>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            <?php endif; ?>
+
 
         </div>
 
@@ -1551,6 +1775,7 @@ if ($page === 'article' || $page === 'label') {
                                     <th>Lagerort</th>
                                     <th>MHD</th>
                                     <th>Menge</th>
+                                    <th></th>
 
                                 </tr>
 
@@ -1612,6 +1837,24 @@ if ($page === 'article' || $page === 'label') {
                                             </strong>
                                         </td>
 
+                                        <td>
+
+                                            <?php if ($rowExpiry['class'] === 'expiry-expired'): ?>
+
+                                                <?= renderDisposeForm(
+                                                    (int) $row['article_id'],
+                                                    (int) $row['batch_id'],
+                                                    (int) $row['location_id'],
+                                                    $row['article_name'] . ': ' . (int) $row['quantity'] . ' ' . $row['unit']
+                                                        . ' (MHD ' . formatDate($row['expiry_date']) . ') aus '
+                                                        . $row['location_name'] . ' entsorgen?',
+                                                    'expiry'
+                                                ) ?>
+
+                                            <?php endif; ?>
+
+                                        </td>
+
                                     </tr>
 
                                 <?php endforeach; ?>
@@ -1639,8 +1882,8 @@ if ($page === 'article' || $page === 'label') {
                     <h1>Buchen</h1>
 
                     <p>
-                        Artikelnummer scannen oder eingeben, Von- und
-                        Ziel-Lagerort wählen. Es wird automatisch ein
+                        Artikelnummer scannen oder eingeben, Von und
+                        Nach wählen. Es wird automatisch ein
                         Stück mit dem ältesten MHD ausgebucht oder an
                         den gewählten Lagerort umgebucht.
                     </p>
@@ -1656,14 +1899,6 @@ if ($page === 'article' || $page === 'label') {
 
                 <div class="alert <?= isset($_GET['expired']) ? 'error' : 'success' ?>">
                     <?= h($_GET['success']) ?>
-                </div>
-
-            <?php endif; ?>
-
-            <?php if ($error): ?>
-
-                <div class="alert error">
-                    <?= h($error) ?>
                 </div>
 
             <?php endif; ?>
@@ -1766,7 +2001,7 @@ if ($page === 'article' || $page === 'label') {
                     <label class="issue-target-field">
 
                         <span>
-                            Ziel
+                            Nach
                         </span>
 
                         <select
@@ -2067,6 +2302,34 @@ if ($page === 'article' || $page === 'label') {
             $mainLocationId = (int) $locations[0]['id'];
         }
 
+        /*
+         * "Bestand buchen": Von/Nach der letzten Buchung beibehalten
+         * (kommen per Redirect, siehe StockActions::stockMove()), sonst
+         * Einlagern ins Hauptlager. "receipt" = Einlagern (Von),
+         * "issue" = Ausbuchen (Nach), sonst Lagerort-ID.
+         */
+        $locationIds = array_map('strval', array_column($locations, 'id'));
+
+        $stockFormFrom = in_array($_GET['from'] ?? '', ['receipt', ...$locationIds], true)
+            ? $_GET['from']
+            : 'receipt';
+
+        $stockFormTo = in_array($_GET['to'] ?? '', ['issue', ...$locationIds], true)
+            ? $_GET['to']
+            : (string) $mainLocationId;
+
+        /*
+         * Bestand je Charge ("none" = ohne MHD) und Lagerort, damit die
+         * MHD-Auswahl beim Ausbuchen/Umbuchen zeigt, was am gewählten
+         * Lagerort tatsächlich liegt (siehe stock-form.js).
+         */
+        $batchStockByLocation = [];
+
+        foreach ($articleBatchesByLocation as $row) {
+            $batchKey = $row['batch_id'] === null ? 'none' : (string) (int) $row['batch_id'];
+            $batchStockByLocation[$batchKey][(int) $row['location_id']] = (int) $row['quantity'];
+        }
+
         ?>
 
 
@@ -2357,10 +2620,28 @@ if ($page === 'article' || $page === 'label') {
 
                         </div>
 
-                        <div class="stock-value">
+                        <div class="location-row-end">
 
-                            <?= $quantity ?>
-                            <?= h($article['unit']) ?>
+                            <div class="stock-value">
+
+                                <?= $quantity ?>
+                                <?= h($article['unit']) ?>
+
+                            </div>
+
+                            <?php if ($expiry['class'] === 'expiry-expired'): ?>
+
+                                <?= renderDisposeForm(
+                                    (int) $article['id'],
+                                    (int) $row['batch_id'],
+                                    (int) $row['location_id'],
+                                    $article['name'] . ': ' . $quantity . ' ' . $article['unit']
+                                        . ' (MHD ' . formatDate($row['expiry_date']) . ') aus '
+                                        . $row['location_name'] . ' entsorgen?',
+                                    'article'
+                                ) ?>
+
+                            <?php endif; ?>
 
                         </div>
 
@@ -2404,25 +2685,33 @@ if ($page === 'article' || $page === 'label') {
 
                 <div class="form-grid">
 
+                    <?php /* Der Vorgang ergibt sich aus Von/Nach, siehe StockActions::stockMove(). */ ?>
                     <label>
 
                         <span>
-                            Vorgang
+                            Von
                         </span>
 
                         <select
-                            name="movement_type"
-                            id="movement_type"
+                            name="from"
+                            id="stock_from"
                             required
                         >
 
-                            <option value="receipt">
+                            <option value="receipt" <?= $stockFormFrom === 'receipt' ? 'selected' : '' ?>>
                                 Einlagern
                             </option>
 
-                            <option value="issue">
-                                Entnehmen
-                            </option>
+                            <?php foreach ($locations as $location): ?>
+
+                                <option
+                                    value="<?= (int) $location['id'] ?>"
+                                    <?= $stockFormFrom === (string) $location['id'] ? 'selected' : '' ?>
+                                >
+                                    <?= h($location['name']) ?>
+                                </option>
+
+                            <?php endforeach; ?>
 
                         </select>
 
@@ -2432,19 +2721,24 @@ if ($page === 'article' || $page === 'label') {
                     <label>
 
                         <span>
-                            Lagerort
+                            Nach
                         </span>
 
                         <select
-                            name="location_id"
+                            name="to"
+                            id="stock_to"
                             required
                         >
+
+                            <option value="issue" <?= $stockFormTo === 'issue' ? 'selected' : '' ?>>
+                                Ausbuchen
+                            </option>
 
                             <?php foreach ($locations as $location): ?>
 
                                 <option
                                     value="<?= (int) $location['id'] ?>"
-                                    <?= $mainLocationId === (int) $location['id'] ? 'selected' : '' ?>
+                                    <?= $stockFormTo === (string) $location['id'] ? 'selected' : '' ?>
                                 >
                                     <?= h($location['name']) ?>
                                 </option>
@@ -2484,7 +2778,11 @@ if ($page === 'article' || $page === 'label') {
                             id="batch_selection"
                         >
 
-                            <option value="none">
+                            <option
+                                value="none"
+                                data-label="Ohne MHD"
+                                data-stock="<?= h(json_encode((object) ($batchStockByLocation['none'] ?? []))) ?>"
+                            >
                                 Ohne MHD
                             </option>
 
@@ -2498,6 +2796,8 @@ if ($page === 'article' || $page === 'label') {
                                 <option
                                     value="<?= (int) $batch['batch_id'] ?>"
                                     data-quantity="<?= $batchQuantity ?>"
+                                    data-label="MHD: <?= h(formatDate($batch['expiry_date'])) ?>"
+                                    data-stock="<?= h(json_encode((object) ($batchStockByLocation[(string) (int) $batch['batch_id']] ?? []))) ?>"
                                 >
                                     MHD:
                                     <?= formatDate($batch['expiry_date']) ?>

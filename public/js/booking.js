@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /*
      * Button-Text und Modus-Anzeige über dem Kamerabild an die aktuelle
-     * Von/Ziel-Auswahl anpassen. Die Anzeige ist bewusst auffällig, weil
+     * Von/Nach-Auswahl anpassen. Die Anzeige ist bewusst auffällig, weil
      * beim Scannen der Blick auf der Kamera liegt und nicht auf den
      * Auswahlfeldern darunter.
      */
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     /*
-     * Im Ziel-Select darf nicht derselbe Lagerort wie im Von-Select
+     * Im Nach-Select darf nicht derselbe Lagerort wie im Von-Select
      * stehen (Umbuchen an denselben Ort ergibt keinen Sinn). Die
      * "Ausbuchen"-Option bleibt davon unberührt.
      */
@@ -363,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         /*
                          * Aufeinanderfolgende Buchungen
-                         * desselben Artikels mit demselben Ziel
+                         * desselben Artikels mit demselben Nach-Lagerort
                          * zusammenfassen.
                          */
                         const resultKey =

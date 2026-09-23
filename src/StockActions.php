@@ -8,7 +8,7 @@ use Throwable;
 /**
  * Verarbeitet die POST-Aktionen rund um Lagerbewegungen: das Buchen
  * (Ausbuchen/Umbuchen per Scanner oder manueller Eingabe) sowie das
- * artikelbezogene Bestand-buchen-Formular (Einlagern/Entnehmen).
+ * artikelbezogene Bestand-buchen-Formular (Einlagern/Ausbuchen/Umbuchen).
  */
 class StockActions
 {
@@ -35,6 +35,10 @@ class StockActions
             'issue' => $this->issue($input),
             'stock_move' => $this->stockMove($input),
             'transfer_all_stock' => $this->transferAllStock($input),
+            'undo_issue' => $this->undoToday('issue', $input),
+            'undo_transfer' => $this->undoToday('transfer', $input),
+            'undo_disposal' => $this->undoToday('disposal', $input),
+            'dispose_batch' => $this->disposeBatch($input),
             default => null,
         };
     }
@@ -194,22 +198,26 @@ class StockActions
         }
     }
 
+    /**
+     * "Bestand buchen" auf der Artikelseite. Der Vorgang ergibt sich aus
+     * Von und Nach:
+     *
+     *   from=receipt,  to=<Lagerort>  → Einlagern
+     *   from=<Lagerort>, to=issue     → Ausbuchen
+     *   from=<Lagerort>, to=<anderer> → Umbuchen
+     */
     private function stockMove(array $input): ActionResult
     {
         $articleId = $this->int($input, 'article_id');
-        $locationId = $this->int($input, 'location_id');
         $quantity = $this->int($input, 'quantity');
-        $movementType = $this->string($input, 'movement_type');
+        $from = $this->string($input, 'from');
+        $to = $this->string($input, 'to');
 
-        if ($articleId <= 0) {
+        $article = $this->articles->find($articleId);
+
+        if (!$article) {
             throw new RuntimeException(
                 'Bitte einen Artikel auswählen.'
-            );
-        }
-
-        if ($locationId <= 0) {
-            throw new RuntimeException(
-                'Bitte einen Lagerort auswählen.'
             );
         }
 
@@ -219,15 +227,41 @@ class StockActions
             );
         }
 
-        if (!in_array(
-            $movementType,
-            ['receipt', 'issue'],
-            true
-        )) {
+        if ($from === 'receipt' && $to === 'issue') {
             throw new RuntimeException(
-                'Ungültiger Vorgang.'
+                'Bitte bei Von oder Nach einen Lagerort auswählen.'
             );
         }
+
+        $fromLocation = $from === 'receipt' ? null : $this->locations->find((int) $from);
+        $toLocation = $to === 'issue' ? null : $this->locations->find((int) $to);
+
+        if (
+            ($from !== 'receipt' && !$fromLocation)
+            || ($to !== 'issue' && !$toLocation)
+        ) {
+            throw new RuntimeException(
+                'Bitte gültige Lagerorte für Von und Nach auswählen.'
+            );
+        }
+
+        if ($fromLocation && $toLocation && (int) $fromLocation['id'] === (int) $toLocation['id']) {
+            throw new RuntimeException(
+                'Von und Nach dürfen nicht derselbe Lagerort sein.'
+            );
+        }
+
+        $movementType = match (true) {
+            $fromLocation === null => 'receipt',
+            $toLocation === null => 'issue',
+            default => 'transfer',
+        };
+
+        /*
+         * Lagerort, an dem eingelagert bzw. von dem ausgebucht/umgebucht wird.
+         */
+        $location = $fromLocation ?? $toLocation;
+        $locationId = (int) $location['id'];
 
         /*
          * MHD-Auswahl:
@@ -250,7 +284,7 @@ class StockActions
         if ($batchSelection === 'new') {
             if ($movementType !== 'receipt') {
                 throw new RuntimeException(
-                    'Bei einer Entnahme kann kein neues MHD angelegt werden.'
+                    'Ein neues MHD kann nur beim Einlagern angelegt werden.'
                 );
             }
 
@@ -308,24 +342,45 @@ class StockActions
 
         $note = $this->string($input, 'note');
 
-        $this->stock->move(
-            $articleId,
-            $locationId,
-            $quantity,
-            $movementType,
-            $note !== '' ? $note : null,
-            $batchId
-        );
+        if ($movementType === 'transfer') {
+            $this->stock->transferBatch(
+                $articleId,
+                $batchId,
+                $locationId,
+                (int) $toLocation['id'],
+                $quantity,
+                $note !== ''
+                    ? $note
+                    : 'Umbuchung von ' . $location['name'] . ' nach ' . $toLocation['name']
+            );
 
+            $message = $quantity . ' ' . $article['unit'] . ' umgebucht: ' . $location['name']
+                . ' → ' . $toLocation['name'];
+        } else {
+            $this->stock->move(
+                $articleId,
+                $locationId,
+                $quantity,
+                $movementType,
+                $note !== '' ? $note : null,
+                $batchId
+            );
+
+            $message = $quantity . ' ' . $article['unit']
+                . ($movementType === 'receipt'
+                    ? ' eingelagert in ' . $location['name']
+                    : ' ausgebucht aus ' . $location['name']);
+        }
+
+        /*
+         * Von/Nach mitgeben, damit das Formular für die nächste Buchung so
+         * eingestellt bleibt (wie auf der Buchen-Seite).
+         */
         return ActionResult::redirect(
-            '?page=article&id=' .
-            $articleId .
-            '&message=' .
-            urlencode(
-                $movementType === 'receipt'
-                    ? 'Bestand eingelagert'
-                    : 'Bestand entnommen'
-            )
+            '?page=article&id=' . $articleId
+            . '&from=' . urlencode($from)
+            . '&to=' . urlencode($to)
+            . '&message=' . urlencode($message)
         );
     }
 
@@ -375,6 +430,109 @@ class StockActions
                     ? 'Bestand nach ' . $toLocation['name']
                         . ' verschoben (' . $movedUnits . ' Stück).'
                     : 'Es war kein Bestand zum Verschieben vorhanden.'
+            )
+        );
+    }
+
+    /**
+     * Macht heutige Buchungen rückgängig (Seite "Heute ausgebucht"): je
+     * nach Button ein Stück oder die ganze Zeile, jeweils als Gegenbuchung.
+     * `batch_id` leer/0 bedeutet "ohne MHD". Bei Umbuchungen bezeichnet
+     * `location_id` die ursprüngliche Quelle, `to_location_id` das Ziel.
+     *
+     * @param string $kind issue|transfer|disposal
+     */
+    private function undoToday(string $kind, array $input): ActionResult
+    {
+        $articleId = $this->int($input, 'article_id');
+        $locationId = $this->int($input, 'location_id');
+        $quantity = $this->int($input, 'quantity');
+        $batchId = $this->int($input, 'batch_id') ?: null;
+
+        $article = $this->articles->find($articleId);
+        $location = $this->locations->find($locationId);
+
+        if (!$article || !$location) {
+            throw new RuntimeException(
+                'Ungültige Buchung.'
+            );
+        }
+
+        if ($kind === 'transfer') {
+            $toLocation = $this->locations->find(
+                $this->int($input, 'to_location_id')
+            );
+
+            if (!$toLocation) {
+                throw new RuntimeException(
+                    'Ungültige Buchung.'
+                );
+            }
+
+            $this->stock->reverseTodayTransfer(
+                $articleId,
+                $batchId,
+                $locationId,
+                (int) $toLocation['id'],
+                $quantity
+            );
+
+            $done = 'von ' . $toLocation['name'] . ' zurück nach ' . $location['name'] . ' gebucht';
+        } elseif ($kind === 'disposal') {
+            $this->stock->reverseTodayDisposal($articleId, $batchId, $locationId, $quantity);
+
+            $done = 'Entsorgung rückgängig, wieder in ' . $location['name'];
+        } else {
+            $this->stock->reverseTodayIssue($articleId, $batchId, $locationId, $quantity);
+
+            $done = 'zurück nach ' . $location['name'] . ' gebucht';
+        }
+
+        return ActionResult::redirect(
+            '?page=today_issues&message=' . urlencode(
+                $article['name'] . ' – ' . $quantity . ' '
+                . $article['unit'] . ' ' . $done
+            )
+        );
+    }
+
+    /**
+     * Entsorgt eine abgelaufene Charge an einem Lagerort vollständig.
+     * Aufrufbar aus MHD-Übersicht, Artikel- und Lagerort-Detailseite;
+     * `return` bestimmt, wohin danach zurückgeleitet wird.
+     */
+    private function disposeBatch(array $input): ActionResult
+    {
+        $articleId = $this->int($input, 'article_id');
+        $batchId = $this->int($input, 'batch_id');
+        $locationId = $this->int($input, 'location_id');
+
+        $article = $this->articles->find($articleId);
+        $location = $this->locations->find($locationId);
+
+        if (!$article || !$location || $batchId <= 0) {
+            throw new RuntimeException(
+                'Ungültige Charge.'
+            );
+        }
+
+        $quantity = $this->stock->disposeExpiredBatch(
+            $articleId,
+            $batchId,
+            $locationId
+        );
+
+        $return = match ($this->string($input, 'return')) {
+            'article' => '?page=article&id=' . $articleId,
+            'location' => '?page=location&id=' . $locationId,
+            default => '?page=expiry',
+        };
+
+        return ActionResult::redirect(
+            $return . '&message=' . urlencode(
+                $article['name'] . ' – ' . $quantity . ' ' . $article['unit']
+                . ' aus ' . $location['name'] . ' entsorgt'
+                . ' (rückgängig unter „Heute ausgebucht“)'
             )
         );
     }

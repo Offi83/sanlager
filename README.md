@@ -25,7 +25,10 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 * Buchen: Ausbuchen oder Umbuchen an einen anderen Lagerort per Kamera, Hand-Barcodescanner oder manueller Eingabe – immer das älteste MHD zuerst
 * gut sichtbare Anzeige der Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen); die gewählte Richtung bleibt für weitere Buchungen erhalten
 * „Scanner starten“ erscheint nur auf Geräten mit Kamera
+* Aus-, Umbuchungen und Entsorgungen des Tages mit einem Klick rückgängig machen – als Gegenbuchung, die Historie bleibt erhalten
+* abgelaufene Chargen mit einem Klick entsorgen (MHD-Übersicht, Artikel- und Lagerort-Seite)
 * Wöchentlicher Bericht per E-Mail: abgelaufenes und bald ablaufendes Material, Unterschreitung der Mindestbestände, Entnahmen der Woche
+* Artikelseite: Einlagern, Ausbuchen und Umbuchen einer bestimmten Charge und Menge – mit Anzeige, was am gewählten Lagerort liegt
 * QR-Code je Artikel und Etikettendruck
 * einfache und übersichtliche Bedienung
 * optimiert für die Nutzung per Touchscreen

@@ -1,13 +1,25 @@
 /*
- * Artikeldetailseite: "Bestand buchen"-Formular. Blendet je nach
- * Vorgang (Einlagern/Entnehmen) und MHD-Auswahl die passenden Felder
- * ein/aus und passt die Button-Beschriftung an.
+ * Artikeldetailseite: "Bestand buchen"-Formular. Der Vorgang ergibt sich
+ * aus Von und Nach (siehe StockActions::stockMove()):
+ *
+ *   Von "Einlagern"  → Nach Lagerort   = Einlagern
+ *   Von Lagerort     → Nach "Ausbuchen" = Ausbuchen
+ *   Von Lagerort A   → Nach Lagerort B  = Umbuchen
+ *
+ * Unsinnige Kombinationen (Einlagern → Ausbuchen, A → A) werden
+ * ausgeblendet. Die MHD-Optionen tragen den Bestand je Lagerort
+ * (data-stock, JSON {lagerortId: menge}): Beim Ausbuchen/Umbuchen wird
+ * angezeigt, was am Von-Lagerort liegt, leere Chargen werden ausgeblendet;
+ * beim Einlagern zählt der Gesamtbestand (data-quantity).
  */
 
 document.addEventListener('DOMContentLoaded', function () {
 
-    const movementType =
-        document.getElementById('movement_type');
+    const fromSelect =
+        document.getElementById('stock_from');
+
+    const toSelect =
+        document.getElementById('stock_to');
 
     const batchSelection =
         document.getElementById('batch_selection');
@@ -23,94 +35,135 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     if (
-        !movementType
+        !fromSelect
+        || !toSelect
         || !batchSelection
     ) {
         return;
     }
 
 
-    function updateForm() {
+    function stockAt(option, locationId) {
 
-        const movement =
-            movementType.value;
+        try {
 
-        let selection =
-            batchSelection.value;
+            const stock =
+                JSON.parse(option.dataset.stock || '{}');
+
+            return parseInt(stock[locationId] || '0', 10);
+
+        } catch (error) {
+
+            return 0;
+
+        }
+
+    }
 
 
-        /*
-         * "Neues MHD" nur beim Einlagern erlauben.
-         */
-        const newOption =
-            batchSelection.querySelector(
-                'option[value="new"]'
-            );
+    /*
+     * Blendet in einem Select Optionen aus und wählt, falls die aktuelle
+     * Auswahl dabei verschwindet, die erste noch sichtbare Option.
+     */
+    function hideOptions(select, isHidden) {
 
-        if (newOption) {
+        Array.from(select.options).forEach(function (option) {
 
-            const isIssue =
-                movement === 'issue';
+            const hidden = isHidden(option);
 
-            newOption.disabled = isIssue;
-            newOption.hidden = isIssue;
+            option.hidden = hidden;
+            option.disabled = hidden;
 
-            if (
-                isIssue
-                && selection === 'new'
-            ) {
+        });
 
-                batchSelection.value = 'none';
+        if (select.selectedOptions[0]?.disabled) {
 
-                selection = 'none';
+            const firstFree =
+                Array.from(select.options).find(function (option) {
+                    return !option.disabled;
+                });
+
+            if (firstFree) {
+                select.value = firstFree.value;
             }
 
         }
 
+    }
+
+
+    function updateForm() {
 
         /*
-         * Bei Entnahme nur MHDs
-         * mit positivem Bestand anzeigen.
+         * Nach: nicht derselbe Lagerort wie Von; "Ausbuchen" ergibt nach
+         * "Einlagern" keinen Sinn.
          */
-        Array.from(
-            batchSelection.options
-        ).forEach(function (option) {
+        hideOptions(toSelect, function (option) {
 
-            if (
-                option.value === ''
-                || option.value === 'none'
-                || option.value === 'new'
-            ) {
+            return option.value === fromSelect.value
+                || (fromSelect.value === 'receipt' && option.value === 'issue');
+
+        });
+
+        const isReceipt =
+            fromSelect.value === 'receipt';
+
+        const isIssue =
+            toSelect.value === 'issue';
+
+
+        /*
+         * MHD-Auswahl.
+         */
+        hideOptions(batchSelection, function (option) {
+
+            if (option.value === 'new') {
+                return !isReceipt;
+            }
+
+            if (!option.dataset.label || isReceipt) {
+                return false;
+            }
+
+            return stockAt(option, fromSelect.value) <= 0;
+
+        });
+
+        Array.from(batchSelection.options).forEach(function (option) {
+
+            if (!option.dataset.label) {
                 return;
             }
 
-            const quantity =
-                parseInt(
-                    option.dataset.quantity || '0',
-                    10
-                );
+            if (isReceipt) {
 
-            option.hidden =
-                movement === 'issue'
-                && quantity <= 0;
+                option.textContent =
+                    option.value === 'none'
+                        ? option.dataset.label
+                        : option.dataset.label + ' – Bestand: '
+                            + (option.dataset.quantity || '0');
+
+                return;
+
+            }
+
+            option.textContent =
+                option.dataset.label + ' – hier: '
+                + stockAt(option, fromSelect.value);
+
         });
 
 
         /*
          * Eingabefeld für neues MHD.
          */
-        newExpiryField.hidden =
-            !(
-                movement === 'receipt'
-                && selection === 'new'
-            );
+        const needsNewExpiry =
+            isReceipt && batchSelection.value === 'new';
 
+        newExpiryField.hidden = !needsNewExpiry;
 
         if (expiryInput) {
-
-            expiryInput.required =
-                movement === 'receipt'
-                && selection === 'new';
+            expiryInput.required = needsNewExpiry;
         }
 
 
@@ -120,23 +173,20 @@ document.addEventListener('DOMContentLoaded', function () {
         if (submitButton) {
 
             submitButton.textContent =
-                movement === 'receipt'
+                isReceipt
                     ? 'Einlagern'
-                    : 'Entnehmen';
+                    : isIssue
+                        ? 'Ausbuchen'
+                        : 'Umbuchen';
+
         }
 
     }
 
 
-    movementType.addEventListener(
-        'change',
-        updateForm
-    );
-
-    batchSelection.addEventListener(
-        'change',
-        updateForm
-    );
+    fromSelect.addEventListener('change', updateForm);
+    toSelect.addEventListener('change', updateForm);
+    batchSelection.addEventListener('change', updateForm);
 
 
     updateForm();
