@@ -162,6 +162,14 @@ SanLager verwendet bewusst einfache und robuste Technologien:
 
 ---
 
+## Lizenz
+
+SanLager ist freie Software unter der **GNU General Public License v3.0** (GPL-3.0-only), siehe [LICENSE](LICENSE).
+
+Mitgelieferte und verwendete Fremdbestandteile (u. a. der QR-Code-Scanner html5-qrcode unter Apache-2.0 und Symbole aus Lucide unter ISC) sind mit ihren Lizenzen in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) aufgeführt; die Lizenztexte liegen unter [licenses/](licenses/).
+
+---
+
 ## Ziel
 
 SanLager soll keine komplexe Warenwirtschaft sein.

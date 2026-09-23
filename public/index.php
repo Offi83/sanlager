@@ -3123,6 +3123,12 @@ if ($page === 'article' || $page === 'label') {
 
 </main>
 
+<footer class="app-footer">
+    SanLager ·
+    <a href="https://github.com/Offi83/sanlager/blob/main/LICENSE">GPL-3.0</a> ·
+    <a href="https://github.com/Offi83/sanlager">Quellcode</a>
+</footer>
+
 
 <script src="/js/vendor/html5-qrcode.min.js" defer></script>
 <script src="/js/sortable-list.js" defer></script>

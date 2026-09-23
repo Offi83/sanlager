@@ -124,6 +124,10 @@ function normalizeDate(string $value): ?string
  * currentColor, funktioniert ohne Internet). Dekorativ – der Button
  * braucht zusätzlich Text oder ein aria-label/title.
  *
+ * Die Pfade stammen aus Lucide (https://lucide.dev, ISC-Lizenz):
+ * "undo-2" und "trash-2" (letzteres ursprünglich aus Feather, MIT).
+ * Lizenztext siehe licenses/lucide-ISC.txt und THIRD-PARTY-NOTICES.md.
+ *
  * @param string $name undo|trash
  */
 function icon(string $name): string

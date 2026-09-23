@@ -80,6 +80,18 @@ a {
     padding: var(--space-6) var(--card-padding) 60px;
 }
 
+/* Dezenter Lizenz-/Quellcode-Hinweis am Seitenende (nicht fixiert). */
+.app-footer {
+    padding: 0 var(--card-padding) var(--space-5);
+    color: var(--muted-light);
+    font-size: 12px;
+    text-align: center;
+}
+
+.app-footer a {
+    color: inherit;
+}
+
 .page-header {
     display: flex;
     align-items: center;
@@ -967,6 +979,7 @@ tbody tr:last-child td {
     }
 
     .topbar,
+    .app-footer,
     .container > *:not(.label-print-page) {
         display: none !important;
     }

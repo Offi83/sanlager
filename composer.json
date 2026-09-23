@@ -2,6 +2,7 @@
     "name": "drk/lager-app",
     "description": "Sanitätslagerverwaltung",
     "type": "project",
+    "license": "GPL-3.0-only",
     "require": {
         "php": "^8.5",
         "vlucas/phpdotenv": "^5.7",
