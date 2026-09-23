@@ -2242,9 +2242,11 @@ if ($page === 'article' || $page === 'label') {
                             <tr>
 
                                 <td>
-                                    <strong>
-                                        <?= h($location['location_name']) ?>
-                                    </strong>
+                                    <a href="?page=location&id=<?= (int) $location['location_id'] ?>">
+                                        <strong>
+                                            <?= h($location['location_name']) ?>
+                                        </strong>
+                                    </a>
                                 </td>
 
                                 <td class="<?= ($locationQuantity < 0 || $locationIsLow) ? 'stock-low' : '' ?>">
@@ -2340,7 +2342,9 @@ if ($page === 'article' || $page === 'label') {
                             </strong>
 
                             <span class="location-hint">
-                                <?= h($row['location_name']) ?>
+                                <a href="?page=location&id=<?= (int) $row['location_id'] ?>">
+                                    <?= h($row['location_name']) ?>
+                                </a>
                             </span>
 
                             <?php if ($expiry['warning']): ?>
