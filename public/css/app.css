@@ -92,6 +92,19 @@ a {
     color: inherit;
 }
 
+/*
+ * Pi-Terminal (Querformat mit wenig Höhe, Chromium im Kiosk-Modus):
+ * Links nicht antippbar – sie würden die App verlassen, und im Kiosk gibt
+ * es keinen Zurück-Button. Der Lizenzhinweis bleibt als Text sichtbar.
+ */
+@media (max-width: 900px) and (max-height: 560px) {
+
+    .app-footer a {
+        pointer-events: none;
+        text-decoration: none;
+    }
+}
+
 .page-header {
     display: flex;
     align-items: center;
