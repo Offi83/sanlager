@@ -3,6 +3,7 @@
 namespace LagerApp;
 
 use PDO;
+use RuntimeException;
 
 /**
  * Datenbankzugriff für Chargen/Mindesthaltbarkeitsdaten (Tabelle `batches`).
@@ -89,6 +90,18 @@ class BatchRepository
 
         if ($expiryDate === null) {
             return null;
+        }
+
+        /*
+         * Letzte Absicherung: MHD-Vergleiche in SQL sind Textvergleiche
+         * und funktionieren nur mit Y-m-d. Die Umwandlung von
+         * Benutzereingaben erfolgt vorher per normalizeDate().
+         */
+        if (normalizeDate($expiryDate) !== $expiryDate) {
+            throw new RuntimeException(
+                'MHD muss im Format JJJJ-MM-TT gespeichert werden: '
+                . $expiryDate
+            );
         }
 
         $statement = $this->db->prepare(

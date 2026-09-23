@@ -69,22 +69,52 @@ function expiryInfo(?string $date): array
         return $none;
     }
 
-    $expiry = strtotime($date);
+    $date = normalizeDate($date);
 
-    if ($expiry === false) {
+    if ($date === null) {
         return $none;
     }
 
-    $today = strtotime(date('Y-m-d'));
-    $warningThreshold = strtotime('+90 days');
+    /*
+     * Reiner Datumsvergleich (Y-m-d als String), identisch zur Logik in
+     * StockRepository, damit Anzeige und Bestandszahlen denselben Tag
+     * als "abgelaufen" werten.
+     */
+    $today = date('Y-m-d');
+    $warningThreshold = date('Y-m-d', strtotime('+90 days'));
 
-    if ($expiry < $today) {
+    if ($date < $today) {
         return ['class' => 'expiry-expired', 'warning' => 'ABGELAUFEN'];
     }
 
-    if ($expiry <= $warningThreshold) {
+    if ($date <= $warningThreshold) {
         return ['class' => 'expiry-warning', 'warning' => 'MHD bald erreicht'];
     }
 
     return $none;
+}
+
+/**
+ * Prüft ein eingegebenes Datum (z. B. MHD) und liefert es im
+ * Speicherformat Y-m-d zurück, oder `null`, wenn es kein gültiges
+ * Kalenderdatum ist.
+ *
+ * Akzeptiert Y-m-d (Datumsfeld im Browser) sowie d.m.Y (manuelle
+ * Eingabe, falls der Browser kein Datumsfeld anbietet). Alle
+ * MHD-Vergleiche in SQL laufen als Textvergleich und funktionieren
+ * daher nur, wenn ausschließlich Y-m-d gespeichert wird.
+ */
+function normalizeDate(string $value): ?string
+{
+    $value = trim($value);
+
+    foreach (['Y-m-d', 'd.m.Y'] as $format) {
+        $date = DateTimeImmutable::createFromFormat('!' . $format, $value);
+
+        if ($date !== false && $date->format($format) === $value) {
+            return $date->format('Y-m-d');
+        }
+    }
+
+    return null;
 }

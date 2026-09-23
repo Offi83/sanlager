@@ -133,7 +133,7 @@ class StockRepository
                     CASE
                         WHEN sm.batch_id IS NULL
                             OR b.expiry_date IS NULL
-                            OR b.expiry_date >= date("now")
+                            OR b.expiry_date >= :today
                         THEN sm.quantity
                         ELSE 0
                     END
@@ -154,7 +154,8 @@ class StockRepository
         );
 
         $statement->execute([
-            'article_id' => $articleId
+            'article_id' => $articleId,
+            'today' => $this->today()
         ]);
 
         return $statement->fetchAll();
@@ -235,7 +236,7 @@ class StockRepository
                 CASE
                     WHEN sm.batch_id IS NULL
                         OR b.expiry_date IS NULL
-                        OR b.expiry_date >= date("now")
+                        OR b.expiry_date >= :today
                     THEN sm.quantity
                     ELSE 0
                 END
@@ -244,7 +245,8 @@ class StockRepository
         );
 
         $statement->execute([
-            'article_id' => $articleId
+            'article_id' => $articleId,
+            'today' => $this->today()
         ]);
 
         return $statement->fetchColumn() !== false;
@@ -358,12 +360,13 @@ class StockRepository
              AND (
                  sm.batch_id IS NULL
                  OR b.expiry_date IS NULL
-                 OR b.expiry_date >= date("now")
+                 OR b.expiry_date >= :today
              )'
         );
 
         $statement->execute([
-            'article_id' => $articleId
+            'article_id' => $articleId,
+            'today' => $this->today()
         ]);
 
         return (int) $statement->fetchColumn();
@@ -376,7 +379,7 @@ class StockRepository
      */
     public function getTodayIssues(): array
     {
-        $statement = $this->db->query(
+        $statement = $this->db->prepare(
             'SELECT
                 a.name AS article_name,
                 a.article_number,
@@ -391,9 +394,9 @@ class StockRepository
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl
                 ON sl.id = sm.location_id
-             WHERE sm.movement_type = "issue"
-             AND date(sm.created_at, "localtime")
-                 = date("now", "localtime")
+             WHERE sm.movement_type = \'issue\'
+             AND sm.created_at >= :day_start
+             AND sm.created_at < :day_end
              GROUP BY
                 sm.article_id,
                 sm.batch_id,
@@ -407,6 +410,8 @@ class StockRepository
                 b.expiry_date'
         );
 
+        $statement->execute($this->todayUtcRange());
+
         return $statement->fetchAll();
     }
 
@@ -415,13 +420,15 @@ class StockRepository
      */
     public function getTodayIssueCount(): int
     {
-        $statement = $this->db->query(
+        $statement = $this->db->prepare(
             'SELECT COUNT(*)
              FROM stock_movements
-             WHERE movement_type = "issue"
-             AND date(created_at, "localtime")
-                 = date("now", "localtime")'
+             WHERE movement_type = \'issue\'
+             AND created_at >= :day_start
+             AND created_at < :day_end'
         );
+
+        $statement->execute($this->todayUtcRange());
 
         return (int) $statement->fetchColumn();
     }
@@ -439,11 +446,12 @@ class StockRepository
              INNER JOIN batches b
                  ON b.id = sm.batch_id
              WHERE sm.article_id = :article_id
-             AND b.expiry_date < date("now")'
+             AND b.expiry_date < :today'
         );
 
         $statement->execute([
-            'article_id' => $articleId
+            'article_id' => $articleId,
+            'today' => $this->today()
         ]);
 
         return max(0, (int) $statement->fetchColumn());
@@ -477,7 +485,7 @@ class StockRepository
                 ON sl.id = sm.location_id
              WHERE a.active = 1
              AND sl.active = 1
-             AND b.expiry_date <= date("now", "+" || :within_days || " days")
+             AND b.expiry_date <= :until
              GROUP BY
                 a.id,
                 sl.id,
@@ -489,7 +497,7 @@ class StockRepository
         );
 
         $statement->execute([
-            'within_days' => $withinDays
+            'until' => date('Y-m-d', strtotime('+' . $withinDays . ' days'))
         ]);
 
         return $statement->fetchAll();
@@ -839,5 +847,39 @@ class StockRepository
             'movement_type' => $type,
             'note' => $note
         ]);
+    }
+
+    /**
+     * Heutiges Datum (Y-m-d) in der Zeitzone der Anwendung.
+     *
+     * Wird bewusst in PHP statt per `date('now')` in SQLite ermittelt:
+     * SQLite rechnet in UTC, die MHD-Anzeige (expiryInfo()) aber in der
+     * PHP-Zeitzone. So gelten beide Seiten rund um Mitternacht
+     * denselben Tag als "heute".
+     */
+    private function today(): string
+    {
+        return date('Y-m-d');
+    }
+
+    /**
+     * Beginn und Ende des heutigen (lokalen) Tages als UTC-Zeitstempel.
+     *
+     * `created_at` wird per CURRENT_TIMESTAMP in UTC gespeichert. Statt
+     * jede Zeile per date(..., 'localtime') umzurechnen, wird der lokale
+     * Tag einmal in einen UTC-Bereich übersetzt – das nutzt zudem den
+     * Index auf `created_at`.
+     *
+     * @return array{day_start: string, day_end: string}
+     */
+    private function todayUtcRange(): array
+    {
+        $utc = new \DateTimeZone('UTC');
+        $start = new \DateTimeImmutable('today');
+
+        return [
+            'day_start' => $start->setTimezone($utc)->format('Y-m-d H:i:s'),
+            'day_end' => $start->modify('+1 day')->setTimezone($utc)->format('Y-m-d H:i:s'),
+        ];
     }
 }

@@ -44,6 +44,13 @@ $root = dirname(__DIR__);
 $dotenv = Dotenv::createImmutable($root);
 $dotenv->safeLoad();
 
+/*
+ * Zeitzone für alle Datumsberechnungen ("heute", MHD-Ablauf, heutige
+ * Ausbuchungen). Ohne diese Einstellung nutzt PHP je nach php.ini UTC,
+ * wodurch rund um Mitternacht der falsche Tag als "heute" gelten würde.
+ */
+date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Europe/Berlin');
+
 $dbFile = $root . '/' . ($_ENV['DB_DATABASE'] ?? 'database/database.sqlite');
 
 if (!is_dir(dirname($dbFile))) {

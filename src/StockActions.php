@@ -265,6 +265,17 @@ class StockActions
                 );
             }
 
+            $normalizedExpiryDate = normalizeDate($expiryDate);
+
+            if ($normalizedExpiryDate === null) {
+                throw new RuntimeException(
+                    'Ungültiges MHD: ' . $expiryDate
+                    . ' (erwartet z. B. 31.12.2027).'
+                );
+            }
+
+            $expiryDate = $normalizedExpiryDate;
+
             $batchId = $this->batches->findOrCreate(
                 $articleId,
                 $expiryDate

@@ -49,7 +49,10 @@ Beispiel:
 
 ```env
 DB_DATABASE=database/database.sqlite
+APP_TIMEZONE=Europe/Berlin
 ```
+
+`APP_TIMEZONE` legt fest, welcher Tag als „heute“ gilt (MHD-Ablauf, heute ausgebuchte Artikel). Ohne Angabe wird `Europe/Berlin` verwendet.
 
 Die `.env`-Datei ist lokal und wird nicht über Git versioniert. Sie darf zudem nicht über den Webserver öffentlich erreichbar sein.
 

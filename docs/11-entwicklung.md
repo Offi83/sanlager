@@ -62,7 +62,7 @@ Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale
 
 * **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden, Redirect/JSON-Antwort). Jede `dispatch(string $action)`-Methode kümmert sich nur um die Aktionen, für die sie zuständig ist, und ignoriert alle anderen – `index.php` ruft dadurch einfach alle Action-Klassen nacheinander auf.
-* **`helpers.php`** – kleine globale Funktionen (`h()`, `redirect()`, `formatDate()`, `expiryInfo()`), die sowohl im HTML-Template als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen.
+* **`helpers.php`** – kleine globale Funktionen (`h()`, `redirect()`, `formatDate()`, `expiryInfo()`, `normalizeDate()`), die sowohl im HTML-Template als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen.
 
 ### `database/`
 
@@ -112,6 +112,16 @@ Für PHP kann beispielsweise die Syntax geprüft werden:
 ```bash
 php -l public/index.php
 ```
+
+Die automatisierten Tests (PHPUnit) laufen gegen eine frische In-Memory-Datenbank, auf die alle Migrationen angewendet werden. Die lokale `database.sqlite` wird dabei nicht verändert:
+
+```bash
+composer test
+```
+
+Die Tests liegen unter `tests/` und decken vor allem die Bestandslogik in `StockRepository` ab (FIFO-Ausbuchung, Umbuchen, abgelaufene Chargen, Mindestbestand, heutige Ausbuchungen) sowie die Datums-Helper.
+
+**Hinweis zu Datumswerten:** MHDs werden immer im Format `JJJJ-MM-TT` gespeichert, da alle Ablaufprüfungen in SQL als Textvergleich laufen. Benutzereingaben daher stets über `normalizeDate()` prüfen. Das Datum „heute“ wird in PHP (Zeitzone `APP_TIMEZONE`) ermittelt und als Parameter an SQL übergeben, nicht per `date('now')` in SQLite (UTC).
 
 ## Änderungen zu GitHub übertragen
 
