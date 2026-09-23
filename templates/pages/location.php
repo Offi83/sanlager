@@ -47,7 +47,7 @@
 
             <?php else: ?>
 
-                <table class="table-with-article-number">
+                <table class="table-with-article-number table-cards">
 
                     <thead>
 

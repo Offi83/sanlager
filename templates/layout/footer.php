@@ -18,6 +18,7 @@
 <script src="/js/stock-form.js" defer></script>
 <script src="/js/article-number-suggestion.js" defer></script>
 <script src="/js/navigation.js" defer></script>
+<script src="/js/table-cards.js" defer></script>
 
 
 

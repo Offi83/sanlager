@@ -1642,3 +1642,93 @@ nav a.active {
     }
 
 }
+
+
+/* =========================================================
+   Smartphone: breite Tabellen als Karten
+   ========================================================= */
+
+/*
+ * Tabellen mit Klasse "table-cards" (Heute ausgebucht, MHD-Übersicht,
+ * Lagerort-Inhalt) sind für schmale Bildschirme zu breit – die Buttons
+ * lägen außerhalb des Bildes. Unter 600 px wird jede Zeile deshalb zu
+ * einer Karte: erste Spalte (Artikel) fett, die übrigen Werte kompakt
+ * darunter mit kleiner Spaltenbeschriftung (data-label, gesetzt von
+ * table-cards.js), Buttons rechts.
+ */
+@media (max-width: 600px) {
+
+    table.table-cards thead {
+        display: none;
+    }
+
+    table.table-cards,
+    table.table-cards tbody {
+        display: block;
+    }
+
+    table.table-cards tbody tr {
+        position: relative;
+        display: block;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    table.table-cards tbody tr:has(.cell-actions) {
+        padding-right: 64px;
+    }
+
+    table.table-cards tbody tr:last-child {
+        border-bottom: 0;
+    }
+
+    table.table-cards td {
+        display: inline-block;
+        margin: 2px 14px 0 0;
+        padding: 0;
+        border: 0;
+        font-size: 13px;
+        vertical-align: top;
+    }
+
+    table.table-cards td:first-child {
+        display: block;
+        margin: 0 0 2px;
+        font-size: 15px;
+    }
+
+    table.table-cards td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        color: var(--muted-light);
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    table.table-cards td.cell-actions {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        margin: 0;
+        transform: translateY(-50%);
+    }
+
+    /* Kategorie-Überschriften (Lagerort-Inhalt) über die volle Breite. */
+    table.table-cards tbody tr.article-category-row {
+        padding: 0;
+    }
+
+    table.table-cards tbody tr.article-category-row th {
+        display: block;
+    }
+
+    /*
+     * Übrige Tabellen (Artikelliste, Bestand nach Lagerort) bleiben
+     * Tabellen, mit etwas weniger Innenabstand, damit sie ins Bild passen.
+     */
+    table:not(.table-cards) th,
+    table:not(.table-cards) td {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+}

@@ -75,7 +75,7 @@
 
                     <div class="table-wrapper">
 
-                        <table class="table-with-article-number">
+                        <table class="table-with-article-number table-cards">
 
                             <thead>
 
