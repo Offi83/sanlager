@@ -2117,54 +2117,61 @@ if ($page === 'article' || $page === 'label') {
         </div>
 
 
-        <div class="article-top-row<?= $qrCode === null ? ' no-qr' : '' ?>">
+        <?php
+        /*
+         * Kompakte Kopfzeile: kleiner QR-Code (zum Scannen vom Bildschirm,
+         * zum Drucken gibt es das Etikett), Artikelnummer und Gesamtbestand
+         * in einer Card statt zwei großer Kacheln.
+         */
+        ?>
+        <div class="card article-summary">
 
             <?php if ($qrCode !== null): ?>
 
-                <div class="card article-qr-card">
+                <div class="article-summary-qr">
+                    <?= $qrCode ?>
+                </div>
 
-                    <div class="card-header">
+                <div class="article-summary-info">
 
-                        <h2>
-                            QR-Code
-                        </h2>
+                    <span class="article-summary-label">
+                        Artikelnummer
+                    </span>
 
-                    </div>
+                    <strong>
+                        <?= h($article['article_number']) ?>
+                    </strong>
 
-                    <div class="article-qr-content">
+                    <small>
+                        Der QR-Code enthält nur die Artikelnummer.
+                    </small>
 
-                        <div class="article-qr-code">
-                            <?= $qrCode ?>
-                        </div>
+                </div>
 
-                        <div class="article-qr-info">
+            <?php else: ?>
 
-                            <strong>
-                                <?= h($article['name']) ?>
-                            </strong>
+                <div class="article-summary-info">
 
-                            <span>
-                                Artikelnummer:
-                                <?= h($article['article_number']) ?>
-                            </span>
+                    <span class="article-summary-label">
+                        Artikelnummer
+                    </span>
 
-                            <small>
-                                Dieser QR-Code enthält ausschließlich
-                                die Artikelnummer.
-                            </small>
+                    <strong>
+                        keine
+                    </strong>
 
-                        </div>
-
-                    </div>
+                    <small>
+                        Ohne Artikelnummer gibt es keinen QR-Code, der Artikel
+                        kann nicht gescannt werden.
+                    </small>
 
                 </div>
 
             <?php endif; ?>
 
+            <div class="article-summary-stock">
 
-            <div class="stock-total">
-
-                <span>
+                <span class="article-summary-label">
                     Gesamtbestand
                 </span>
 

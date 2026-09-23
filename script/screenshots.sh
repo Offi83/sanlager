@@ -127,9 +127,10 @@ shot ausgebucht.png "${BASE}/?page=today_issues"
 shot mhd.png "${BASE}/?page=expiry"
 shot artikel.png "${BASE}/?page=articles"
 
+shot artikel-detail.png "${BASE}/?page=article&id=${ARTICLE_ID}"
+
 # Breiter aufgenommen, damit die Cards nebeneinander stehen
 # (bei 800 px brechen sie untereinander um).
-shot artikel-detail.png "${BASE}/?page=article&id=${ARTICLE_ID}" 1024 900
 shot kategorien.png "${BASE}/?page=categories" 1024 640
 shot lagerorte.png "${BASE}/?page=locations" 1024 640
 
