@@ -19,6 +19,8 @@ sanlager/
 │   └── ...
 ├── images/
 │   └── *.png          (Screenshots für das README)
+├── pages/
+│   └── <seite>.php    (Daten je Seite)
 ├── public/
 │   ├── css/
 │   ├── images/
@@ -49,6 +51,10 @@ sanlager/
 │   ├── StockActions.php
 │   ├── StockRepository.php
 │   └── WeeklyReport.php
+├── templates/
+│   ├── helpers.php    (Bausteine: Entsorgen-/Rückgängig-Button)
+│   ├── layout/        (header.php, footer.php)
+│   └── pages/         (<seite>.php, eine Vorlage pro Seite)
 ├── tests/
 ├── vendor/
 ├── .gitignore
@@ -66,11 +72,15 @@ Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind: der Woche
 
 Enthält die öffentlich erreichbaren Dateien der Anwendung.
 
-Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung. Pro Request passiert dort:
+Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung (bewusst ohne Framework). Pro Request passiert dort:
 
 1. **POST-Aktionen** – `$action` wird an die passende `*Actions`-Klasse aus `src/` weitergereicht (siehe unten).
-2. **GET-Datenaufbau** – anhand von `$page` werden die für die jeweilige Seite nötigen Daten aus den `*Repository`-Klassen geladen.
-3. **HTML** – ein großer if/elseif-Block anhand von `$page` rendert die passende Seite.
+2. **Seitendaten** – `pages/<seite>.php` lädt die Daten für die aufgerufene Seite (`?page=…`). Hier sind noch Weiterleitungen möglich, z. B. bei einer unbekannten Artikel-ID. Unbekannte Seiten zeigen die Buchen-Seite.
+3. **HTML** – `templates/layout/header.php` (Head, Navigation, Meldungen), dann die Seitenvorlage `templates/pages/<seite>.php`, dann `templates/layout/footer.php`.
+
+Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintragen, Vorlage `templates/pages/<name>.php` anlegen und bei Bedarf `pages/<name>.php` für die Daten; Menüpunkt in `templates/layout/header.php`.
+
+**Wichtig:** `use`-Anweisungen gelten in PHP nur für die eigene Datei. In Vorlagen und Seitendaten Klassen deshalb immer mit vollem Namen ansprechen, z. B. `new \LagerApp\QrCodeGenerator()` – `TemplatesTest` prüft das.
 
 `public/js/` enthält das Frontend-JavaScript als eigenständige Dateien (kein PHP-Templating nötig, da sie ausschließlich über DOM-IDs/Klassen und `fetch()` mit der Anwendung interagieren). `public/js/vendor/` enthält zusätzlich extern bezogene Bibliotheken (aktuell den QR-Code-Scanner `html5-qrcode`), die lokal mitgeliefert werden, damit SanLager ohne Internetzugriff funktioniert.
 

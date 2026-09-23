@@ -192,6 +192,7 @@ class PagesTest extends TestCase
         return [
             'Buchen' => ['?page=issue', 'Buchen'],
             'Startseite' => ['', 'Buchen'],
+            'Unbekannte Seite' => ['?page=gibt-es-nicht', 'Buchen'],
             'Heute ausgebucht' => ['?page=today_issues', 'Heute umgebucht'],
             'MHD-Übersicht' => ['?page=expiry', 'ABGELAUFEN'],
             'Artikelliste' => ['?page=articles', 'Mullbinde 8 cm'],
