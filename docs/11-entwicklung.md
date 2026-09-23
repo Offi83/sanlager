@@ -139,7 +139,14 @@ Die automatisierten Tests (PHPUnit) laufen gegen eine frische In-Memory-Datenban
 composer test
 ```
 
-Die Tests liegen unter `tests/` und decken vor allem die Bestandslogik in `StockRepository` ab (FIFO-Ausbuchung, Umbuchen, abgelaufene Chargen, Mindestbestand, heutige Ausbuchungen) sowie die Datums-Helper, die POST-Aktionen (`ActionsTest`) und das automatische Anwenden der Migrationen (`DatabaseTest`).
+Die Tests liegen unter `tests/`:
+
+* **Logik:** Bestandslogik in `StockRepository` (FIFO, Umbuchen, abgelaufene Chargen, Mindestbestand, Rückgängig, gleichzeitige Buchungen), POST-Aktionen (`ActionsTest`), Migrationen (`DatabaseTest`), Wochenbericht, Datensicherung, Sicherheitsfunktionen und Datums-Helper.
+* **Seiten (`PagesTest`):** startet einen eigenen PHP-Entwicklungsserver mit frischer Demo-Datenbank, ruft jede Seite auf und spielt die wichtigsten Abläufe über echtes HTTP durch (Buchen, Scanner, Entsorgen, Rückgängig, abgelehnte fremde Anfragen). Jede PHP-Warnung oder -Meldung in einer Seite lässt den Test scheitern.
+
+### Automatisch bei jedem Push (GitHub Actions)
+
+`.github/workflows/tests.yml` führt bei jedem Push und Pull Request auf GitHub aus: `composer validate`, PHP- und JavaScript-Syntaxprüfung sowie alle Tests. Das Ergebnis zeigt das Abzeichen oben im README bzw. der Reiter „Actions“ im GitHub-Repository. **Vor einem `./script/pull.sh` auf dem Server lohnt der Blick dorthin:** ist der letzte Lauf rot, nicht aktualisieren.
 
 **Hinweis zu Datumswerten:** MHDs werden immer im Format `JJJJ-MM-TT` gespeichert, da alle Ablaufprüfungen in SQL als Textvergleich laufen. Benutzereingaben daher stets über `normalizeDate()` prüfen. Das Datum „heute“ wird in PHP (Zeitzone `APP_TIMEZONE`) ermittelt und als Parameter an SQL übergeben, nicht per `date('now')` in SQLite (UTC).
 

@@ -28,7 +28,15 @@ Dotenv::createImmutable(__DIR__)->safeLoad();
  */
 date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Europe/Berlin');
 
-$dbFile = __DIR__ . '/' . ($_ENV['DB_DATABASE'] ?? 'database/database.sqlite');
+/*
+ * DB_DATABASE relativ zum Projektordner oder absolut (z. B. für Tests
+ * oder eine Datenbank außerhalb des Projekts).
+ */
+$dbFile = $_ENV['DB_DATABASE'] ?? 'database/database.sqlite';
+
+if (!str_starts_with($dbFile, '/')) {
+    $dbFile = __DIR__ . '/' . $dbFile;
+}
 
 if (!is_dir(dirname($dbFile))) {
     mkdir(dirname($dbFile), 0775, true);

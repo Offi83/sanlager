@@ -1,5 +1,7 @@
 # SanLager
 
+[![Tests](https://github.com/Offi83/sanlager/actions/workflows/tests.yml/badge.svg)](https://github.com/Offi83/sanlager/actions/workflows/tests.yml)
+
 ## Digitale Lagerverwaltung für Sanitätsmaterial
 
 **SanLager** ist eine schlanke Webanwendung zur Verwaltung von Sanitätsmaterial z.B. bei einer Hiorg.

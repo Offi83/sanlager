@@ -1,0 +1,44 @@
+# Prüft bei jedem Push und Pull Request, dass SanLager fehlerfrei ist,
+# bevor der Stand per script/pull.sh auf den Server kommt.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          # Wie composer.json ("php": "^8.5") und der Produktivserver.
+          php-version: '8.5'
+          extensions: pdo_sqlite, mbstring, intl
+          coverage: none
+          tools: composer
+
+      - name: composer.json prüfen
+        run: composer validate --strict
+
+      - name: Abhängigkeiten installieren
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: PHP-Syntax prüfen
+        run: |
+          find . -name '*.php' -not -path './vendor/*' -print0 \
+            | xargs -0 -n1 php -l > /dev/null
+
+      - name: JavaScript-Syntax prüfen
+        run: |
+          for file in public/js/*.js; do
+            node --check "$file"
+          done
+
+      - name: Tests ausführen (inkl. Seitentests über HTTP)
+        run: composer test
