@@ -109,6 +109,24 @@ class ActionsTest extends TestCase
         $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
     }
 
+    public function testIssueByFormKeepsSourceAndTargetForNextBooking(): void
+    {
+        $this->receive(2);
+        $boxId = $this->locations->create('Kiste 1', '');
+
+        $transfer = $this->stockActions()->dispatch('issue', [
+            'article_number' => 'A-001',
+            'source' => (string) $this->mainId,
+            'target' => (string) $boxId,
+        ]);
+
+        $this->assertStringContainsString('&source=' . $this->mainId . '&target=' . $boxId, $transfer->redirectUrl);
+
+        $issue = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
+
+        $this->assertStringContainsString('&source=' . $this->mainId . '&target=issue', $issue->redirectUrl);
+    }
+
     public function testStockMoveNormalizesGermanExpiryDate(): void
     {
         $result = $this->stockActions()->dispatch('stock_move', [

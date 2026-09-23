@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitButton =
         document.getElementById('issue-submit');
 
+    const modeHint =
+        document.getElementById('issue-mode');
+
 
     if (
         !scanButton
@@ -40,6 +43,7 @@ document.addEventListener('DOMContentLoaded', function () {
         || !sourceSelect
         || !targetSelect
         || !submitButton
+        || !modeHint
     ) {
         return;
     }
@@ -57,12 +61,41 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
+    function sourceLabel() {
+
+        const option =
+            sourceSelect.options[sourceSelect.selectedIndex];
+
+        return option
+            ? option.textContent.trim()
+            : '';
+
+    }
+
+
+    /*
+     * Button-Text und Modus-Anzeige über dem Kamerabild an die aktuelle
+     * Von/Ziel-Auswahl anpassen. Die Anzeige ist bewusst auffällig, weil
+     * beim Scannen der Blick auf der Kamera liegt und nicht auf den
+     * Auswahlfeldern darunter.
+     */
     function updateSubmitButton() {
 
+        const isIssue =
+            targetSelect.value === 'issue';
+
         submitButton.textContent =
-            targetSelect.value === 'issue'
+            isIssue
                 ? 'Ausbuchen'
                 : 'Nach ' + targetLabel() + ' umbuchen';
+
+        modeHint.textContent =
+            isIssue
+                ? 'Ausbuchen aus ' + sourceLabel()
+                : 'Umbuchen: ' + sourceLabel() + ' → ' + targetLabel();
+
+        modeHint.classList.toggle('issue-mode-issue', isIssue);
+        modeHint.classList.toggle('issue-mode-transfer', !isIssue);
 
     }
 
@@ -434,6 +467,86 @@ document.addEventListener('DOMContentLoaded', function () {
 
         }
     );
+
+
+    /*
+     * "Scanner starten" nur anzeigen, wenn dieses Gerät eine Kamera hat
+     * (im HTML standardmäßig ausgeblendet, damit er beim Laden nicht kurz
+     * aufblitzt). Ohne Kamera – z. B. am Pi-Terminal mit Hand-Scanner –
+     * bleibt mehr Platz für das Formular.
+     *
+     * Kamerazugriff gibt es nur auf sicheren Seiten (HTTPS/localhost).
+     * Vor der ersten Kamerafreigabe liefern Browser keine Gerätenamen,
+     * verraten aber, ob überhaupt eine Kamera ("videoinput") existiert –
+     * das reicht hier. iOS/iPadOS meldet das vor der Freigabe nicht
+     * zuverlässig; dort hat praktisch jedes Gerät eine Kamera, daher
+     * wird der Button dort immer angezeigt.
+     */
+    const isAppleMobile =
+        /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+
+    async function hasCamera() {
+
+        if (
+            !window.isSecureContext
+            || !navigator.mediaDevices
+            || !navigator.mediaDevices.enumerateDevices
+        ) {
+            return false;
+        }
+
+        if (isAppleMobile) {
+            return true;
+        }
+
+        try {
+
+            const devices =
+                await navigator.mediaDevices.enumerateDevices();
+
+            return devices.some(function (device) {
+                return device.kind === 'videoinput';
+            });
+
+        } catch (error) {
+
+            return false;
+
+        }
+
+    }
+
+
+    async function updateScanButtonVisibility() {
+
+        /*
+         * Während eines laufenden Scans nie ausblenden, sonst ließe sich
+         * der Scanner nicht mehr beenden.
+         */
+        if (scanning) {
+            return;
+        }
+
+        scanButton.hidden = !(await hasCamera());
+
+    }
+
+
+    updateScanButtonVisibility();
+
+    /*
+     * USB-Kamera ein- oder ausgesteckt: Button ohne Neuladen anpassen.
+     */
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+
+        navigator.mediaDevices.addEventListener(
+            'devicechange',
+            updateScanButtonVisibility
+        );
+
+    }
 
 
     /*

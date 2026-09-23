@@ -6,6 +6,10 @@ Der Raspberry Pi startet nach dem Einschalten automatisch die grafische Oberflä
 
 Die durch `.htaccess` geschützte HTTP-Basic-Authentication wird automatisch über das Chrome DevTools Protocol (CDP) durchgeführt.
 
+![Buchen-Seite auf dem Pi-Display](../images/buchen.png)
+
+Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite nimmt das Artikelnummer-Feld die volle Breite ein, darüber zeigt ein farbiger Balken die Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen). Die gewählte Richtung bleibt nach jeder Buchung erhalten, sodass mit einem **Hand-Barcodescanner** (tippt die Nummer ein und sendet Enter) mehrere Artikel nacheinander in dieselbe Richtung gebucht werden können. Der Button „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt – ohne Kamera bleibt er ausgeblendet.
+
 ## Hardware
 
 * Raspberry Pi 4

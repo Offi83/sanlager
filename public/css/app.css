@@ -125,6 +125,19 @@ a {
     margin-top: var(--space-4);
 }
 
+/*
+ * In Rastern (Cards nebeneinander) sorgt allein `gap` für den Abstand.
+ * Der Außenabstand von .card + .card würde sonst die rechte Card nach
+ * unten versetzen, und im einspaltigen Umbruch (schmale Bildschirme)
+ * addieren sich Außenabstände zum gap, statt wie bei normalen Blöcken
+ * zu verschmelzen.
+ */
+.category-layout > .card,
+.article-top-row > .card {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
 .card-header {
     padding: 18px var(--card-padding);
     background: #fafafa;
@@ -675,8 +688,116 @@ tbody tr:last-child td {
     min-height: 52px;
 }
 
-.issue-scan-button {
+/*
+ * Scanner-Button und Richtungsanzeige teilen sich eine Zeile, damit
+ * auf dem Pi-Display (800×480) genug Höhe für das Formular bleibt.
+ */
+.issue-toolbar {
+    display: flex;
+    align-items: stretch;
+    gap: var(--space-3);
     margin-bottom: var(--space-3);
+}
+
+.issue-scan-button {
+    flex-shrink: 0;
+}
+
+/*
+ * Standardmäßig ausgeblendet, booking.js blendet den Button nur bei
+ * vorhandener Kamera ein. Nötig, weil .button sonst display: inline-flex
+ * setzt und das hidden-Attribut aushebelt.
+ */
+.issue-scan-button[hidden] {
+    display: none;
+}
+
+/*
+ * Richtung der Buchung (über dem Kamerabild): rot = Material verlässt
+ * das Lager, blau = bleibt im Bestand, wechselt nur den Lagerort.
+ */
+.issue-mode {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-width: 0;
+    padding: 8px 16px;
+    border-left: 6px solid;
+    border-radius: var(--radius);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.issue-mode-issue {
+    border-color: var(--primary);
+    background: #fdecec;
+    color: #8c1016;
+}
+
+.issue-mode-transfer {
+    border-color: #1d5fbf;
+    background: #e8f0fb;
+    color: #123f80;
+}
+
+/*
+ * Mittlere Breiten (u. a. Pi-Display): Artikelnummer bekommt eine
+ * eigene, volle Zeile – sie ist das Feld, in das gescannt/getippt wird.
+ * Von, Ziel und Button folgen darunter nebeneinander.
+ */
+@media (max-width: 900px) {
+
+    .issue-form {
+        flex-wrap: wrap;
+    }
+
+    .issue-form .issue-article-field {
+        flex: 1 1 100%;
+    }
+
+    .issue-form .issue-target-field {
+        flex: 1 1 160px;
+    }
+
+    .issue-form .issue-article-field input {
+        font-size: 22px;
+    }
+}
+
+/*
+ * Querformat mit wenig Höhe (Pi-Display 800×480): Erklärtext ausblenden,
+ * Überschrift und Karte kompakter – die Richtungsanzeige erklärt, was
+ * beim Scannen passiert.
+ */
+@media (max-width: 900px) and (max-height: 560px) {
+
+    .issue-page .page-header {
+        margin-bottom: var(--space-2);
+    }
+
+    .issue-page .page-header p {
+        display: none;
+    }
+
+    .issue-card {
+        padding: var(--space-3);
+    }
+
+    .issue-mode {
+        font-size: 16px;
+    }
+}
+
+/* Smartphones: Button und Anzeige wieder untereinander. */
+@media (max-width: 520px) {
+
+    .issue-toolbar {
+        flex-direction: column;
+    }
+
+    .issue-mode {
+        padding: 10px 14px;
+    }
 }
 
 .issue-scanner {
@@ -1010,6 +1131,68 @@ nav a:hover {
 nav a.active {
     background: #cc0000;
     color: #fff;
+}
+
+/*
+ * Kompakte Kopfzeile, u. a. für das Pi-Touchdisplay (800×480): Die
+ * Navigation passt sonst nicht in die Breite (Seite scrollt seitlich,
+ * "Lagerorte" ist abgeschnitten). Das Logo bleibt, der Untertitel
+ * entfällt, Abstände werden enger.
+ */
+@media (max-width: 1000px) {
+
+    .topbar-inner {
+        gap: 1rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .brand img {
+        height: 42px;
+    }
+
+    .brand-text span {
+        display: none;
+    }
+
+    nav {
+        gap: 0.1rem;
+    }
+
+    nav a {
+        padding: 0.65rem 0.55rem;
+        font-size: 0.85rem;
+    }
+}
+
+/*
+ * Smartphones: Navigation in eine eigene Zeile unter dem Logo, bei
+ * Bedarf seitlich wischbar statt die ganze Seite zu verbreitern.
+ */
+@media (max-width: 640px) {
+
+    .topbar {
+        height: auto;
+        padding: 0;
+    }
+
+    .topbar-inner {
+        flex-wrap: wrap;
+        row-gap: 0.4rem;
+        width: 100%;
+        min-height: 0;
+    }
+
+    nav {
+        width: 100%;
+        margin-left: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    nav::-webkit-scrollbar {
+        display: none;
+    }
 }
 
 /* ==========================================================================

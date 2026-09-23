@@ -22,7 +22,9 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 * Verwaltung von Artikelstammdaten
 * Verwaltung und Sortierung von Kategorien
 * Verwaltung und Sortierung von Lagerorten
-* Buchen: Ausbuchen oder Umbuchen an einen anderen Lagerort per Scan oder manueller Eingabe
+* Buchen: Ausbuchen oder Umbuchen an einen anderen Lagerort per Kamera, Hand-Barcodescanner oder manueller Eingabe – immer das älteste MHD zuerst
+* gut sichtbare Anzeige der Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen); die gewählte Richtung bleibt für weitere Buchungen erhalten
+* „Scanner starten“ erscheint nur auf Geräten mit Kamera
 * Wöchentlicher Bericht per E-Mail: abgelaufenes und bald ablaufendes Material, Unterschreitung der Mindestbestände, Entnahmen der Woche
 * QR-Code je Artikel und Etikettendruck
 * einfache und übersichtliche Bedienung
@@ -44,17 +46,32 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 ---
 
 ## Screenshots
-*Ausbuchen - auch via Kamera*
-![Ausbuchen - auch via Kamera](images/ausbuchen.png)
 
-*Artikelübersicht*
-![Artikelübersicht](images/artikel.png)
+Die Screenshots zeigen Beispieldaten im Format des Raspberry-Pi-Displays (800×480). Sie werden mit `./script/screenshots.sh` erzeugt (siehe [Entwicklung](docs/11-entwicklung.md#screenshots-aktualisieren)).
+
+*Buchen – hier eine Umbuchung vom Hauptlager in einen Rucksack. Auf Geräten mit Kamera erscheint zusätzlich „Scanner starten“.*
+![Buchen](images/buchen.png)
 
 *Heute ausgebuchte Artikel*
 ![Heute ausgebuchte Artikel](images/ausgebucht.png)
 
-*Kategorien Anlegen/Sortieren/Anpassen*
-![Anlegen/Sortieren/Anpassen der Kategorien](images/kategorien.png)
+*MHD-Übersicht – abgelaufenes und bald ablaufendes Material je Lagerort*
+![MHD-Übersicht](images/mhd.png)
+
+*Artikelübersicht – rot: unter Mindestbestand*
+![Artikelübersicht](images/artikel.png)
+
+*Artikel mit QR-Code, Bestand und Mindestbestand je Lagerort*
+![Artikeldetail](images/artikel-detail.png)
+
+*Kategorien anlegen, sortieren und anpassen*
+![Kategorien](images/kategorien.png)
+
+*Lagerorte anlegen, sortieren und deaktivieren*
+![Lagerorte](images/lagerorte.png)
+
+*Wochenbericht per E-Mail*
+![Wochenbericht](images/wochenbericht.png)
 
 ---
 

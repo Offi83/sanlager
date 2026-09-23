@@ -16,6 +16,8 @@ sanlager/
 │       └── ...
 ├── docs/
 │   └── ...
+├── images/
+│   └── *.png          (Screenshots für das README)
 ├── public/
 │   ├── css/
 │   ├── images/
@@ -24,8 +26,10 @@ sanlager/
 │   │   └── *.js
 │   └── index.php
 ├── script/
+│   ├── demo-data.php
 │   ├── pull.sh
-│   └── push.sh
+│   ├── push.sh
+│   └── screenshots.sh
 ├── src/
 │   ├── ActionResult.php
 │   ├── ArticleActions.php
@@ -94,7 +98,7 @@ wird **nicht über GitHub verteilt**.
 
 ### `script/`
 
-Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`), siehe die Abschnitte weiter unten auf dieser Seite.
+Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`) sowie für die Doku (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
 
 ### `docs/`
 
@@ -136,6 +140,30 @@ composer test
 Die Tests liegen unter `tests/` und decken vor allem die Bestandslogik in `StockRepository` ab (FIFO-Ausbuchung, Umbuchen, abgelaufene Chargen, Mindestbestand, heutige Ausbuchungen) sowie die Datums-Helper, die POST-Aktionen (`ActionsTest`) und das automatische Anwenden der Migrationen (`DatabaseTest`).
 
 **Hinweis zu Datumswerten:** MHDs werden immer im Format `JJJJ-MM-TT` gespeichert, da alle Ablaufprüfungen in SQL als Textvergleich laufen. Benutzereingaben daher stets über `normalizeDate()` prüfen. Das Datum „heute“ wird in PHP (Zeitzone `APP_TIMEZONE`) ermittelt und als Parameter an SQL übergeben, nicht per `date('now')` in SQLite (UTC).
+
+## Screenshots aktualisieren
+
+Die Screenshots im README (`images/*.png`) werden automatisch erzeugt:
+
+```bash
+./script/screenshots.sh
+```
+
+Das Skript
+
+1. legt mit `script/demo-data.php` eine **Demo-Datenbank mit Beispieldaten** an (Hauptlager, drei Rucksäcke, 15 Artikel, abgelaufene und bald ablaufende Chargen, Mindestbestände, Entnahmen von heute),
+2. startet dafür einen eigenen PHP-Entwicklungsserver,
+3. nimmt die Seiten mit Chrome/Chromium im Headless-Modus auf, im Format des Pi-Displays (800×480, doppelte Auflösung). Seiten mit zwei Spalten werden breiter aufgenommen, damit beide Spalten zu sehen sind,
+4. räumt Demo-Datenbank und Server anschließend wieder auf.
+
+Die produktive `database.sqlite` wird dabei **nicht** verwendet. Gefunden wird Chrome unter macOS und Linux automatisch, sonst den Pfad über `CHROME=/pfad/zu/chrome ./script/screenshots.sh` angeben. Außerdem wird `sqlite3` benötigt.
+
+Die Demo-Datenbank lässt sich auch einzeln anlegen, z. B. zum Ausprobieren:
+
+```bash
+php script/demo-data.php database/demo.sqlite
+DB_DATABASE=database/demo.sqlite php -d variables_order=EGPCS -S localhost:8080 -t public
+```
 
 ## Änderungen zu GitHub übertragen
 

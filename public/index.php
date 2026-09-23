@@ -248,6 +248,44 @@ if ($page === 'issue') {
      * aus) und wird zusätzlich serverseitig in StockActions geprüft.
      */
     $allLocations = $locationRepository->all();
+
+    /*
+     * Von/Ziel der vorherigen Buchung beibehalten: nach Erfolg kommen
+     * sie über den Redirect (GET, siehe StockActions::issue()), nach
+     * einem Fehler aus dem abgeschickten Formular (POST). Ungültige oder
+     * inzwischen deaktivierte Lagerorte fallen auf die Standardauswahl
+     * (Hauptlager, Ausbuchen) zurück.
+     */
+    $requestValue = static fn (string $key): string =>
+        is_string($_POST[$key] ?? null)
+            ? $_POST[$key]
+            : (is_string($_GET[$key] ?? null) ? $_GET[$key] : '');
+
+    $locationNamesById = array_column($allLocations, 'name', 'id');
+
+    $issueSourceId = (int) $requestValue('source');
+
+    if (!isset($locationNamesById[$issueSourceId])) {
+        $issueSourceId = (int) (array_search('Hauptlager', $locationNamesById, true)
+            ?: array_key_first($locationNamesById));
+    }
+
+    $issueTarget = $requestValue('target');
+
+    if (
+        $issueTarget !== 'issue'
+        && (
+            !isset($locationNamesById[(int) $issueTarget])
+            || (int) $issueTarget === $issueSourceId
+        )
+    ) {
+        $issueTarget = 'issue';
+    }
+
+    $issueModeText = $issueTarget === 'issue'
+        ? 'Ausbuchen aus ' . ($locationNamesById[$issueSourceId] ?? '')
+        : 'Umbuchen: ' . ($locationNamesById[$issueSourceId] ?? '')
+            . ' → ' . $locationNamesById[(int) $issueTarget];
 }
 
 if ($page === 'article' || $page === 'label') {
@@ -1632,13 +1670,25 @@ if ($page === 'article' || $page === 'label') {
 
             <div class="card issue-card">
 
-                <button
-                    type="button"
-                    class="button button-primary issue-scan-button"
-                    id="issue-start-scan"
-                >
-                    Scanner starten
-                </button>
+                <div class="issue-toolbar">
+
+                    <button
+                        type="button"
+                        class="button button-primary issue-scan-button"
+                        id="issue-start-scan"
+                        hidden
+                    >
+                        Scanner starten
+                    </button>
+
+                    <?php /* Richtung der Buchung, gut sichtbar direkt über dem Kamerabild – wird von booking.js aktualisiert. */ ?>
+                    <div
+                        id="issue-mode"
+                        class="issue-mode <?= $issueTarget === 'issue' ? 'issue-mode-issue' : 'issue-mode-transfer' ?>"
+                        aria-live="polite"
+                    ><?= h($issueModeText) ?></div>
+
+                </div>
 
                 <div
                     id="issue-scanner"
@@ -1669,7 +1719,7 @@ if ($page === 'article' || $page === 'label') {
                         value="issue"
                     >
 
-                    <label>
+                    <label class="issue-article-field">
 
                         <span>
                             Artikelnummer
@@ -1702,7 +1752,7 @@ if ($page === 'article' || $page === 'label') {
 
                                 <option
                                     value="<?= (int) $sourceLocation['id'] ?>"
-                                    <?= $sourceLocation['name'] === 'Hauptlager' ? 'selected' : '' ?>
+                                    <?= (int) $sourceLocation['id'] === $issueSourceId ? 'selected' : '' ?>
                                 >
                                     <?= h($sourceLocation['name']) ?>
                                 </option>
@@ -1724,13 +1774,16 @@ if ($page === 'article' || $page === 'label') {
                             id="issue-target"
                         >
 
-                            <option value="issue" selected>
+                            <option value="issue" <?= $issueTarget === 'issue' ? 'selected' : '' ?>>
                                 Ausbuchen
                             </option>
 
                             <?php foreach ($allLocations as $targetLocation): ?>
 
-                                <option value="<?= (int) $targetLocation['id'] ?>">
+                                <option
+                                    value="<?= (int) $targetLocation['id'] ?>"
+                                    <?= (string) $targetLocation['id'] === $issueTarget ? 'selected' : '' ?>
+                                >
                                     <?= h($targetLocation['name']) ?>
                                 </option>
 
@@ -2765,6 +2818,7 @@ if ($page === 'article' || $page === 'label') {
 <script src="/js/booking.js" defer></script>
 <script src="/js/stock-form.js" defer></script>
 <script src="/js/article-number-suggestion.js" defer></script>
+<script src="/js/navigation.js" defer></script>
 
 
 

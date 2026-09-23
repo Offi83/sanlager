@@ -172,7 +172,15 @@ class StockActions
                     $expiryText .
                     ')'
                 ) .
-                ($expiryWarning !== '' ? '&expired=1' : '')
+                ($expiryWarning !== '' ? '&expired=1' : '') .
+                /*
+                 * Von/Ziel mitgeben, damit die nächste Buchung (z. B. per
+                 * Hand-Barcodescanner mit Enter) wieder in dieselbe
+                 * Richtung geht, statt auf "Hauptlager/Ausbuchen"
+                 * zurückzufallen – wie beim Kamera-Scan ohne Neuladen.
+                 */
+                '&source=' . $sourceLocationId .
+                '&target=' . urlencode($target === '' ? 'issue' : $target)
             );
         } catch (Throwable $exception) {
             if ($isAjax) {
