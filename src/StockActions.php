@@ -137,9 +137,15 @@ class StockActions
                 $actionLabel = 'umgebucht nach ' . $targetLocation['name'];
             }
 
-            $expiryText = $result['expiry_date']
-                ? formatDate($result['expiry_date'])
-                : 'ohne MHD';
+            /*
+             * Bei Artikeln ohne MHD (z. B. Mullbinden) wäre "ohne MHD" nur
+             * Rauschen – dann entfällt die Angabe ganz.
+             */
+            $expiryText = match (true) {
+                $result['expiry_date'] !== null => formatDate($result['expiry_date']),
+                (int) $article['has_expiry'] === 1 => 'ohne MHD',
+                default => '',
+            };
 
             /*
              * Es wird stets die Charge mit dem ältesten MHD gebucht.
@@ -176,7 +182,7 @@ class StockActions
                     . '&source=' . $sourceLocationId
                     . '&target=' . urlencode($target === '' ? 'issue' : $target),
                 $article['name'] . ' – 1 ' . $article['unit'] . ' '
-                    . $actionLabel . ' (' . $expiryText . ')',
+                    . $actionLabel . ($expiryText !== '' ? ' (' . $expiryText . ')' : ''),
                 // Abgelaufene Charge gebucht: rot statt grün hervorheben.
                 $expiryWarning !== '' ? 'error' : 'success'
             );
@@ -273,12 +279,24 @@ class StockActions
         $batchId = null;
 
         /*
+         * Rückfrage zu einem ungewöhnlichen MHD bestätigt, siehe
+         * assertPlausibleExpiry().
+         */
+        $expiryConfirmed = $this->string($input, 'confirm_expiry') === '1';
+
+        /*
          * Neues MHD
          */
         if ($batchSelection === 'new') {
             if ($movementType !== 'receipt') {
                 throw new RuntimeException(
                     'Ein neues MHD kann nur beim Einlagern angelegt werden.'
+                );
+            }
+
+            if ((int) $article['has_expiry'] !== 1) {
+                throw new RuntimeException(
+                    'Dieser Artikel hat kein MHD (siehe „Artikel bearbeiten“).'
                 );
             }
 
@@ -300,6 +318,8 @@ class StockActions
             }
 
             $expiryDate = $normalizedExpiryDate;
+
+            $this->assertPlausibleExpiry($expiryDate, $expiryConfirmed);
 
             $batchId = $this->batches->findOrCreate(
                 $articleId,
@@ -331,6 +351,10 @@ class StockActions
                 throw new RuntimeException(
                     'Das MHD gehört nicht zu diesem Artikel.'
                 );
+            }
+
+            if ($movementType === 'receipt') {
+                $this->assertPlausibleExpiry((string) $batch['expiry_date'], $expiryConfirmed);
             }
         }
 
@@ -376,6 +400,42 @@ class StockActions
             . '&to=' . urlencode($to),
             $message
         );
+    }
+
+    /**
+     * Prüft das MHD beim Einlagern auf Tippfehler: Offensichtlich falsche
+     * Jahre (vor 2000, mehr als 30 Jahre voraus – z. B. "0027" bei
+     * Handeingabe) werden abgelehnt. Ein MHD in der Vergangenheit oder
+     * mehr als 10 Jahre voraus kann stimmen, muss aber bestätigt werden
+     * (Rückfrage in stock-form.js, setzt `confirm_expiry=1`).
+     *
+     * @param string $expiryDate Y-m-d
+     */
+    private function assertPlausibleExpiry(string $expiryDate, bool $confirmed): void
+    {
+        if ($expiryDate < '2000-01-01' || $expiryDate > date('Y-m-d', strtotime('+30 years'))) {
+            throw new RuntimeException(
+                'Ungültiges MHD: ' . formatDate($expiryDate) . '. Bitte das Jahr prüfen.'
+            );
+        }
+
+        if ($confirmed) {
+            return;
+        }
+
+        if ($expiryDate < date('Y-m-d')) {
+            throw new RuntimeException(
+                'Das MHD ' . formatDate($expiryDate) . ' ist bereits abgelaufen. '
+                . 'Bitte prüfen und beim Einlagern bestätigen.'
+            );
+        }
+
+        if ($expiryDate > date('Y-m-d', strtotime('+10 years'))) {
+            throw new RuntimeException(
+                'Das MHD ' . formatDate($expiryDate) . ' liegt über 10 Jahre in der Zukunft. '
+                . 'Bitte prüfen und beim Einlagern bestätigen.'
+            );
+        }
     }
 
     /**
@@ -427,8 +487,9 @@ class StockActions
     }
 
     /**
-     * Macht heutige Buchungen rückgängig (Seite "Heute ausgebucht"): je
-     * nach Button ein Stück oder die ganze Zeile, jeweils als Gegenbuchung.
+     * Macht heutige Buchungen rückgängig (Seite "Heute"): die übergebene
+     * Menge – der Button nimmt bewusst die ganze Zeile zurück –, als
+     * Gegenbuchung.
      * `batch_id` leer/0 bedeutet "ohne MHD". Bei Umbuchungen bezeichnet
      * `location_id` die ursprüngliche Quelle, `to_location_id` das Ziel.
      *

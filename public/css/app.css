@@ -31,6 +31,15 @@
     box-sizing: border-box;
 }
 
+/*
+ * Das hidden-Attribut muss immer ausblenden. Sonst hebeln Regeln wie
+ * `label { display: flex }` oder `.button { display: inline-flex }` es
+ * aus, und per Skript "ausgeblendete" Felder bleiben sichtbar.
+ */
+[hidden] {
+    display: none !important;
+}
+
 html {
     font-family:
         -apple-system,
@@ -292,6 +301,34 @@ label > span {
 
 .form-actions .button {
     min-width: 150px;
+}
+
+/*
+ * Ankreuzfeld mit Beschriftung daneben (z. B. "Artikel hat ein MHD"),
+ * große Tippfläche fürs Touchdisplay.
+ */
+label.checkbox-field {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 22px;
+    cursor: pointer;
+}
+
+label.checkbox-field input {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--primary);
+}
+
+label.checkbox-field small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted-light);
+    font-weight: 400;
 }
 
 .form-help {
@@ -761,15 +798,6 @@ tbody tr:last-child td {
 
 .issue-scan-button {
     flex-shrink: 0;
-}
-
-/*
- * Standardmäßig ausgeblendet, booking.js blendet den Button nur bei
- * vorhandener Kamera ein. Nötig, weil .button sonst display: inline-flex
- * setzt und das hidden-Attribut aushebelt.
- */
-.issue-scan-button[hidden] {
-    display: none;
 }
 
 /*

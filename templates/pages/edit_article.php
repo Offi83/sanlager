@@ -1,20 +1,5 @@
         <div class="edit-article-page">
 
-        <?php
-
-        $articleId = (int) ($_GET['id'] ?? 0);
-
-        $editArticle =
-            $articles->find($articleId);
-
-        if (!$editArticle) {
-            redirect('?page=articles');
-        }
-
-        $editArticleStock = $stock->getPhysicalStock($articleId);
-
-        ?>
-
         <div class="page-header">
 
             <div>
@@ -160,6 +145,31 @@
                         name="description"
                         rows="3"
                     ><?= h($editArticle['description']) ?></textarea>
+
+                </label>
+
+                <?php /* Verstecktes 0 davor: Nicht angekreuzt kommt sonst gar nichts an. */ ?>
+                <input
+                    type="hidden"
+                    name="has_expiry"
+                    value="0"
+                >
+
+                <label class="checkbox-field">
+
+                    <input
+                        type="checkbox"
+                        name="has_expiry"
+                        value="1"
+                        <?= (int) $editArticle['has_expiry'] === 1 ? 'checked' : '' ?>
+                    >
+
+                    <span>
+                        Artikel hat ein MHD
+                        <small class="form-hint">
+                            Ohne Haken (z. B. Mullbinden) entfällt die MHD-Auswahl beim Buchen.
+                        </small>
+                    </span>
 
                 </label>
 

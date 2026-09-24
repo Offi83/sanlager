@@ -132,6 +132,31 @@
 
                 </label>
 
+                <?php /* Verstecktes 0 davor: Nicht angekreuzt kommt sonst gar nichts an. */ ?>
+                <input
+                    type="hidden"
+                    name="has_expiry"
+                    value="0"
+                >
+
+                <label class="checkbox-field">
+
+                    <input
+                        type="checkbox"
+                        name="has_expiry"
+                        value="1"
+                        checked
+                    >
+
+                    <span>
+                        Artikel hat ein MHD
+                        <small class="form-hint">
+                            Ohne Haken (z. B. Mullbinden) entfällt die MHD-Auswahl beim Buchen.
+                        </small>
+                    </span>
+
+                </label>
+
 
                 <div class="form-actions">
 

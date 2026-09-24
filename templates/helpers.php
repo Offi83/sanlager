@@ -39,7 +39,7 @@ function renderDisposeForm(
 }
 
 /**
- * Rückgängig-Button (Pfeil) für eine Zeile auf "Heute ausgebucht": nimmt
+ * Rückgängig-Button (Pfeil) für eine Zeile auf "Heute": nimmt
  * nach Rückfrage die ganze Zeile zurück. Gegenbuchung statt Löschen,
  * siehe StockActions::undoToday().
  *

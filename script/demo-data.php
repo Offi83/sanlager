@@ -71,7 +71,7 @@ $day = static fn (string $modifier): string => date('Y-m-d', strtotime($modifier
  * Hauptlager], Mindestbestand Hauptlager, Soll je Rucksack]
  */
 $demoArticles = [
-    ['verb-mullbinde-8', 'Mullbinde 8 cm', 'Stück', 'Verbandmaterial', [$day('+3 years') => 40], 20, 4],
+    ['verb-mullbinde-8', 'Mullbinde 8 cm', 'Stück', 'Verbandmaterial', ['' => 40], 20, 4],
     ['verb-vp-m', 'Verbandpäckchen M', 'Stück', 'Verbandmaterial', [$day('+50 days') => 12, $day('+4 years') => 30], 25, 3],
     ['verb-heftpflaster-25', 'Heftpflaster 2,5 cm', 'Rolle', 'Verbandmaterial', ['' => 6], 10, 1],
     ['verb-kompresse-10', 'Kompresse 10 × 10 cm', 'Stück', 'Verbandmaterial', [$day('+2 years') => 100], 50, 10],
@@ -91,7 +91,13 @@ $demoArticles = [
 $ids = [];
 
 foreach ($demoArticles as [$number, $name, $unit, $category, $stockByExpiry, $mainMinimum, $bagMinimum]) {
-    $articleId = $articles->create($number, $name, '', $unit, (int) $categoryIds[$category]);
+    /*
+     * Artikel, die nur Bestand ohne MHD haben (z. B. Mullbinden), sind
+     * als "ohne MHD" angelegt – beim Buchen entfällt dann die MHD-Auswahl.
+     */
+    $hasExpiry = array_keys($stockByExpiry) !== [''];
+
+    $articleId = $articles->create($number, $name, '', $unit, (int) $categoryIds[$category], $hasExpiry);
     $ids[$number] = $articleId;
 
     foreach ($stockByExpiry as $expiry => $quantity) {

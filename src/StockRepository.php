@@ -896,7 +896,7 @@ class StockRepository
     /**
      * Entnimmt eine abgelaufene Charge an einem Lagerort vollständig
      * (Entsorgung). Gebucht wird als `disposal` – das zählt nicht als
-     * Ausbuchung/Verbrauch (weder in "Heute ausgebucht" noch in den
+     * Ausbuchung/Verbrauch (weder in den Ausbuchungen auf "Heute" noch in den
      * Entnahmen des Wochenberichts).
      *
      * @return int entsorgte Menge

@@ -33,6 +33,36 @@ class TemplatesTest extends TestCase
     }
 
     /**
+     * Vorlagen geben nur aus: Daten laden, Eingaben lesen und weiterleiten
+     * gehören nach pages/. Eine Weiterleitung aus der Vorlage käme zu spät
+     * (der Seitenkopf ist schon gesendet) und klappt nur, solange PHP die
+     * Ausgabe zufällig puffert.
+     */
+    public function testPageTemplatesDoNotLoadDataOrRedirect(): void
+    {
+        foreach (glob(dirname(__DIR__) . '/templates/pages/*.php') as $file) {
+            $code = file_get_contents($file);
+
+            $this->assertDoesNotMatchRegularExpression(
+                '/redirect\(|\$_(GET|POST)\b|\$(stock|articles|reports|batches|categories|locationRepository)->/',
+                $code,
+                'templates/pages/' . basename($file) . ': gehört nach pages/'
+            );
+        }
+    }
+
+    /**
+     * Ausblenden per hidden-Attribut (z. B. MHD-Auswahl bei Artikeln ohne
+     * MHD) wirkt nur, wenn keine display-Regel es überstimmt.
+     */
+    public function testHiddenAttributeAlwaysHides(): void
+    {
+        $css = file_get_contents(dirname(__DIR__) . '/public/css/app.css');
+
+        $this->assertMatchesRegularExpression('/\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/', $css);
+    }
+
+    /**
      * Findet per Tokenizer unqualifizierte Verwendungen von Klassen aus
      * dem Namensraum LagerApp (`new Foo`, `Foo::BAR`, `Foo::bar()`).
      * Globale Klassen wie DateTimeImmutable funktionieren auch ohne

@@ -223,7 +223,12 @@ class PagesTest extends TestCase
 
     public function testUnknownIdsRedirectInsteadOfFailing(): void
     {
-        foreach (['?page=article&id=999999' => 'page=articles', '?page=location&id=999999' => 'page=locations'] as $path => $target) {
+        foreach ([
+            '?page=article&id=999999' => 'page=articles',
+            '?page=edit_article&id=999999' => 'page=articles',
+            '?page=label&id=999999' => 'page=articles',
+            '?page=location&id=999999' => 'page=locations',
+        ] as $path => $target) {
             $response = self::request($path);
 
             $this->assertSame(302, $response['status'], $path);
@@ -272,6 +277,57 @@ class PagesTest extends TestCase
 
         // Kategorie-Überschriften: Heftpflaster (Verbandmaterial) fehlt im Hauptlager.
         $this->assertMatchesRegularExpression('#article-category-row.*?<th colspan="4">\s*<span class="article-category-name">\s*Verbandmaterial#s', $response['body']);
+    }
+
+    public function testDeletedArticleCannotBeOpenedByAddress(): void
+    {
+        self::$db->exec("INSERT INTO articles (article_number, name, unit, active) VALUES ('alt-geloescht', 'Gelöschter Artikel', 'Stück', 0)");
+        $deletedId = self::id("SELECT id FROM articles WHERE article_number = 'alt-geloescht'");
+
+        foreach (['article', 'edit_article', 'label'] as $page) {
+            $response = self::request('?page=' . $page . '&id=' . $deletedId);
+
+            $this->assertSame(302, $response['status'], $page);
+            $this->assertStringContainsString('page=articles', (string) $response['location'], $page);
+        }
+    }
+
+    public function testArticlePageExplainsExpiredStockAndHidesEmptyBatches(): void
+    {
+        $articleId = self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'");
+
+        // Eine aufgebrauchte Charge: steht nicht mehr in der MHD-Auswahl.
+        self::$db->exec("INSERT INTO batches (article_id, expiry_date) VALUES ($articleId, '2031-05-31')");
+
+        $body = self::request('?page=article&id=' . $articleId)['body'];
+
+        // Rucksack 1 hat nur abgelaufene Messstreifen.
+        $this->assertMatchesRegularExpression('#davon 10 abgelaufen#', $body);
+        $this->assertStringNotContainsString('31.05.2031', $body);
+
+        // Abgelaufene Chargen sind für das Einlagern markiert.
+        $this->assertMatchesRegularExpression('#data-expired="1"\s+data-expiry="\d{4}-\d{2}-\d{2}"#', $body);
+    }
+
+    public function testArticleWithoutExpiryHidesMhdFields(): void
+    {
+        $bandage = self::request('?page=article&id=' . self::id("SELECT id FROM articles WHERE article_number = 'verb-mullbinde-8'"))['body'];
+
+        $this->assertCleanPage(['status' => 200, 'body' => $bandage], 'Artikel ohne MHD');
+        $this->assertStringNotContainsString('Bestand nach MHD', $bandage);
+        $this->assertStringNotContainsString('Neues MHD', $bandage);
+        $this->assertMatchesRegularExpression('#id="batch-selection-field"\s+hidden#', $bandage);
+        $this->assertStringContainsString('data-has-expiry="0"', $bandage);
+
+        $strips = self::request(self::resolve('?page=article&id={article}'))['body'];
+
+        $this->assertStringContainsString('Bestand nach MHD', $strips);
+        $this->assertStringContainsString('Neues MHD', $strips);
+        $this->assertMatchesRegularExpression('#id="batch-selection-field"\s+>#', $strips);
+
+        // Ankreuzfeld beim Bearbeiten spiegelt die Einstellung.
+        $edit = self::request('?page=edit_article&id=' . self::id("SELECT id FROM articles WHERE article_number = 'verb-mullbinde-8'"))['body'];
+        $this->assertMatchesRegularExpression('#name="has_expiry"\s+value="1"\s+>#', $edit);
     }
 
     public function testBookingShowsMessageOnceAndKeepsDirection(): void
@@ -360,7 +416,8 @@ class PagesTest extends TestCase
             'from' => 'receipt',
             'to' => $mainId,
             'batch_selection' => 'new',
-            'expiry_date' => '31.12.2030',
+            // Relativ zu heute, sonst irgendwann "abgelaufen" (Rückfrage).
+            'expiry_date' => date('d.m.Y', strtotime('+2 years')),
             'quantity' => 2,
         ]);
 
@@ -369,7 +426,7 @@ class PagesTest extends TestCase
         $article = self::request((string) $move['location']);
         $this->assertCleanPage($article, 'Artikel nach Einlagern');
         $this->assertStringContainsString('2 Stück eingelagert in Hauptlager', $article['body']);
-        $this->assertStringContainsString('MHD: 31.12.2030', $article['body']);
+        $this->assertStringContainsString('MHD: ' . date('d.m.Y', strtotime('+2 years')), $article['body']);
     }
 
     public function testInvalidInputShowsMessageNotError(): void

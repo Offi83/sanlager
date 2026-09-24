@@ -1,62 +1,5 @@
         <div class="article-detail-page">
 
-        <?php
-
-        $articleSummary = $stock->getStockSummary(
-            (int) $article['id']
-        );
-
-        $totalStock = $articleSummary['total'];
-
-        $qrCode = null;
-
-        if (!empty($article['article_number'])) {
-            $qrGenerator = new \LagerApp\QrCodeGenerator();
-            $qrCode = $qrGenerator->generate(
-                $article['article_number']
-            );
-        }
-
-        $isLow = $articleSummary['is_low'];
-
-        /*
-         * Standard-Lagerort: der erste der festgelegten Reihenfolge
-         * ($locations ist danach sortiert), siehe
-         * LocationRepository::defaultLocation().
-         */
-        $mainLocationId = $locations ? (int) $locations[0]['id'] : null;
-
-        /*
-         * "Bestand buchen": Von/Nach der letzten Buchung beibehalten
-         * (kommen per Redirect, siehe StockActions::stockMove()), sonst
-         * Einlagern in den Standard-Lagerort. "receipt" = Einlagern (Von),
-         * "issue" = Ausbuchen (Nach), sonst Lagerort-ID.
-         */
-        $locationIds = array_map('strval', array_column($locations, 'id'));
-
-        $stockFormFrom = in_array($_GET['from'] ?? '', ['receipt', ...$locationIds], true)
-            ? $_GET['from']
-            : 'receipt';
-
-        $stockFormTo = in_array($_GET['to'] ?? '', ['issue', ...$locationIds], true)
-            ? $_GET['to']
-            : (string) $mainLocationId;
-
-        /*
-         * Bestand je Charge ("none" = ohne MHD) und Lagerort, damit die
-         * MHD-Auswahl beim Ausbuchen/Umbuchen zeigt, was am gewählten
-         * Lagerort tatsächlich liegt (siehe stock-form.js).
-         */
-        $batchStockByLocation = [];
-
-        foreach ($articleBatchesByLocation as $row) {
-            $batchKey = $row['batch_id'] === null ? 'none' : (string) (int) $row['batch_id'];
-            $batchStockByLocation[$batchKey][(int) $row['location_id']] = (int) $row['quantity'];
-        }
-
-        ?>
-
-
         <div class="page-header">
 
             <div>
@@ -162,8 +105,8 @@
                     Gesamtbestand
                 </span>
 
-                <strong class="<?= $isLow ? 'stock-low' : '' ?>">
-                    <?= $totalStock ?>
+                <strong class="<?= $articleSummary['is_low'] ? 'stock-low' : '' ?>">
+                    <?= $articleSummary['total'] ?>
                     <?= h($article['unit']) ?>
                 </strong>
 
@@ -224,6 +167,14 @@
 
                             $locationIsLow = $locationMinimum !== null
                                 && (int) $location['usable_quantity'] < $locationMinimum;
+
+                            /*
+                             * Die Menge enthält Abgelaufenes, der Mindestbestand
+                             * zählt es nicht – ohne Hinweis wirkte "10 Stück" in
+                             * Rot bei Soll 10 wie ein Rechenfehler.
+                             */
+                            $locationExpired = $locationQuantity
+                                - (int) $location['usable_quantity'];
                             ?>
 
                             <tr>
@@ -239,6 +190,12 @@
                                 <td class="<?= ($locationQuantity < 0 || $locationIsLow) ? 'stock-low' : '' ?>">
                                     <?= $locationQuantity ?>
                                     <?= h($article['unit']) ?>
+
+                                    <?php if ($locationExpired > 0): ?>
+                                        <span class="warning">
+                                            davon <?= $locationExpired ?> abgelaufen
+                                        </span>
+                                    <?php endif; ?>
                                 </td>
 
                                 <td>
@@ -282,6 +239,8 @@
             </form>
 
         </div>
+
+        <?php if ($showExpiryCard): ?>
 
         <div class="card">
 
@@ -377,6 +336,8 @@
 
         </div>
 
+        <?php endif; ?>
+
         <div class="card">
 
             <div class="card-header">
@@ -392,6 +353,7 @@
                 method="post"
                 class="form stock-form"
                 id="stock-form"
+                data-has-expiry="<?= $articleHasExpiry ? '1' : '0' ?>"
             >
 
                 <input
@@ -406,6 +368,13 @@
                     value="<?= (int) $article['id'] ?>"
                 >
 
+                <?php /* Rückfrage zu ungewöhnlichem MHD bestätigt, siehe stock-form.js. */ ?>
+                <input
+                    type="hidden"
+                    name="confirm_expiry"
+                    id="confirm_expiry"
+                    value="0"
+                >
 
                 <div class="form-grid">
 
@@ -491,7 +460,18 @@
                     </label>
 
 
-                    <label>
+                    <?php
+                    /*
+                     * Artikel ohne MHD: Auswahl ausgeblendet ("Ohne MHD" bleibt
+                     * gewählt). Liegt noch alter Bestand mit MHD da, blendet
+                     * stock-form.js sie ein, solange davon am Von-Lagerort
+                     * etwas liegt.
+                     */
+                    ?>
+                    <label
+                        id="batch-selection-field"
+                        <?= $articleHasExpiry ? '' : 'hidden' ?>
+                    >
 
                         <span>
                             MHD
@@ -520,11 +500,13 @@
                                 <option
                                     value="<?= (int) $batch['batch_id'] ?>"
                                     data-quantity="<?= $batchQuantity ?>"
+                                    data-expired="<?= expiryInfo($batch['expiry_date'])['class'] === 'expiry-expired' ? '1' : '0' ?>"
+                                    data-expiry="<?= h($batch['expiry_date']) ?>"
                                     data-label="MHD: <?= h(formatDate($batch['expiry_date'])) ?>"
                                     data-stock="<?= h(json_encode((object) ($batchStockByLocation[(string) (int) $batch['batch_id']] ?? []))) ?>"
                                 >
                                     MHD:
-                                    <?= formatDate($batch['expiry_date']) ?>
+                                    <?= h(formatDate($batch['expiry_date'])) ?>
                                     –
                                     Bestand:
                                     <?= $batchQuantity ?>
@@ -532,9 +514,11 @@
 
                             <?php endforeach; ?>
 
-                            <option value="new">
-                                Neues MHD
-                            </option>
+                            <?php if ($articleHasExpiry): ?>
+                                <option value="new">
+                                    Neues MHD
+                                </option>
+                            <?php endif; ?>
 
                         </select>
 
@@ -542,6 +526,8 @@
 
                 </div>
 
+
+                <?php if ($articleHasExpiry): ?>
 
                 <div
                     id="new-expiry-field"
@@ -570,6 +556,8 @@
                     </p>
 
                 </div>
+
+                <?php endif; ?>
 
 
                 <label>

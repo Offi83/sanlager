@@ -7,7 +7,7 @@ use PDO;
 /**
  * Auswertungen über die Lagerbewegungen – nur lesend:
  *
- * - "Heute ausgebucht": Ausbuchungen, Entsorgungen, Umbuchungen des Tages
+ * - "Heute": Ausbuchungen, Entsorgungen, Umbuchungen des Tages
  * - MHD-Übersicht: abgelaufene und bald ablaufende Chargen
  * - Wochenbericht: Entnahmen eines Zeitraums, Unterschreitung der
  *   Mindestbestände

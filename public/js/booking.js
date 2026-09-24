@@ -401,8 +401,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             + data.unit
                             + ' '
                             + data.action_label
-                            + ' – MHD '
-                            + data.expiry_date,
+                            // Artikel ohne MHD: keine Angabe.
+                            + (data.expiry_date ? ' – MHD ' + data.expiry_date : ''),
                             data.expired === true
                         );
 

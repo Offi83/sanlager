@@ -4,7 +4,7 @@
 
                 <div>
 
-                    <h1>Heute ausgebucht</h1>
+                    <h1>Heute</h1>
 
                     <p>
                         Übersicht aller heutigen Ausbuchungen, Umbuchungen und Entsorgungen –

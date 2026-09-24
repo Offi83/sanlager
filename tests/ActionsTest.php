@@ -134,20 +134,23 @@ class ActionsTest extends TestCase
 
     public function testStockMoveNormalizesGermanExpiryDate(): void
     {
+        // Relativ zu heute, sonst wird das MHD irgendwann "abgelaufen".
+        $expiry = strtotime('+1 year');
+
         $result = $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
             'from' => 'receipt',
             'to' => (string) $this->mainId,
             'quantity' => '3',
             'batch_selection' => 'new',
-            'expiry_date' => '31.12.2027',
+            'expiry_date' => date('d.m.Y', $expiry),
         ]);
 
         $this->assertStringStartsWith('?page=article&id=' . $this->articleId, $result->redirectUrl);
 
         $batches = $this->stock->getStockByBatch($this->articleId);
 
-        $this->assertSame('2027-12-31', $batches[0]['expiry_date']);
+        $this->assertSame(date('Y-m-d', $expiry), $batches[0]['expiry_date']);
         $this->assertSame(3, (int) $batches[0]['quantity']);
     }
 
@@ -168,6 +171,141 @@ class ActionsTest extends TestCase
         } finally {
             $this->assertSame([], $this->stock->getStockByBatch($this->articleId));
         }
+    }
+
+    private function receiveWithExpiry(string $expiry, bool $confirmed = false, string $batch = 'new'): ActionResult
+    {
+        return $this->stockActions()->dispatch('stock_move', [
+            'article_id' => (string) $this->articleId,
+            'from' => 'receipt',
+            'to' => (string) $this->mainId,
+            'quantity' => '1',
+            'batch_selection' => $batch,
+            'expiry_date' => $expiry,
+            'confirm_expiry' => $confirmed ? '1' : '0',
+        ]);
+    }
+
+    public function testReceiptRejectsImplausibleExpiryYear(): void
+    {
+        // Handeingabe mit falschem Jahr; auch bestätigt nicht möglich.
+        foreach (['31.12.0027', '01.01.1999', date('d.m.Y', strtotime('+31 years'))] as $expiry) {
+            try {
+                $this->receiveWithExpiry($expiry, confirmed: true);
+                $this->fail('Angenommen: ' . $expiry);
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString('Bitte das Jahr prüfen', $exception->getMessage());
+            }
+        }
+
+        // Keine Charge angelegt.
+        $this->assertSame([], $this->stock->getStockByBatch($this->articleId));
+    }
+
+    public function testReceiptWithUnusualExpiryNeedsConfirmation(): void
+    {
+        foreach ([
+            date('d.m.Y', strtotime('-1 day')) => 'ist bereits abgelaufen',
+            date('d.m.Y', strtotime('+11 years')) => 'über 10 Jahre in der Zukunft',
+        ] as $expiry => $message) {
+            try {
+                $this->receiveWithExpiry($expiry);
+                $this->fail('Ohne Bestätigung angenommen: ' . $expiry);
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString($message, $exception->getMessage());
+            }
+
+            $this->receiveWithExpiry($expiry, confirmed: true);
+        }
+
+        $this->assertSame(2, $this->stock->getTotalStock($this->articleId) + $this->stock->getExpiredStock($this->articleId));
+
+        // Auch in eine vorhandene, abgelaufene Charge nur mit Bestätigung.
+        $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
+
+        $this->expectExceptionMessage('ist bereits abgelaufen');
+        $this->receiveWithExpiry('', batch: (string) $expired);
+    }
+
+    public function testIssueOfExpiredBatchNeedsNoConfirmation(): void
+    {
+        $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
+        $this->stock->move($this->articleId, $this->mainId, 2, 'receipt', null, $expired);
+
+        $this->stockActions()->dispatch('stock_move', [
+            'article_id' => (string) $this->articleId,
+            'from' => (string) $this->mainId,
+            'to' => 'issue',
+            'quantity' => '1',
+            'batch_selection' => (string) $expired,
+        ]);
+
+        $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
+    }
+
+    public function testArticleWithoutExpiryIsSavedAndBookedWithoutMhd(): void
+    {
+        $category = (string) $this->categories->all()[0]['id'];
+
+        // Formular: verstecktes 0, angekreuzt 1 – nicht angekreuzt bleibt 0.
+        $this->articleActions()->dispatch('create_article', [
+            'article_number' => 'B-001',
+            'name' => 'Mullbinde 6 cm',
+            'category_id' => $category,
+            'has_expiry' => '0',
+        ]);
+
+        $bandage = $this->articles->findByArticleNumber('B-001');
+        $this->assertSame(0, (int) $bandage['has_expiry']);
+
+        // Fehlt das Feld (ältere Formulare, Skripte), gilt "mit MHD".
+        $this->assertSame(1, (int) $this->articles->find($this->articleId)['has_expiry']);
+
+        // Kein neues MHD für Artikel ohne MHD.
+        try {
+            $this->stockActions()->dispatch('stock_move', [
+                'article_id' => (string) $bandage['id'],
+                'from' => 'receipt',
+                'to' => (string) $this->mainId,
+                'quantity' => '5',
+                'batch_selection' => 'new',
+                'expiry_date' => date('d.m.Y', strtotime('+1 year')),
+            ]);
+            $this->fail('MHD für Artikel ohne MHD angelegt.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('hat kein MHD', $exception->getMessage());
+        }
+
+        $this->stockActions()->dispatch('stock_move', [
+            'article_id' => (string) $bandage['id'],
+            'from' => 'receipt',
+            'to' => (string) $this->mainId,
+            'quantity' => '5',
+            'batch_selection' => 'none',
+        ]);
+
+        // Meldungen ohne "(ohne MHD)" bzw. " – MHD ...".
+        $result = $this->stockActions()->dispatch('issue', ['article_number' => 'B-001']);
+        $this->assertSame('Mullbinde 6 cm – 1 Stück ausgebucht', $result->message);
+
+        $json = $this->stockActions()->dispatch('issue', ['article_number' => 'B-001', 'ajax' => '1'])->json;
+        $this->assertSame('', $json['expiry_date']);
+
+        // Artikel mit MHD, aber Bestand ohne: Angabe bleibt.
+        $this->receive(1);
+        $result = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
+        $this->assertStringEndsWith('ausgebucht (ohne MHD)', $result->message);
+
+        // Haken beim Bearbeiten wieder setzen.
+        $this->articleActions()->dispatch('update_article', [
+            'id' => (string) $bandage['id'],
+            'article_number' => 'B-001',
+            'name' => 'Mullbinde 6 cm',
+            'category_id' => $category,
+            'has_expiry' => '1',
+        ]);
+
+        $this->assertSame(1, (int) $this->articles->find((int) $bandage['id'])['has_expiry']);
     }
 
     public function testManipulatedArrayInputIsTreatedAsMissing(): void

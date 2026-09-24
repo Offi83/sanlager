@@ -73,7 +73,8 @@ class ArticleActions
             $name,
             $description,
             $unit !== '' ? $unit : 'Stück',
-            $categoryId
+            $categoryId,
+            $this->hasExpiry($input)
         );
 
         return ActionResult::redirect('?page=new_article', 'Artikel angelegt');
@@ -124,13 +125,24 @@ class ArticleActions
             $name,
             $description,
             $unit !== '' ? $unit : 'Stück',
-            $categoryId
+            $categoryId,
+            $this->hasExpiry($input)
         );
 
         return ActionResult::redirect(
             '?page=article&id=' . $id,
             'Artikel gespeichert'
         );
+    }
+
+    /**
+     * Ankreuzfeld "Hat ein MHD": Das Formular schickt davor ein verstecktes
+     * `has_expiry=0`, angekreuzt überschreibt es das mit `1`. Fehlt das Feld
+     * ganz, bleibt es beim Standard (mit MHD).
+     */
+    private function hasExpiry(array $input): bool
+    {
+        return $this->string($input, 'has_expiry', '1') !== '0';
     }
 
     private function deactivate(array $input): ActionResult

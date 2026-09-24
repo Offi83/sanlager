@@ -107,7 +107,8 @@ class ArticleRepository
         string $name,
         string $description,
         string $unit,
-        ?int $categoryId
+        ?int $categoryId,
+        bool $hasExpiry = true
     ): int {
         $this->assertArticleNumberAvailable($articleNumber);
         $this->assertNameAvailable($name);
@@ -120,7 +121,8 @@ class ArticleRepository
                     name,
                     description,
                     unit,
-                    category_id
+                    category_id,
+                    has_expiry
                 )
              VALUES
                 (
@@ -128,7 +130,8 @@ class ArticleRepository
                     :name,
                     :description,
                     :unit,
-                    :category_id
+                    :category_id,
+                    :has_expiry
                 )'
         );
 
@@ -137,7 +140,8 @@ class ArticleRepository
             'name' => $name,
             'description' => $description ?: null,
             'unit' => $unit,
-            'category_id' => $categoryId
+            'category_id' => $categoryId,
+            'has_expiry' => $hasExpiry ? 1 : 0
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -155,7 +159,8 @@ class ArticleRepository
         string $name,
         string $description,
         string $unit,
-        ?int $categoryId
+        ?int $categoryId,
+        bool $hasExpiry = true
     ): void {
         $this->assertArticleNumberAvailable($articleNumber, $id);
         $this->assertNameAvailable($name, $id);
@@ -167,7 +172,8 @@ class ArticleRepository
                  name = :name,
                  description = :description,
                  unit = :unit,
-                 category_id = :category_id
+                 category_id = :category_id,
+                 has_expiry = :has_expiry
              WHERE id = :id'
         );
 
@@ -177,7 +183,8 @@ class ArticleRepository
             'name' => $name,
             'description' => $description,
             'unit' => $unit,
-            'category_id' => $categoryId
+            'category_id' => $categoryId,
+            'has_expiry' => $hasExpiry ? 1 : 0
         ]);
     }
 

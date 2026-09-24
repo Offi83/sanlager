@@ -54,8 +54,8 @@ Die Screenshots zeigen Beispieldaten im Format des Raspberry-Pi-Displays (800×4
 *Buchen – hier eine Umbuchung vom Hauptlager in einen Rucksack. Auf Geräten mit Kamera erscheint zusätzlich „Scanner starten“.*
 ![Buchen](images/buchen.png)
 
-*Heute ausgebuchte Artikel*
-![Heute ausgebuchte Artikel](images/ausgebucht.png)
+*Heute – alle Aus- und Umbuchungen und Entsorgungen des Tages*
+![Heute](images/ausgebucht.png)
 
 *MHD-Übersicht – abgelaufenes und bald ablaufendes Material je Lagerort*
 ![MHD-Übersicht](images/mhd.png)
