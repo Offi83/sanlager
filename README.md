@@ -17,28 +17,25 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 
 ## Funktionen
 
-* Übersicht des aktuellen Lagerbestands
-* Verwaltung von Sanitätsmaterial
-* Anzeige von Mindesthaltbarkeitsdaten
-* Erkennung abgelaufener Artikel
-* Verwaltung von Artikelstammdaten
-* Verwaltung und Sortierung von Kategorien
-* Verwaltung und Sortierung von Lagerorten
-* Buchen: Ausbuchen oder Umbuchen an einen anderen Lagerort per Kamera, Hand-Barcodescanner oder manueller Eingabe – immer das älteste MHD zuerst
-* gut sichtbare Anzeige der Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen); die gewählte Richtung bleibt für weitere Buchungen erhalten
-* „Scanner starten“ erscheint nur auf Geräten mit Kamera
-* Aus-, Umbuchungen und Entsorgungen des Tages mit einem Klick rückgängig machen – als Gegenbuchung, die Historie bleibt erhalten
-* abgelaufene Chargen mit einem Klick entsorgen (MHD-Übersicht, Artikel- und Lagerort-Seite)
-* Auffüll-Liste: was je Lagerort unter dem Mindestbestand liegt, wie viel davon im Hauptlager vorhanden ist, und mit einem Klick zum Umbuchen in den Rucksack
-* Wöchentlicher Bericht per E-Mail: abgelaufenes und bald ablaufendes Material, Unterschreitung der Mindestbestände, Entnahmen der Woche
-* Artikelseite: Einlagern, Ausbuchen und Umbuchen einer bestimmten Charge und Menge – mit Anzeige, was am gewählten Lagerort liegt
-* QR-Code je Artikel und Etikettendruck
-* einfache und übersichtliche Bedienung
-* optimiert für die Nutzung per Touchscreen
-* funktioniert vollständig ohne Internetzugriff (auch der Kamera-Scanner ist lokal eingebunden)
-* lokale SQLite-Datenbank
-* Webzugriff über Browser
-* Raspberry-Pi-Terminal für das Lager (optional)
+**Buchen**
+* Scannen per Kamera, Hand-Scanner oder Tastatur
+* Ausbuchen oder Umbuchen in einen anderen Lagerort, dabei wird immer das älteste MHD zuerst genommen
+
+**Heute**
+* Alle Buchungen des Tages, Fehlbuchungen können rückgängig gemacht werden
+
+**Kontrolle**
+* Abgelaufenes und bald Ablaufendes, mit „Entsorgen“-Funktion
+* Auffüllliste: was je Lagerort unter dem Mindestbestand liegt
+
+**Verwaltung**
+* Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck
+* Kategorien und Lagerorte anlegen und sortieren
+
+**Außerdem**
+* Wöchentlicher Bericht per E-Mail
+* Touch-Bedienung, angepasst an das Raspberry-Pi-Display (800×480)
+* Läuft ohne Internet, die Daten liegen in einer lokalen SQLite-Datenbank
 
 ## ToDo
 
