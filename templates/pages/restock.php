@@ -41,7 +41,8 @@
 
             <?php foreach ($restockGroups as $group): ?>
 
-                <div class="card">
+                <?php /* Anker für den Hinweis auf der Lagerort-Seite. */ ?>
+                <div class="card" id="location-<?= (int) $group['location_id'] ?>">
 
                     <div class="card-header restock-header">
 
@@ -63,7 +64,7 @@
 
                         </div>
 
-                        <?php if (!$group['is_default'] && $restockDefaultLocation): ?>
+                        <?php if (!$group['is_default'] && $restockDefaultLocation && $group['can_transfer']): ?>
 
                             <a
                                 href="?page=issue&source=<?= $restockDefaultId ?>&target=<?= (int) $group['location_id'] ?>"
@@ -147,8 +148,7 @@
 
                                         <td>
                                             <strong class="stock-low">
-                                                <?= (int) $row['missing_quantity'] ?>
-                                                <?= h($row['unit']) ?>
+                                                <?= h(quantityText((int) $row['missing_quantity'], $row)) ?>
                                             </strong>
                                         </td>
 
@@ -161,12 +161,10 @@
 
                                             <td>
                                                 <?php if ($row['default_quantity'] >= $row['missing_quantity']): ?>
-                                                    <?= (int) $row['default_quantity'] ?>
-                                                    <?= h($row['unit']) ?>
+                                                    <?= h(quantityText((int) $row['default_quantity'], $row)) ?>
                                                 <?php elseif ($row['default_quantity'] > 0): ?>
                                                     <span class="stock-low">
-                                                        nur <?= (int) $row['default_quantity'] ?>
-                                                        <?= h($row['unit']) ?>
+                                                        nur <?= h(quantityText((int) $row['default_quantity'], $row)) ?>
                                                     </span>
                                                 <?php else: ?>
                                                     <span class="stock-low">nichts</span>

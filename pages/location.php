@@ -25,3 +25,12 @@ if (!$viewLocation) {
 $locationStockRows = $stock->getStockAtLocationDetailed(
     $viewLocationId
 );
+
+/*
+ * Was hier unter dem Mindestbestand liegt – die Seite zeigt sonst nur,
+ * was da ist, nicht was fehlt. Hinweis mit Link zur Auffüllliste.
+ */
+$locationMissing = array_values(array_filter(
+    $reports->getLowStockItems(),
+    static fn (array $row): bool => (int) $row['location_id'] === $viewLocationId
+));

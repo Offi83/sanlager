@@ -106,8 +106,7 @@
                 </span>
 
                 <strong class="<?= $articleSummary['is_low'] ? 'stock-low' : '' ?>">
-                    <?= $articleSummary['total'] ?>
-                    <?= h($article['unit']) ?>
+                    <?= h(quantityText((int) $articleSummary['total'], $article)) ?>
                 </strong>
 
             </div>
@@ -188,8 +187,7 @@
                                 </td>
 
                                 <td class="<?= ($locationQuantity < 0 || $locationIsLow) ? 'stock-low' : '' ?>">
-                                    <?= $locationQuantity ?>
-                                    <?= h($article['unit']) ?>
+                                    <?= h(quantityText((int) $locationQuantity, $article)) ?>
 
                                     <?php if ($locationExpired > 0): ?>
                                         <span class="warning">
@@ -211,7 +209,8 @@
                                             value="<?= $locationMinimum !== null ? $locationMinimum : '' ?>"
                                         >
 
-                                        <?= h($article['unit']) ?>
+                                        <?php /* Neben dem Mindestbestand: Mehrzahl ("Rollen"). */ ?>
+                                        <?= h($article['unit_plural']) ?>
 
                                     </div>
 
@@ -307,8 +306,7 @@
 
                             <div class="stock-value">
 
-                                <?= $quantity ?>
-                                <?= h($article['unit']) ?>
+                                <?= h(quantityText((int) $quantity, $article)) ?>
 
                             </div>
 
@@ -318,7 +316,7 @@
                                     (int) $article['id'],
                                     (int) $row['batch_id'],
                                     (int) $row['location_id'],
-                                    $article['name'] . ': ' . $quantity . ' ' . $article['unit']
+                                    $article['name'] . ': ' . quantityText((int) $quantity, $article)
                                         . ' (MHD ' . formatDate($row['expiry_date']) . ') aus '
                                         . $row['location_name'] . ' entsorgen?',
                                     'article'

@@ -14,6 +14,8 @@ use LagerApp\LocationRepository;
 use LagerApp\StockActions;
 use LagerApp\StockReports;
 use LagerApp\StockRepository;
+use LagerApp\UnitActions;
+use LagerApp\UnitRepository;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -56,7 +58,7 @@ class ActionsTest extends TestCase
 
     private function articleActions(): ArticleActions
     {
-        return new ArticleActions($this->articles, $this->categories, $this->stock, $this->locations);
+        return new ArticleActions($this->articles, $this->categories, $this->stock, $this->locations, new UnitRepository($this->db));
     }
 
     private function receive(int $quantity): void
@@ -306,6 +308,121 @@ class ActionsTest extends TestCase
         ]);
 
         $this->assertSame(1, (int) $this->articles->find((int) $bandage['id'])['has_expiry']);
+    }
+
+    public function testUnitsAreManagedAndShownInSingularOrPlural(): void
+    {
+        $units = new UnitRepository($this->db);
+        $actions = new UnitActions($units);
+
+        $actions->dispatch('create_unit', ['name' => 'Rolle', 'plural' => 'Rollen']);
+        $actions->dispatch('create_unit', ['name' => 'Paar', 'plural' => '']);
+
+        $roll = $units->findByName('rolle');
+        $this->assertSame('Rollen', $roll['plural']);
+        $this->assertSame('Paar', $units->findByName('Paar')['plural'], 'ohne Mehrzahl gilt die Einzahl');
+
+        // Keine Varianten: gleiche Einzahl oder schon als Mehrzahl vergeben.
+        foreach (['ROLLE', 'Rollen'] as $variant) {
+            try {
+                $actions->dispatch('create_unit', ['name' => $variant, 'plural' => '']);
+                $this->fail('Variante angelegt: ' . $variant);
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString('gibt es schon (Rolle)', $exception->getMessage());
+            }
+        }
+
+        // Artikel wählt die Einheit aus der Liste.
+        $category = (string) $this->categories->all()[0]['id'];
+
+        $this->articleActions()->dispatch('create_article', [
+            'article_number' => 'P-1',
+            'name' => 'Pflaster',
+            'category_id' => $category,
+            'unit_id' => (string) $roll['id'],
+        ]);
+
+        $plaster = $this->articles->findByArticleNumber('P-1');
+        $this->assertSame('Rolle', $plaster['unit']);
+        $this->assertSame('1 Rolle', quantityText(1, $plaster));
+        $this->assertSame('5 Rollen', quantityText(5, $plaster));
+        $this->assertSame('0 Rollen', quantityText(0, $plaster));
+
+        try {
+            $this->articleActions()->dispatch('create_article', [
+                'article_number' => 'P-2', 'name' => 'Pflaster 2', 'category_id' => $category, 'unit_id' => '9999',
+            ]);
+            $this->fail('Unbekannte Einheit angenommen.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Bitte eine Einheit auswählen.', $exception->getMessage());
+        }
+
+        // Meldungen in der passenden Form.
+        $this->stockActions()->dispatch('stock_move', [
+            'article_id' => (string) $plaster['id'], 'from' => 'receipt', 'to' => (string) $this->mainId,
+            'quantity' => '3', 'batch_selection' => 'none',
+        ]);
+        $this->assertSame('Pflaster – 1 Rolle ausgebucht (ohne MHD)', $this->stockActions()->dispatch('issue', ['article_number' => 'P-1'])->message);
+
+        $json = $this->stockActions()->dispatch('issue', ['article_number' => 'P-1', 'ajax' => '1'])->json;
+        $this->assertSame(['Rolle', 'Rollen'], [$json['unit'], $json['unit_plural']]);
+
+        // Umbenennen wirkt bei allen Artikeln.
+        $actions->dispatch('update_unit', ['id' => (string) $roll['id'], 'name' => 'Spule', 'plural' => 'Spulen']);
+        $this->assertSame('Spulen', $this->articles->find((int) $plaster['id'])['unit_plural']);
+
+        // Löschen nur, wenn kein aktiver Artikel sie nutzt.
+        try {
+            $actions->dispatch('delete_unit', ['id' => (string) $roll['id']]);
+            $this->fail('Benutzte Einheit gelöscht.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('noch von 1 Artikel verwendet', $exception->getMessage());
+        }
+
+        $this->stock->move((int) $plaster['id'], $this->mainId, 1, 'issue');
+        $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $plaster['id']]);
+        $actions->dispatch('delete_unit', ['id' => (string) $roll['id']]);
+
+        $this->assertNull($units->find((int) $roll['id']));
+        $this->assertSame('Stück', $this->articles->find((int) $plaster['id'])['unit'], 'gelöschter Artikel fällt auf Stück zurück');
+    }
+
+    public function testCreateArticleContinuesWithNextOrOpensIt(): void
+    {
+        $category = (int) $this->categories->all()[1]['id'];
+
+        $next = $this->articleActions()->dispatch('create_article', [
+            'article_number' => 'N-1', 'name' => 'Dreiecktuch', 'category_id' => (string) $category, 'after' => 'next',
+        ]);
+
+        // Zurück ins Formular, Kategorie bleibt gewählt.
+        $this->assertSame('?page=new_article&category=' . $category, $next->redirectUrl);
+        $this->assertSame('„Dreiecktuch“ angelegt', $next->message);
+
+        $open = $this->articleActions()->dispatch('create_article', [
+            'article_number' => 'N-2', 'name' => 'Rettungsdecke', 'category_id' => (string) $category, 'after' => 'open',
+        ]);
+
+        $this->assertSame('?page=article&id=' . $this->articles->findByArticleNumber('N-2')['id'], $open->redirectUrl);
+    }
+
+    public function testTransferAllStockReportsQuantitiesPerUnit(): void
+    {
+        $units = new UnitRepository($this->db);
+        $units->create('Rolle', 'Rollen');
+
+        $boxId = $this->locations->create('Kiste 1', '');
+        $plasterId = $this->articles->create('P-1', 'Pflaster', '', 'Rolle', null);
+
+        $this->stock->move($this->articleId, $boxId, 3, 'receipt');
+        $this->stock->move($plasterId, $boxId, 2, 'receipt');
+
+        $result = $this->stockActions()->dispatch('transfer_all_stock', [
+            'from_location_id' => (string) $boxId,
+            'to_location_id' => (string) $this->mainId,
+        ]);
+
+        $this->assertSame("Bestand nach Hauptlager verschoben (3\u{00A0}Stück · 2\u{00A0}Rollen).", $result->message);
     }
 
     public function testManipulatedArrayInputIsTreatedAsMissing(): void

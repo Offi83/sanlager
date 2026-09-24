@@ -36,6 +36,28 @@
 
         </div>
 
+        <?php if ($locationMissing): ?>
+
+            <a
+                href="?page=restock#location-<?= (int) $viewLocation['id'] ?>"
+                class="restock-hint"
+            >
+                <strong>
+                    <?= count($locationMissing) === 1
+                        ? '1 Artikel fehlt'
+                        : count($locationMissing) . ' Artikel fehlen' ?>
+                </strong>
+                <span>
+                    <?= h(implode(', ', array_map(
+                        static fn (array $row): string => $row['article_name'],
+                        array_slice($locationMissing, 0, 3)
+                    )) . (count($locationMissing) > 3 ? ' …' : '')) ?>
+                </span>
+                <span class="restock-hint-link">Zur Auffüllliste →</span>
+            </a>
+
+        <?php endif; ?>
+
         <div class="card">
 
             <?php if (!$locationStockRows): ?>
@@ -130,8 +152,7 @@
 
                                 <td>
                                     <strong>
-                                        <?= (int) $row['quantity'] ?>
-                                        <?= h($row['unit']) ?>
+                                        <?= h(quantityText((int) $row['quantity'], $row)) ?>
                                     </strong>
                                 </td>
 
@@ -143,7 +164,7 @@
                                             (int) $row['article_id'],
                                             (int) $row['batch_id'],
                                             (int) $viewLocation['id'],
-                                            $row['article_name'] . ': ' . (int) $row['quantity'] . ' ' . $row['unit']
+                                            $row['article_name'] . ': ' . quantityText((int) $row['quantity'], $row)
                                                 . ' (MHD ' . formatDate($row['expiry_date']) . ') aus '
                                                 . $viewLocation['name'] . ' entsorgen?',
                                             'location'

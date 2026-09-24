@@ -70,7 +70,8 @@ class StockRepository
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 a.has_expiry,
                 c.name AS category_name,
                 c.color AS category_color,
@@ -81,6 +82,8 @@ class StockRepository
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              LEFT JOIN article_categories c
                 ON c.id = a.category_id
              LEFT JOIN batches b
@@ -592,36 +595,47 @@ class StockRepository
      * (nicht Stück für Stück), das MHD bleibt dabei je Charge erhalten.
      * Bei leerem Quell-Lagerort passiert nichts.
      *
-     * @return int Anzahl der insgesamt verschobenen Einheiten
+     * @return array<int, array{article_id: int, quantity: int, unit: string, unit_plural: string}>
+     *         die verschobenen Posten (je Artikel/Charge) mit Einheit, z. B.
+     *         für quantitiesByUnit(); leer, wenn nichts da war
      * @throws RuntimeException wenn Quell- und Ziellagerort identisch sind
      */
     public function transferAllStock(
         int $fromLocationId,
         int $toLocationId,
         ?string $note = null
-    ): int {
+    ): array {
         if ($fromLocationId === $toLocationId) {
             throw new RuntimeException(
                 'Quell- und Ziellagerort dürfen nicht identisch sein.'
             );
         }
 
-        return $this->transactional(function () use ($fromLocationId, $toLocationId, $note): int {
+        return $this->transactional(function () use ($fromLocationId, $toLocationId, $note): array {
             $statement = $this->db->prepare(
-                'SELECT article_id, batch_id, SUM(quantity) AS quantity
-                 FROM stock_movements
-                 WHERE location_id = :location_id
-                 GROUP BY article_id, batch_id
-                 HAVING SUM(quantity) > 0'
+                'SELECT
+                    sm.article_id,
+                    sm.batch_id,
+                    SUM(sm.quantity) AS quantity,
+                    COALESCE(u.name, \'Stück\') AS unit,
+                    COALESCE(u.plural, u.name, \'Stück\') AS unit_plural
+                 FROM stock_movements sm
+                 INNER JOIN articles a
+                    ON a.id = sm.article_id
+                 LEFT JOIN units u
+                    ON u.id = a.unit_id
+                 WHERE sm.location_id = :location_id
+                 GROUP BY sm.article_id, sm.batch_id
+                 HAVING SUM(sm.quantity) > 0'
             );
 
             $statement->execute([
                 'location_id' => $fromLocationId
             ]);
 
-            $totalMoved = 0;
+            $moved = $statement->fetchAll();
 
-            foreach ($statement->fetchAll() as $row) {
+            foreach ($moved as $row) {
                 $articleId = (int) $row['article_id'];
                 $batchId = $row['batch_id'] !== null
                     ? (int) $row['batch_id']
@@ -629,11 +643,9 @@ class StockRepository
                 $quantity = (int) $row['quantity'];
 
                 $this->transferPair($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note, false);
-
-                $totalMoved += $quantity;
             }
 
-            return $totalMoved;
+            return $moved;
         });
     }
 

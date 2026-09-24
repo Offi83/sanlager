@@ -27,6 +27,7 @@ use LagerApp\CategoryRepository;
 use LagerApp\Database;
 use LagerApp\LocationRepository;
 use LagerApp\StockRepository;
+use LagerApp\UnitRepository;
 
 if (PHP_SAPI !== 'cli') {
     exit('Nur über die Kommandozeile aufrufbar.');
@@ -55,6 +56,15 @@ $locations = new LocationRepository($db);
 $stock = new StockRepository($db);
 
 $categoryIds = array_column($categories->all(), 'id', 'name');
+
+/*
+ * Einheiten mit Mehrzahl ("Stück" legt die Migration schon an).
+ */
+$units = new UnitRepository($db);
+
+foreach (['Rolle' => 'Rollen', 'Paar' => 'Paar', 'Flasche' => 'Flaschen', 'Packung' => 'Packungen'] as $singular => $plural) {
+    $units->create($singular, $plural);
+}
 
 $mainId = (int) $locations->findByName('Hauptlager')['id'];
 

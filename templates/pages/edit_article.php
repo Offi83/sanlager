@@ -124,11 +124,19 @@
                             Einheit
                         </span>
 
-                        <input
-                            type="text"
-                            name="unit"
-                            value="<?= h($editArticle['unit']) ?>"
+                        <select
+                            name="unit_id"
+                            required
                         >
+                            <?php foreach ($unitList as $unit): ?>
+                                <option
+                                    value="<?= (int) $unit['id'] ?>"
+                                    <?= (int) $unit['id'] === (int) $editArticle['unit_id'] ? 'selected' : '' ?>
+                                >
+                                    <?= h($unit['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
 
                     </label>
 
@@ -215,8 +223,7 @@
                         Löschen ist erst möglich, wenn kein Bestand mehr vorhanden ist.
                         Aktuell:
                         <strong>
-                            <?= $editArticleStock ?>
-                            <?= h($editArticle['unit']) ?>
+                            <?= h(quantityText((int) $editArticleStock, $editArticle)) ?>
                         </strong>
                         (abgelaufene Chargen eingeschlossen) – bitte zuerst
                         <a href="?page=article&id=<?= (int) $editArticle['id'] ?>">auf der Artikelseite</a>

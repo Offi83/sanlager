@@ -143,8 +143,7 @@
 
                                         <td>
                                             <strong>
-                                                <?= (int) $row['quantity'] ?>
-                                                <?= h($row['unit']) ?>
+                                                <?= h(quantityText((int) $row['quantity'], $row)) ?>
                                             </strong>
                                         </td>
 
@@ -156,7 +155,7 @@
                                                     (int) $row['article_id'],
                                                     (int) $row['batch_id'],
                                                     (int) $row['location_id'],
-                                                    $row['article_name'] . ': ' . (int) $row['quantity'] . ' ' . $row['unit']
+                                                    $row['article_name'] . ': ' . quantityText((int) $row['quantity'], $row)
                                                         . ' (MHD ' . formatDate($row['expiry_date']) . ') aus '
                                                         . $row['location_name'] . ' entsorgen?',
                                                     'expiry'

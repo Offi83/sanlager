@@ -20,7 +20,8 @@ class ArticleActions
         private ArticleRepository $articles,
         private CategoryRepository $categories,
         private StockRepository $stock,
-        private LocationRepository $locations
+        private LocationRepository $locations,
+        private UnitRepository $units
     ) {
     }
 
@@ -47,7 +48,7 @@ class ArticleActions
         $articleNumber = $this->string($input, 'article_number');
         $name = $this->string($input, 'name');
         $description = $this->string($input, 'description');
-        $unit = $this->string($input, 'unit', 'Stück');
+        $unit = $this->unit($input);
 
         $categoryId = $this->int($input, 'category_id');
 
@@ -69,16 +70,26 @@ class ArticleActions
             );
         }
 
-        $this->articles->create(
+        $id = $this->articles->create(
             $articleNumber,
             $name,
             $description,
-            $unit !== '' ? $unit : 'Stück',
+            $unit,
             $categoryId,
             $this->hasExpiry($input)
         );
 
-        return ActionResult::redirect('?page=new_article', 'Artikel angelegt');
+        /*
+         * "Anlegen & öffnen": zur neuen Artikelseite. Sonst ("Anlegen &
+         * nächster Artikel") zurück ins leere Formular, mit derselben
+         * Kategorie vorausgewählt.
+         */
+        return ActionResult::redirect(
+            $this->string($input, 'after') === 'open'
+                ? '?page=article&id=' . $id
+                : '?page=new_article&category=' . $categoryId,
+            '„' . $name . '“ angelegt'
+        );
     }
 
     private function update(array $input): ActionResult
@@ -88,7 +99,7 @@ class ArticleActions
         $articleNumber = $this->string($input, 'article_number');
         $name = $this->string($input, 'name');
         $description = $this->string($input, 'description');
-        $unit = $this->string($input, 'unit', 'Stück');
+        $unit = $this->unit($input);
 
         $categoryId = $this->int($input, 'category_id');
 
@@ -125,7 +136,7 @@ class ArticleActions
             $articleNumber,
             $name,
             $description,
-            $unit !== '' ? $unit : 'Stück',
+            $unit,
             $categoryId,
             $this->hasExpiry($input)
         );
@@ -134,6 +145,29 @@ class ArticleActions
             '?page=article&id=' . $id,
             'Artikel gespeichert'
         );
+    }
+
+    /**
+     * Einheit aus der Auswahlliste (`unit_id`, siehe Verwaltung →
+     * Einheiten) als Einzahl-Name. Fehlt das Feld ganz, gilt "Stück".
+     *
+     * @throws RuntimeException bei einer unbekannten Einheit
+     */
+    private function unit(array $input): string
+    {
+        if (!isset($input['unit_id'])) {
+            return 'Stück';
+        }
+
+        $unit = $this->units->find($this->int($input, 'unit_id'));
+
+        if (!$unit) {
+            throw new RuntimeException(
+                'Bitte eine Einheit auswählen.'
+            );
+        }
+
+        return $unit['name'];
     }
 
     /**
@@ -168,7 +202,7 @@ class ArticleActions
         if ($physicalStock > 0) {
             throw new RuntimeException(
                 'Der Artikel kann nicht gelöscht werden, solange noch Bestand vorhanden ist ('
-                . $physicalStock . ' ' . $article['unit']
+                . quantityText($physicalStock, $article)
                 . ', abgelaufene Chargen eingeschlossen). Bitte zuerst ausbuchen oder entsorgen.'
             );
         }

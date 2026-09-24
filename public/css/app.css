@@ -567,11 +567,10 @@ tbody tr:last-child td {
 }
 
 
-/* =========================================================
-   Artikeldetail
-   ========================================================= */
-
-.article-detail-page .back-link {
+/*
+ * Zurück-Link über der Überschrift (Artikel, Lagerort, Artikel anlegen).
+ */
+.back-link {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
@@ -582,9 +581,13 @@ tbody tr:last-child td {
     text-decoration: none;
 }
 
-.article-detail-page .back-link:hover {
+.back-link:hover {
     color: var(--primary);
 }
+
+/* =========================================================
+   Artikeldetail
+   ========================================================= */
 
 .article-detail-page .location-row .stock-value {
     font-size: 17px;
@@ -839,6 +842,38 @@ tbody tr:last-child td {
     color: var(--muted);
 }
 
+
+/*
+ * Hinweis auf der Lagerort-Seite, wenn dort etwas unter dem
+ * Mindestbestand liegt; die ganze Fläche führt zur Auffüllliste.
+ */
+.restock-hint {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin-bottom: var(--space-3);
+    padding: 12px 16px;
+    border-left: 4px solid var(--danger);
+    border-radius: var(--radius);
+    background: #fbeaea;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.restock-hint strong {
+    color: var(--danger);
+}
+
+.restock-hint span {
+    color: var(--muted);
+}
+
+.restock-hint .restock-hint-link {
+    margin-left: auto;
+    color: var(--danger);
+    font-weight: 600;
+}
 
 /*
  * Auffüll-Liste: Lagerort-Name links, Umbuchen-Button rechts; auf
@@ -1709,8 +1744,13 @@ tbody tr:last-child td {
         text-align: center;
     }
 
+    /* Vier Reiter (Verwaltung) passen so auch auf 360 px. */
+    .sub-nav {
+        gap: 0;
+    }
+
     .sub-nav a {
-        padding: 0.7rem 0.8rem;
+        padding: 0.7rem 0.4rem;
     }
 
     .category-row,

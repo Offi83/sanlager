@@ -65,25 +65,47 @@ function formatExpiry(?string $date, bool $articleHasExpiry): string
 }
 
 /**
+ * Menge mit Einheit in der passenden Form: "1 Rolle", "5 Rollen".
+ * $row enthält `unit` (Einzahl) und `unit_plural` (Mehrzahl), wie sie die
+ * Abfragen aus der Tabelle `units` liefern.
+ */
+function quantityText(int $quantity, array $row): string
+{
+    return $quantity . ' ' . unitText($quantity, $row);
+}
+
+/**
+ * Nur die Einheit, passend zur Menge (Einzahl nur bei genau 1).
+ */
+function unitText(int $quantity, array $row): string
+{
+    $singular = (string) ($row['unit'] ?? 'Stück');
+
+    return abs($quantity) === 1
+        ? $singular
+        : (string) ($row['unit_plural'] ?? $singular);
+}
+
+/**
  * Mengen je Einheit zusammengezählt, z. B. "18 Stück · 12 Paar · 1 Rolle"
  * statt einer Summe über verschiedene Einheiten. Größte Menge zuerst.
  *
- * @param array<int, array{quantity: int|string, unit: string}> $rows
+ * @param array<int, array{quantity: int|string, unit: string, unit_plural?: string}> $rows
  */
 function quantitiesByUnit(array $rows): string
 {
     $sums = [];
 
     foreach ($rows as $row) {
-        $sums[$row['unit']] = ($sums[$row['unit']] ?? 0) + (int) $row['quantity'];
+        $sums[$row['unit']] ??= ['quantity' => 0, 'row' => $row];
+        $sums[$row['unit']]['quantity'] += (int) $row['quantity'];
     }
 
-    arsort($sums);
+    uasort($sums, static fn (array $a, array $b): int => $b['quantity'] <=> $a['quantity']);
 
     return implode(' · ', array_map(
         // Geschütztes Leerzeichen: umbrochen wird nur an den Punkten.
-        static fn (string $unit, int $quantity): string => $quantity . "\u{00A0}" . $unit,
-        array_keys($sums),
+        static fn (array $sum): string => $sum['quantity'] . "\u{00A0}" . unitText($sum['quantity'], $sum['row']),
         $sums
     ));
 }

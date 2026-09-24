@@ -41,7 +41,8 @@ class StockReports
                 sl.id AS location_id,
                 a.name AS article_name,
                 a.article_number,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 a.has_expiry,
                 b.expiry_date,
                 sl.name AS location_name,
@@ -49,6 +50,8 @@ class StockReports
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              LEFT JOIN batches b
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl
@@ -88,7 +91,8 @@ class StockReports
                 sl.id AS location_id,
                 a.name AS article_name,
                 a.article_number,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 a.has_expiry,
                 b.expiry_date,
                 sl.name AS location_name,
@@ -96,6 +100,8 @@ class StockReports
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              LEFT JOIN batches b
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl
@@ -139,7 +145,8 @@ class StockReports
                 t.from_location_id,
                 t.to_location_id,
                 a.name AS article_name,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 a.has_expiry,
                 b.expiry_date,
                 src.name AS from_location_name,
@@ -168,6 +175,8 @@ class StockReports
              ) t
              INNER JOIN articles a
                 ON a.id = t.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              LEFT JOIN batches b
                 ON b.id = t.batch_id
              INNER JOIN storage_locations src
@@ -207,12 +216,15 @@ class StockReports
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 sl.name AS location_name,
                 ABS(SUM(sm.quantity)) AS quantity
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              INNER JOIN storage_locations sl
                 ON sl.id = sm.location_id
              WHERE sm.movement_type IN (\'issue\', \'issue_reversal\')
@@ -250,7 +262,8 @@ class StockReports
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 sl.id AS location_id,
                 sl.name AS location_name,
                 c.name AS category_name,
@@ -267,6 +280,8 @@ class StockReports
              FROM article_location_minimums alm
              INNER JOIN articles a
                 ON a.id = alm.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              INNER JOIN storage_locations sl
                 ON sl.id = alm.location_id
              LEFT JOIN article_categories c
@@ -381,7 +396,8 @@ class StockReports
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                a.unit,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 sl.id AS location_id,
                 sl.name AS location_name,
                 b.id AS batch_id,
@@ -390,6 +406,8 @@ class StockReports
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
+             LEFT JOIN units u
+                ON u.id = a.unit_id
              INNER JOIN batches b
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl

@@ -165,6 +165,7 @@ class StockActions
                     'article_name' => $article['name'],
                     'article_number' => $articleNumber,
                     'unit' => $article['unit'],
+                    'unit_plural' => $article['unit_plural'],
                     'expiry_date' => $expiryText,
                     'action_label' => $actionLabel,
                     'expired' => $expiryWarning !== ''
@@ -181,7 +182,7 @@ class StockActions
                 '?page=issue'
                     . '&source=' . $sourceLocationId
                     . '&target=' . urlencode($target === '' ? 'issue' : $target),
-                $article['name'] . ' – 1 ' . $article['unit'] . ' '
+                $article['name'] . ' – ' . quantityText(1, $article) . ' '
                     . $actionLabel . ($expiryText !== '' ? ' (' . $expiryText . ')' : ''),
                 // Abgelaufene Charge gebucht: rot statt grün hervorheben.
                 $expiryWarning !== '' ? 'error' : 'success'
@@ -372,7 +373,7 @@ class StockActions
                     : 'Umbuchung von ' . $location['name'] . ' nach ' . $toLocation['name']
             );
 
-            $message = $quantity . ' ' . $article['unit'] . ' umgebucht: ' . $location['name']
+            $message = quantityText($quantity, $article) . ' umgebucht: ' . $location['name']
                 . ' → ' . $toLocation['name'];
         } else {
             $this->stock->move(
@@ -384,7 +385,7 @@ class StockActions
                 $batchId
             );
 
-            $message = $quantity . ' ' . $article['unit']
+            $message = quantityText($quantity, $article)
                 . ($movementType === 'receipt'
                     ? ' eingelagert in ' . $location['name']
                     : ' ausgebucht aus ' . $location['name']);
@@ -470,7 +471,7 @@ class StockActions
             );
         }
 
-        $movedUnits = $this->stock->transferAllStock(
+        $moved = $this->stock->transferAllStock(
             $fromLocationId,
             $toLocationId,
             'Komplettumzug von ' . $fromLocation['name']
@@ -479,9 +480,10 @@ class StockActions
 
         return ActionResult::redirect(
             '?page=locations&edit=' . $fromLocationId,
-            $movedUnits > 0
+            // Je Einheit statt "47 Stück" über Rollen, Paare usw. hinweg.
+            $moved !== []
                 ? 'Bestand nach ' . $toLocation['name']
-                    . ' verschoben (' . $movedUnits . ' Stück).'
+                    . ' verschoben (' . quantitiesByUnit($moved) . ').'
                 : 'Es war kein Bestand zum Verschieben vorhanden.'
         );
     }
@@ -543,8 +545,7 @@ class StockActions
 
         return ActionResult::redirect(
             '?page=today_issues',
-            $article['name'] . ' – ' . $quantity . ' '
-                . $article['unit'] . ' ' . $done
+            $article['name'] . ' – ' . quantityText($quantity, $article) . ' ' . $done
         );
     }
 
@@ -582,7 +583,7 @@ class StockActions
 
         return ActionResult::redirect(
             $return,
-            $article['name'] . ' – ' . $quantity . ' ' . $article['unit']
+            $article['name'] . ' – ' . quantityText($quantity, $article)
                 . ' aus ' . $location['name'] . ' entsorgt'
                 . ' (rückgängig unter „Heute“)'
         );

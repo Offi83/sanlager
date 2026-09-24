@@ -58,8 +58,21 @@ final class WeeklyReport
             'expiring' => $expiring,
             'low_stock' => $this->reports->getLowStockItems(),
             'issues' => $issues,
-            'issue_total' => array_sum(array_map('intval', array_column($issues, 'quantity'))),
+            // Je Einheit ("12 Stück · 12 Paar · 1 Rolle"), leer ohne Entnahmen.
+            'issue_summary' => quantitiesByUnit($issues),
         ];
+    }
+
+    /**
+     * "Entnahmen 18.09.2026 – 24.09.2026 (12 Stück · 12 Paar · 1 Rolle)".
+     */
+    private function issuesTitle(array $report): string
+    {
+        return sprintf(
+            'Entnahmen %s – %s',
+            $report['period_start']->format('d.m.Y'),
+            $report['period_end']->modify('-1 day')->format('d.m.Y')
+        ) . ($report['issue_summary'] !== '' ? ' (' . $report['issue_summary'] . ')' : '');
     }
 
     /**
@@ -125,10 +138,9 @@ final class WeeklyReport
         };
 
         $batchLine = static fn (array $row): string => sprintf(
-            '%s: %d %s %s – %s (%s)',
+            '%s: %s %s – %s (%s)',
             formatDate($row['expiry_date']),
-            $row['quantity'],
-            $row['unit'],
+            quantityText((int) $row['quantity'], $row),
             $row['article_name'],
             $row['location_name'],
             $row['article_number'] ?? ''
@@ -147,12 +159,11 @@ final class WeeklyReport
             'Unter Mindestbestand (abgelaufenes Material zählt nicht)',
             $report['low_stock'],
             static fn (array $row): string => sprintf(
-                '%s: %s – %d von %d %s, fehlen %d',
+                '%s: %s – %d von %s, fehlen %d',
                 $row['location_name'],
                 $row['article_name'],
                 $row['usable_quantity'],
-                $row['minimum_stock'],
-                $row['unit'],
+                quantityText((int) $row['minimum_stock'], $row),
                 $row['missing_quantity']
             ),
             'Alle Mindestbestände sind erfüllt.'
@@ -166,17 +177,11 @@ final class WeeklyReport
         }
 
         $section(
-            sprintf(
-                'Entnahmen %s – %s (%d insgesamt)',
-                $report['period_start']->format('d.m.Y'),
-                $report['period_end']->modify('-1 day')->format('d.m.Y'),
-                $report['issue_total']
-            ),
+            $this->issuesTitle($report),
             $report['issues'],
             static fn (array $row): string => sprintf(
-                '%d %s %s – %s',
-                $row['quantity'],
-                $row['unit'],
+                '%s %s – %s',
+                quantityText((int) $row['quantity'], $row),
                 $row['article_name'],
                 $row['location_name']
             ),
@@ -233,7 +238,7 @@ final class WeeklyReport
                 h(formatDate($row['expiry_date'])),
                 $articleName($row),
                 h($row['location_name']),
-                (int) $row['quantity'] . ' ' . h($row['unit']),
+                h(quantityText((int) $row['quantity'], $row)),
             ],
             $rows
         );
@@ -261,7 +266,7 @@ final class WeeklyReport
                         $articleName($row),
                         (int) $row['usable_quantity'],
                         (int) $row['minimum_stock'],
-                        '<strong>' . (int) $row['missing_quantity'] . ' ' . h($row['unit']) . '</strong>',
+                        '<strong>' . h(quantityText((int) $row['missing_quantity'], $row)) . '</strong>',
                     ],
                     $report['low_stock']
                 ),
@@ -274,12 +279,7 @@ final class WeeklyReport
         }
 
         $html .= $heading(
-            sprintf(
-                'Entnahmen %s – %s (%d insgesamt)',
-                $report['period_start']->format('d.m.Y'),
-                $report['period_end']->modify('-1 day')->format('d.m.Y'),
-                $report['issue_total']
-            ),
+            $this->issuesTitle($report),
             '#0f172a'
         )
             . $table(
@@ -288,7 +288,7 @@ final class WeeklyReport
                     static fn (array $row): array => [
                         $articleName($row),
                         h($row['location_name']),
-                        (int) $row['quantity'] . ' ' . h($row['unit']),
+                        h(quantityText((int) $row['quantity'], $row)),
                     ],
                     $report['issues']
                 ),

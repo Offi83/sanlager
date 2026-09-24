@@ -195,7 +195,7 @@
                                     <strong class="<?= $isLow ? 'stock-low' : '' ?>">
                                         <?= $total ?>
                                     </strong>
-                                    <?= h($item['unit']) ?>
+                                    <?= h(unitText($total, $item)) ?>
                                 </a>
 
                                 <?php if ($expiredStock > 0): ?>

@@ -4,6 +4,13 @@
 
             <div>
 
+                <a
+                    href="?page=articles"
+                    class="back-link"
+                >
+                    ← Artikel
+                </a>
+
                 <h1>Artikel anlegen</h1>
 
                 <p>
@@ -11,13 +18,6 @@
                 </p>
 
             </div>
-
-            <a
-                href="?page=articles"
-                class="button button-secondary"
-            >
-                Abbrechen
-            </a>
 
         </div>
 
@@ -90,7 +90,7 @@
                             <option
                                 value="<?= (int) $category['id'] ?>"
                                 data-short-name="<?= h($category['short_name']) ?>"
-                                <?= $category['name'] === 'Sonstiges' ? 'selected' : '' ?>
+                                <?= (int) $category['id'] === $newArticleCategoryId ? 'selected' : '' ?>
                             >
                                 <?= h($category['name']) ?>
                             </option>
@@ -106,13 +106,20 @@
 
                     <span>
                         Einheit
-                        </span>
+                    </span>
 
-                        <input
-                            type="text"
-                            name="unit"
-                            value="Stück"
+                        <select
+                            name="unit_id"
+                            required
                         >
+                            <?php foreach ($unitList as $unit): ?>
+                                <option
+                                    value="<?= (int) $unit['id'] ?>"
+                                >
+                                    <?= h($unit['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
 
                     </label>
 
@@ -160,11 +167,29 @@
 
                 <div class="form-actions">
 
+                    <?php
+                    /*
+                     * Zwei Wege nach dem Anlegen: gleich den nächsten Artikel
+                     * (Kategorie bleibt gewählt; auch per Enter) oder den neuen
+                     * Artikel öffnen – zum Einlagern, Mindestbestand, Etikett.
+                     */
+                    ?>
                     <button
                         type="submit"
+                        name="after"
+                        value="next"
                         class="button button-primary"
                     >
-                        Artikel anlegen
+                        Anlegen &amp; nächster Artikel
+                    </button>
+
+                    <button
+                        type="submit"
+                        name="after"
+                        value="open"
+                        class="button button-secondary"
+                    >
+                        Anlegen &amp; öffnen
                     </button>
 
                     <a

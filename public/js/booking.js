@@ -398,7 +398,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             + ' – '
                             + lastResultCount
                             + ' '
-                            + data.unit
+                            // Einzahl nur bei genau 1 ("1 Rolle", "2 Rollen").
+                            + (lastResultCount === 1 ? data.unit : (data.unit_plural || data.unit))
                             + ' '
                             + data.action_label
                             // Artikel ohne MHD: keine Angabe.

@@ -113,8 +113,7 @@
 
                                         <td>
                                             <strong>
-                                                <?= (int) $movement['quantity'] ?>
-                                                <?= h($movement['unit']) ?>
+                                                <?= h(quantityText((int) $movement['quantity'], $movement)) ?>
                                             </strong>
 
                                             <?php if ($movement['kind'] === 'disposal'): ?>
@@ -146,7 +145,7 @@
                                                     'location_id' => (int) $movement['location_id'],
                                                 ],
                                                 (int) $movement['quantity'],
-                                                (int) $movement['quantity'] . ' ' . $movement['unit'] . ' '
+                                                quantityText((int) $movement['quantity'], $movement) . ' '
                                                     . $movement['article_name'] . ' wieder in '
                                                     . $movement['location_name'] . ' einbuchen'
                                                     . ($movement['kind'] === 'disposal' ? ' (Entsorgung rückgängig)?' : '?')
@@ -205,8 +204,7 @@
 
                                         <td>
                                             <strong>
-                                                <?= (int) $transfer['quantity'] ?>
-                                                <?= h($transfer['unit']) ?>
+                                                <?= h(quantityText((int) $transfer['quantity'], $transfer)) ?>
                                             </strong>
                                         </td>
 
@@ -233,7 +231,7 @@
                                                     'to_location_id' => (int) $transfer['to_location_id'],
                                                 ],
                                                 (int) $transfer['quantity'],
-                                                (int) $transfer['quantity'] . ' ' . $transfer['unit'] . ' '
+                                                quantityText((int) $transfer['quantity'], $transfer) . ' '
                                                     . $transfer['article_name'] . ' von ' . $transfer['to_location_name']
                                                     . ' zurück nach ' . $transfer['from_location_name'] . ' buchen?'
                                             ) ?>

@@ -21,3 +21,8 @@ if (!$editArticle || (int) $editArticle['active'] !== 1) {
  * lässt sich der Artikel nicht löschen.
  */
 $editArticleStock = $stock->getPhysicalStock((int) $editArticle['id']);
+
+/*
+ * Auswahl der Einheit (Verwaltung → Einheiten).
+ */
+$unitList = $units->all();

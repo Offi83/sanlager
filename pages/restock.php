@@ -33,12 +33,23 @@ foreach ($reports->getLowStockItems() as $row) {
         'location_id' => $locationId,
         'location_name' => $row['location_name'],
         'is_default' => $locationId === $restockDefaultId,
+        'can_transfer' => false,
         'items' => [],
     ];
 
+    $defaultQuantity = $restockDefaultStock[(int) $row['article_id']] ?? 0;
+
     $restockGroups[$locationId]['items'][] = $row + [
-        'default_quantity' => $restockDefaultStock[(int) $row['article_id']] ?? 0,
+        'default_quantity' => $defaultQuantity,
     ];
+
+    /*
+     * "Aus Hauptlager umbuchen" nur anbieten, wenn dort von den fehlenden
+     * Artikeln überhaupt etwas liegt.
+     */
+    if ($defaultQuantity > 0) {
+        $restockGroups[$locationId]['can_transfer'] = true;
+    }
 
     $restockItemCount++;
 }

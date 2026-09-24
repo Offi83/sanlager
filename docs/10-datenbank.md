@@ -24,11 +24,24 @@ Enthält die Stammdaten der Lagerartikel.
 | `article_number` | Artikelnummer (eindeutig)  |
 | `name`           | Bezeichnung des Artikels   |
 | `description`    | Beschreibung                |
-| `unit`           | Einheit, z. B. Stück       |
+| `unit_id`        | Einheit, siehe `units`     |
 | `category_id`    | Zugehörige Kategorie       |
 | `has_expiry`     | 1 = Artikel hat ein MHD, 0 = nicht (z. B. Mullbinden): Beim Buchen entfällt dann die MHD-Auswahl |
 | `active`         | Status des Artikels (Soft-Delete beim Löschen) |
 | `created_at`     | Erstellungszeitpunkt       |
+
+### `units`
+
+Einheiten der Artikel, gepflegt unter Verwaltung → Einheiten. Artikel wählen ihre Einheit aus dieser Liste (kein Freitext), damit nicht „Packung“, „Packungen“ und „Pckg.“ nebeneinander entstehen.
+
+| Feld         | Beschreibung                                         |
+| ------------ | ---------------------------------------------------- |
+| `id`         | Eindeutige ID der Einheit                            |
+| `name`       | Einzahl, z. B. „Rolle“ (eindeutig)                   |
+| `plural`     | Mehrzahl, z. B. „Rollen“ – angezeigt bei Mengen ≠ 1  |
+| `sort_order` | Reihenfolge in der Auswahl                           |
+
+Löschen geht nur, solange kein aktiver Artikel die Einheit verwendet. Migration 011 hat die bis dahin frei eingetippten Einheiten übernommen.
 
 ### `article_categories`
 

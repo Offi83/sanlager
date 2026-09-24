@@ -166,7 +166,8 @@ class StockRepositoryTest extends TestCase
 
         $moved = $this->stock->transferAllStock($this->boxId, $this->mainId);
 
-        $this->assertSame(6, $moved);
+        $this->assertSame(6, array_sum(array_column($moved, 'quantity')));
+        $this->assertSame("6\u{00A0}Stück", quantitiesByUnit($moved));
         $this->assertFalse($this->stock->locationHasStock($this->boxId));
         $this->assertSame(4, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
         $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
@@ -174,7 +175,7 @@ class StockRepositoryTest extends TestCase
 
     public function testTransferAllStockFromEmptyLocationMovesNothing(): void
     {
-        $this->assertSame(0, $this->stock->transferAllStock($this->boxId, $this->mainId));
+        $this->assertSame([], $this->stock->transferAllStock($this->boxId, $this->mainId));
     }
 
     public function testExpiredStockIsNotCountedAsUsable(): void

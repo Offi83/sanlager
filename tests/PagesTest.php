@@ -200,11 +200,13 @@ class PagesTest extends TestCase
             'Artikelliste Suche' => ['?page=articles&search=binde', 'Mullbinde 8 cm'],
             'Artikelliste Kategorie' => ['?page=articles&category={category}', 'Artikel'],
             'Artikel' => ['?page=article&id={article}', 'Bestand nach MHD'],
-            'Artikel bearbeiten' => ['?page=edit_article&id={article}', 'Artikel löschen'],
+            'Artikel bearbeiten' => ['?page=edit_article&id={article}', 'name="unit_id"'],
             'Neuer Artikel' => ['?page=new_article', 'Artikelnummer'],
             'Etikett' => ['?page=label&id={article}', 'diag-bz-streifen'],
             'Kategorien' => ['?page=categories', 'Verbandmaterial'],
             'Kategorie bearbeiten' => ['?page=categories&edit={category}', 'Kategorie speichern'],
+            'Einheiten' => ['?page=units', 'Flasche'],
+            'Einheit bearbeiten' => ['?page=units&edit=1', 'Einheit speichern'],
             'Lagerorte' => ['?page=locations', 'Rucksack 3'],
             'Lagerort bearbeiten' => ['?page=locations&edit={location}', 'Lagerort speichern'],
             'Lagerort-Inhalt' => ['?page=location&id={location}', 'Blutzuckermessstreifen'],
@@ -281,7 +283,7 @@ class PagesTest extends TestCase
 
     public function testDeletedArticleCannotBeOpenedByAddress(): void
     {
-        self::$db->exec("INSERT INTO articles (article_number, name, unit, active) VALUES ('alt-geloescht', 'Gelöschter Artikel', 'Stück', 0)");
+        self::$db->exec("INSERT INTO articles (article_number, name, unit_id, active) VALUES ('alt-geloescht', 'Gelöschter Artikel', 1, 0)");
         $deletedId = self::id("SELECT id FROM articles WHERE article_number = 'alt-geloescht'");
 
         foreach (['article', 'edit_article', 'label'] as $page) {
@@ -346,6 +348,54 @@ class PagesTest extends TestCase
         $articles = self::request('?page=articles')['body'];
         $this->assertStringNotContainsString('<th>Einheit</th>', $articles);
         $this->assertMatchesRegularExpression('#<strong class="[^"]*">\s*\d+\s*</strong>\s*Rolle#', $articles);
+    }
+
+    public function testUnitsCanBeSortedAndPluralIsShown(): void
+    {
+        $ids = self::$db->query('SELECT id FROM units ORDER BY sort_order DESC')->fetchAll(PDO::FETCH_COLUMN);
+
+        $response = self::request('?page=units', ['action' => 'reorder_units', 'ids' => $ids]);
+
+        $this->assertSame(200, $response['status']);
+        $this->assertTrue(json_decode($response['body'], true)['success'] ?? false, $response['body']);
+        $this->assertSame(array_map('intval', $ids), array_map('intval', self::$db->query('SELECT id FROM units ORDER BY sort_order')->fetchAll(PDO::FETCH_COLUMN)));
+
+        // Heftpflaster fehlt im Hauptlager: "7 Rollen" statt "7 Rolle".
+        $this->assertMatchesRegularExpression('#<strong class="stock-low">\s*\d+ Rollen\s*</strong>#', self::request('?page=restock')['body']);
+    }
+
+    public function testRestockHintsAndTransferButton(): void
+    {
+        $bag1 = self::id("SELECT id FROM storage_locations WHERE name = 'Rucksack 1'");
+        $bag3 = self::id("SELECT id FROM storage_locations WHERE name = 'Rucksack 3'");
+
+        // Lagerort-Seite: was hier fehlt, mit Link zur passenden Stelle der Auffüllliste.
+        $location = self::request('?page=location&id=' . $bag1)['body'];
+        $this->assertStringContainsString('href="?page=restock#location-' . $bag1 . '"', $location);
+        $this->assertMatchesRegularExpression('#\d+ Artikel fehl(t|en)#', $location);
+
+        // Etwas, das im Hauptlager gar nicht vorrätig ist: kein Umbuchen-Button.
+        self::$db->exec("INSERT INTO articles (article_number, name, unit_id) VALUES ('nicht-da', 'Nicht vorrätig', 1)");
+        self::$db->exec("INSERT INTO article_location_minimums (article_id, location_id, minimum_stock) VALUES ((SELECT id FROM articles WHERE article_number = 'nicht-da'), $bag3, 2)");
+
+        $restock = self::request('?page=restock')['body'];
+
+        $this->assertStringContainsString('id="location-' . $bag3 . '"', $restock);
+        $this->assertStringNotContainsString('target=' . $bag3 . '"', $restock);
+        $this->assertStringContainsString('target=' . $bag1 . '"', $restock);
+
+        self::$db->exec("DELETE FROM article_location_minimums WHERE location_id = $bag3");
+        self::$db->exec("UPDATE articles SET active = 0 WHERE article_number = 'nicht-da'");
+    }
+
+    public function testNewArticleKeepsCategory(): void
+    {
+        $category = self::id("SELECT id FROM article_categories WHERE name = 'Diagnostik'");
+
+        $body = self::request('?page=new_article&category=' . $category)['body'];
+
+        $this->assertMatchesRegularExpression('#value="' . $category . '"\s+data-short-name="[^"]*"\s+selected#', $body);
+        $this->assertStringContainsString('Anlegen &amp; nächster Artikel', $body);
     }
 
     public function testBookingShowsMessageOnceAndKeepsDirection(): void

@@ -47,10 +47,14 @@ class ArticleRepository
 
         $sql = 'SELECT
                     a.*,
+                    COALESCE(u.name, \'Stück\') AS unit,
+                    COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                     c.name AS category_name,
                     c.color AS category_color,
                     c.sort_order AS category_sort_order
                 FROM articles a
+                LEFT JOIN units u
+                    ON u.id = a.unit_id
                 LEFT JOIN article_categories c
                     ON c.id = a.category_id
                 WHERE ' . implode(' AND ', $conditions) . '
@@ -75,10 +79,14 @@ class ArticleRepository
         $statement = $this->db->prepare(
             'SELECT
                 a.*,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 c.name AS category_name,
                 c.color AS category_color,
                 c.sort_order AS category_sort_order
              FROM articles a
+             LEFT JOIN units u
+                 ON u.id = a.unit_id
              LEFT JOIN article_categories c
                 ON c.id = a.category_id
              WHERE a.id = :id'
@@ -106,10 +114,12 @@ class ArticleRepository
         ?string $articleNumber,
         string $name,
         string $description,
-        string $unit,
+        string $unit, // Einheit (Einzahl), siehe UnitRepository
         ?int $categoryId,
         bool $hasExpiry = true
     ): int {
+        $unitId = $this->unitId($unit);
+
         $this->assertArticleNumberAvailable($articleNumber);
         $this->assertNameAvailable($name);
         $this->releaseNumberOfDeleted($articleNumber);
@@ -120,7 +130,7 @@ class ArticleRepository
                     article_number,
                     name,
                     description,
-                    unit,
+                    unit_id,
                     category_id,
                     has_expiry
                 )
@@ -129,7 +139,7 @@ class ArticleRepository
                     :article_number,
                     :name,
                     :description,
-                    :unit,
+                    :unit_id,
                     :category_id,
                     :has_expiry
                 )'
@@ -139,7 +149,7 @@ class ArticleRepository
             'article_number' => $articleNumber ?: null,
             'name' => $name,
             'description' => $description ?: null,
-            'unit' => $unit,
+            'unit_id' => $unitId,
             'category_id' => $categoryId,
             'has_expiry' => $hasExpiry ? 1 : 0
         ]);
@@ -158,10 +168,12 @@ class ArticleRepository
         ?string $articleNumber,
         string $name,
         string $description,
-        string $unit,
+        string $unit, // Einheit (Einzahl), siehe UnitRepository
         ?int $categoryId,
         bool $hasExpiry = true
     ): void {
+        $unitId = $this->unitId($unit);
+
         $this->assertArticleNumberAvailable($articleNumber, $id);
         $this->assertNameAvailable($name, $id);
         $this->releaseNumberOfDeleted($articleNumber, $id);
@@ -171,7 +183,7 @@ class ArticleRepository
              SET article_number = :article_number,
                  name = :name,
                  description = :description,
-                 unit = :unit,
+                 unit_id = :unit_id,
                  category_id = :category_id,
                  has_expiry = :has_expiry
              WHERE id = :id'
@@ -182,7 +194,7 @@ class ArticleRepository
             'article_number' => $articleNumber ?: null,
             'name' => $name,
             'description' => $description,
-            'unit' => $unit,
+            'unit_id' => $unitId,
             'category_id' => $categoryId,
             'has_expiry' => $hasExpiry ? 1 : 0
         ]);
@@ -199,8 +211,12 @@ class ArticleRepository
         $statement = $this->db->prepare(
             'SELECT
                 a.*,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 c.name AS category_name
              FROM articles a
+             LEFT JOIN units u
+                 ON u.id = a.unit_id
              LEFT JOIN article_categories c
                 ON c.id = a.category_id
              WHERE a.article_number = :article_number
@@ -233,6 +249,25 @@ class ArticleRepository
         $statement->execute([
             'id' => $id
         ]);
+    }
+
+    /**
+     * ID der Einheit (Einzahl, siehe UnitRepository), ohne Groß-/Klein-
+     * schreibung.
+     *
+     * @throws RuntimeException wenn es die Einheit nicht gibt
+     */
+    private function unitId(string $unit): int
+    {
+        $unitRow = (new UnitRepository($this->db))->findByName($unit);
+
+        if ($unitRow === null) {
+            throw new RuntimeException(
+                'Unbekannte Einheit: ' . $unit . ' (siehe Verwaltung → Einheiten).'
+            );
+        }
+
+        return (int) $unitRow['id'];
     }
 
     /**

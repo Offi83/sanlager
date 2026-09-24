@@ -36,6 +36,8 @@ use LagerApp\LocationRepository;
 use LagerApp\StockActions;
 use LagerApp\StockReports;
 use LagerApp\StockRepository;
+use LagerApp\UnitActions;
+use LagerApp\UnitRepository;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
@@ -73,6 +75,7 @@ startSession();
 $articles = new ArticleRepository($db);
 $batches = new BatchRepository($db);
 $categories = new CategoryRepository($db);
+$units = new UnitRepository($db);
 $locationRepository = new LocationRepository($db);
 $stock = new StockRepository($db);
 $reports = new StockReports($db);
@@ -83,8 +86,9 @@ $reports = new StockReports($db);
  * in composer.json automatisch geladen werden.
  */
 
-$articleActions = new ArticleActions($articles, $categories, $stock, $locationRepository);
+$articleActions = new ArticleActions($articles, $categories, $stock, $locationRepository, $units);
 $categoryActions = new CategoryActions($categories);
+$unitActions = new UnitActions($units);
 $locationActions = new LocationActions($locationRepository, $stock);
 $stockActions = new StockActions($articles, $locationRepository, $stock, $batches);
 
@@ -136,6 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isSameOriginRequest($_SERVER)) {
 
         $result = $articleActions->dispatch($action, $_POST)
             ?? $categoryActions->dispatch($action, $_POST)
+            ?? $unitActions->dispatch($action, $_POST)
             ?? $locationActions->dispatch($action, $_POST)
             ?? $stockActions->dispatch($action, $_POST);
 
@@ -169,7 +174,7 @@ if ($flash !== null) {
 */
 $pageNames = [
     'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label',
-    'new_article', 'edit_article', 'categories', 'locations', 'location',
+    'new_article', 'edit_article', 'categories', 'units', 'locations', 'location',
 ];
 
 if (!in_array($page, $pageNames, true)) {

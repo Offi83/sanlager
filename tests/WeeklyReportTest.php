@@ -126,9 +126,14 @@ class WeeklyReportTest extends TestCase
         // Stichtag morgen 0 Uhr: Zeitraum umfasst die letzten 7 Tage inkl. heute.
         $data = (new WeeklyReport($this->reports))->build(new DateTimeImmutable('tomorrow'));
 
-        $this->assertSame(3, $data['issue_total']);
+        $this->assertSame("3\u{00A0}Stück", $data['issue_summary']);
         $this->assertCount(1, $data['issues']);
         $this->assertSame('Hauptlager', $data['issues'][0]['location_name']);
+
+        // Überschrift je Einheit statt "(3 insgesamt)".
+        $report = new WeeklyReport($this->reports);
+        $this->assertMatchesRegularExpression("/Entnahmen [\\d.]+ – [\\d.]+ \\(3\u{00A0}Stück\\)/u", $report->renderText($data));
+        $this->assertStringNotContainsString('insgesamt', $report->renderHtml($data));
     }
 
     public function testSubjectSummarizesFindings(): void
