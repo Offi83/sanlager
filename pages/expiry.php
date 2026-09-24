@@ -11,7 +11,12 @@ $expiringBatches = [];
 $expiredCount = 0;
 $expiringSoonCount = 0;
 
-$expiringBatches = $reports->getExpiringBatches(90);
+/*
+ * Vorlaufzeit wie im Wochenbericht (REPORT_EXPIRY_DAYS, Standard 90).
+ */
+$expiryDays = expiryWarningDays();
+
+$expiringBatches = $reports->getExpiringBatches($expiryDays);
 
 foreach ($expiringBatches as $row) {
 

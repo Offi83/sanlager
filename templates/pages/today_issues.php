@@ -30,18 +30,28 @@
 
                 <div class="today-summary">
 
-                    <strong>
-                        <?= $todayIssueCount ?>
-                    </strong>
+                    <?php if ($todayIssuedSummary === ''): ?>
 
-                    <span>
-                        Ausbuchungen heute
-                    </span>
+                        <span>
+                            Heute noch nichts ausgebucht
+                        </span>
 
-                    <?php if ($todayDisposedCount > 0): ?>
+                    <?php else: ?>
+
+                        <strong>
+                            <?= h($todayIssuedSummary) ?>
+                        </strong>
+
+                        <span>
+                            ausgebucht
+                        </span>
+
+                    <?php endif; ?>
+
+                    <?php if ($todayDisposedSummary !== ''): ?>
 
                         <span class="today-disposed">
-                            + <?= $todayDisposedCount ?> entsorgt
+                            + <?= h($todayDisposedSummary) ?> entsorgt
                         </span>
 
                     <?php endif; ?>
@@ -117,11 +127,10 @@
                                         </td>
 
                                         <td>
-                                            <?= h(
-                                                formatDate(
-                                                    $movement['expiry_date']
-                                                )
-                                            ) ?>
+                                            <?= h(formatExpiry(
+                                                $movement['expiry_date'],
+                                                (int) $movement['has_expiry'] === 1
+                                            )) ?>
                                         </td>
 
                                         <td>
@@ -202,7 +211,10 @@
                                         </td>
 
                                         <td>
-                                            <?= h(formatDate($transfer['expiry_date'])) ?>
+                                            <?= h(formatExpiry(
+                                                $transfer['expiry_date'],
+                                                (int) $transfer['has_expiry'] === 1
+                                            )) ?>
                                         </td>
 
                                         <td>

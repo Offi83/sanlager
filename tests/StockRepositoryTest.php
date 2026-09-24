@@ -223,7 +223,7 @@ class StockRepositoryTest extends TestCase
         $this->stock->issueOldest($this->articleId, $this->mainId);
         $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId);
 
-        $this->assertSame(2, $this->reports->getTodayIssueCount());
+        $this->assertSame(2, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
 
         $issues = $this->reports->getTodayIssues();
 
@@ -246,7 +246,7 @@ class StockRepositoryTest extends TestCase
             'UPDATE stock_movements SET created_at = :created_at WHERE movement_type = \'issue\''
         )->execute(['created_at' => $yesterday]);
 
-        $this->assertSame(0, $this->reports->getTodayIssueCount());
+        $this->assertSame(0, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
         $this->assertSame([], $this->reports->getTodayIssues());
     }
 
@@ -288,7 +288,7 @@ class StockRepositoryTest extends TestCase
         $this->stock->reverseTodayIssue($this->articleId, $batch, $this->mainId, 1);
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
-        $this->assertSame(2, $this->reports->getTodayIssueCount());
+        $this->assertSame(2, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
         $this->assertSame(2, (int) $this->reports->getTodayIssues()[0]['quantity']);
 
         // Die Historie bleibt erhalten: nichts gelöscht, eine Gegenbuchung mehr.
@@ -298,7 +298,7 @@ class StockRepositoryTest extends TestCase
         $this->stock->reverseTodayIssue($this->articleId, $batch, $this->mainId, 2);
 
         $this->assertSame([], $this->reports->getTodayIssues());
-        $this->assertSame(0, $this->reports->getTodayIssueCount());
+        $this->assertSame(0, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
     }
 
     public function testReverseTodayIssueWithoutExpiryAndLimits(): void
@@ -336,7 +336,7 @@ class StockRepositoryTest extends TestCase
         $this->assertSame(2, $this->stock->getStockSummary($this->articleId)['total']);
 
         // Entsorgen ist kein Verbrauch.
-        $this->assertSame(0, $this->reports->getTodayIssueCount());
+        $this->assertSame(0, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
         $this->assertSame([], $this->reports->getIssuesBetween(new \DateTimeImmutable('today'), new \DateTimeImmutable('tomorrow')));
 
         $this->expectException(RuntimeException::class);
@@ -393,7 +393,7 @@ class StockRepositoryTest extends TestCase
 
         $this->stock->reverseTodayTransfer($this->articleId, $batch, $this->mainId, $this->boxId, 1);
         $this->assertSame([], $this->reports->getTodayTransfers());
-        $this->assertSame(0, $this->reports->getTodayIssueCount());
+        $this->assertSame(0, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
     }
 
     public function testRealBackTransferIsNotTreatedAsUndo(): void

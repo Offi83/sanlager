@@ -112,9 +112,10 @@
                                 <td>
 
                                     <span class="<?= $rowExpiry['class'] ?>">
-                                        <?= $row['expiry_date']
-                                            ? h(formatDate($row['expiry_date']))
-                                            : 'ohne MHD' ?>
+                                        <?= h(formatExpiry(
+                                            $row['expiry_date'],
+                                            (int) $row['has_expiry'] === 1
+                                        )) ?>
                                     </span>
 
                                     <?php if ($rowExpiry['warning']): ?>

@@ -71,6 +71,7 @@ class StockRepository
                 a.name AS article_name,
                 a.article_number,
                 a.unit,
+                a.has_expiry,
                 c.name AS category_name,
                 c.color AS category_color,
                 c.sort_order AS category_sort_order,

@@ -42,6 +42,35 @@ class HelpersTest extends TestCase
         $this->assertNull(normalizeDate($input));
     }
 
+    public function testExpiryWarningUsesReportExpiryDays(): void
+    {
+        $previous = $_ENV['REPORT_EXPIRY_DAYS'] ?? null;
+        $in45Days = date('Y-m-d', strtotime('+45 days'));
+
+        try {
+            unset($_ENV['REPORT_EXPIRY_DAYS']);
+            $this->assertSame(90, expiryWarningDays());
+            $this->assertSame('expiry-warning', expiryInfo($in45Days)['class']);
+
+            // Wie im Wochenbericht eingestellt: 30 Tage.
+            $_ENV['REPORT_EXPIRY_DAYS'] = '30';
+            $this->assertSame(30, expiryWarningDays());
+            $this->assertSame('', expiryInfo($in45Days)['class']);
+
+            // Ungültige Werte: Standard.
+            foreach (['0', '366', 'bald', ''] as $invalid) {
+                $_ENV['REPORT_EXPIRY_DAYS'] = $invalid;
+                $this->assertSame(90, expiryWarningDays(), $invalid);
+            }
+        } finally {
+            if ($previous === null) {
+                unset($_ENV['REPORT_EXPIRY_DAYS']);
+            } else {
+                $_ENV['REPORT_EXPIRY_DAYS'] = $previous;
+            }
+        }
+    }
+
     public function testNameKeyIgnoresCaseUmlautsAndSpaces(): void
     {
         $this->assertSame(nameKey('Mullbinde 8 cm'), nameKey('  MULLBINDE   8 cm '));

@@ -115,7 +115,6 @@
                     <tr>
                         <th>Artikel</th>
                         <th>Artikelnummer</th>
-                        <th>Einheit</th>
                         <th>Bestand</th>
                     </tr>
 
@@ -142,7 +141,7 @@
                                 class="article-category-row"
                                 style="background-color: <?= h($item['category_color'] ?? '#64748b') ?>;"
                             >
-                                <th colspan="4">
+                                <th colspan="3">
                                     <span class="article-category-name">
                                         <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
                                     </span>
@@ -187,10 +186,6 @@
                                 <?= h($item['article_number']) ?>
                             </td>
 
-                            <td>
-                                <?= h($item['unit']) ?>
-                            </td>
-
                             <td class="article-stock-cell">
 
                                 <a
@@ -200,6 +195,7 @@
                                     <strong class="<?= $isLow ? 'stock-low' : '' ?>">
                                         <?= $total ?>
                                     </strong>
+                                    <?= h($item['unit']) ?>
                                 </a>
 
                                 <?php if ($expiredStock > 0): ?>

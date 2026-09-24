@@ -825,8 +825,9 @@ tbody tr:last-child td {
 
 .today-summary {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: 12px;
+    gap: 4px 12px;
     padding: 22px;
 }
 
@@ -1666,6 +1667,11 @@ tbody tr:last-child td {
 
     .today-summary {
         padding: 18px;
+    }
+
+    /* "12 Stück · 12 Paar · 1 Rolle" passt so meist in eine Zeile. */
+    .today-summary strong {
+        font-size: 24px;
     }
 
     /*

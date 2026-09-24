@@ -8,7 +8,7 @@
 
                     <p>
                         Bereits abgelaufenes und in den nächsten
-                        90 Tagen ablaufendes Material, über alle
+                        <?= $expiryDays ?> Tagen ablaufendes Material, über alle
                         Lagerorte hinweg.
                     </p>
 
@@ -54,7 +54,7 @@
                         </strong>
 
                         <span>
-                            laufen bald ab (90 Tage)
+                            laufen bald ab (<?= $expiryDays ?> Tage)
                         </span>
 
                     </div>
@@ -68,7 +68,7 @@
                 <?php if (!$expiringBatches): ?>
 
                     <p class="empty-state compact">
-                        Kein Material läuft in den nächsten 90 Tagen ab.
+                        Kein Material läuft in den nächsten <?= $expiryDays ?> Tagen ab.
                     </p>
 
                 <?php else: ?>

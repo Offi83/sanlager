@@ -8,11 +8,8 @@
  */
 
 $todayIssues = [];
-$todayIssueCount = 0;
 $todayTransfers = [];
-$todayDisposedCount = 0;
 
-$todayIssueCount = $reports->getTodayIssueCount();
 $todayTransfers = $reports->getTodayTransfers();
 
 /*
@@ -38,7 +35,16 @@ usort(
         ?: strcmp((string) $a['expiry_date'], (string) $b['expiry_date'])
 );
 
-$todayDisposedCount = array_sum(array_map(
-    static fn (array $row): int => $row['kind'] === 'disposal' ? (int) $row['quantity'] : 0,
-    $todayIssues
+/*
+ * Zusammenfassung oben, je Einheit ("18 Stück · 12 Paar") statt einer
+ * Summe über verschiedene Einheiten.
+ */
+$todayIssuedSummary = quantitiesByUnit(array_filter(
+    $todayIssues,
+    static fn (array $row): bool => $row['kind'] === 'issue'
+));
+
+$todayDisposedSummary = quantitiesByUnit(array_filter(
+    $todayIssues,
+    static fn (array $row): bool => $row['kind'] === 'disposal'
 ));

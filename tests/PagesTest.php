@@ -330,6 +330,24 @@ class PagesTest extends TestCase
         $this->assertMatchesRegularExpression('#name="has_expiry"\s+value="1"\s+>#', $edit);
     }
 
+    public function testTodayAndListsShowUnitsAndNoMhdDash(): void
+    {
+        // Summe je Einheit statt "25 Ausbuchungen" über Stück, Paar und Rolle.
+        $today = self::request('?page=today_issues')['body'];
+        $this->assertMatchesRegularExpression('#<strong>\s*\d+\x{00A0}Stück · \d+\x{00A0}Paar · \d+\x{00A0}Rolle\s*</strong>\s*<span>\s*ausgebucht#u', $today);
+
+        // Mullbinde hat kein MHD: "–" statt "ohne MHD".
+        $this->assertMatchesRegularExpression('#Mullbinde 8 cm.*?<td>\s*–\s*</td>#s', $today);
+
+        $bag = self::request(self::resolve('?page=location&id={location}'))['body'];
+        $this->assertMatchesRegularExpression('#Mullbinde 8 cm.*?<span class="">\s*–\s*</span>#s', $bag);
+
+        // Artikelliste: Einheit steht beim Bestand, keine eigene Spalte.
+        $articles = self::request('?page=articles')['body'];
+        $this->assertStringNotContainsString('<th>Einheit</th>', $articles);
+        $this->assertMatchesRegularExpression('#<strong class="[^"]*">\s*\d+\s*</strong>\s*Rolle#', $articles);
+    }
+
     public function testBookingShowsMessageOnceAndKeepsDirection(): void
     {
         $source = self::id("SELECT id FROM storage_locations WHERE name = 'Hauptlager'");

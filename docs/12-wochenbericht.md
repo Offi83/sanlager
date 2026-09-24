@@ -34,7 +34,7 @@ APP_URL=https://lager.example.org
 | `MAILER_DSN`         | ja      | SMTP-Zugang des Mailkontos, über das versendet wird. Sonderzeichen in Benutzername/Passwort URL-kodieren (`@` → `%40`, `:` → `%3A`, `/` → `%2F`). |
 | `REPORT_FROM`        | ja      | Absender, mit oder ohne Namen. Muss meist zum SMTP-Konto passen. |
 | `REPORT_RECIPIENTS`  | ja      | Eine oder mehrere Empfängeradressen, durch Komma getrennt. |
-| `REPORT_EXPIRY_DAYS` | nein    | Vorlaufzeit für „MHD läuft bald ab“ in Tagen (1–365, Standard 90). |
+| `REPORT_EXPIRY_DAYS` | nein    | Vorlaufzeit für „MHD läuft bald ab“ in Tagen (1–365, Standard 90). Gilt auch in der App (MHD-Übersicht, „MHD bald erreicht“), damit Mail und Anzeige übereinstimmen. |
 | `APP_URL`            | nein    | Adresse der Weboberfläche. Ist sie gesetzt, sind die Artikel in der Mail verlinkt. |
 | `APP_TIMEZONE`       | nein    | Bestimmt, was „heute“ und „letzte Woche“ bedeuten (Standard `Europe/Berlin`). |
 

@@ -158,6 +158,13 @@ final class WeeklyReport
             'Alle Mindestbestände sind erfüllt.'
         );
 
+        /*
+         * Direkt zur Auffüllliste (je Lagerort, mit Bestand im Hauptlager).
+         */
+        if ($appUrl !== null && $report['low_stock'] !== []) {
+            array_splice($lines, -1, 0, ['Auffüllliste: ' . $appUrl . '/?page=restock']);
+        }
+
         $section(
             sprintf(
                 'Entnahmen %s – %s (%d insgesamt)',
@@ -260,6 +267,11 @@ final class WeeklyReport
                 ),
                 'Alle Mindestbestände sind erfüllt.'
             );
+
+        if ($appUrl !== null && $report['low_stock'] !== []) {
+            $html .= '<p style="margin:4px 0 16px"><a href="' . h($appUrl . '/?page=restock')
+                . '" style="color:#b91c1c">Zur Auffüllliste</a></p>';
+        }
 
         $html .= $heading(
             sprintf(

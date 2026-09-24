@@ -501,7 +501,7 @@ class ActionsTest extends TestCase
         ]);
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
-        $this->assertSame(1, $this->reports->getTodayIssueCount());
+        $this->assertSame(1, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
         $this->assertSame('1 Stück ausgebucht aus Hauptlager', $result->message);
         $this->assertStringContainsString('&from=' . $this->mainId . '&to=issue', $result->redirectUrl);
     }

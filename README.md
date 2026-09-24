@@ -31,6 +31,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 **Verwaltung**
 * Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck
+* MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien und Lagerorte anlegen und sortieren
 
 **Außerdem**

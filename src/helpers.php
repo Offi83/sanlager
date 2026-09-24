@@ -56,6 +56,56 @@ function formatDate(?string $date): string
 }
 
 /**
+ * MHD-Spalte in Tabellen: Datum, "ohne MHD" – oder "–" bei Artikeln, die
+ * gar kein MHD haben (z. B. Mullbinden), da wäre "ohne MHD" nur Rauschen.
+ */
+function formatExpiry(?string $date, bool $articleHasExpiry): string
+{
+    return !$date && !$articleHasExpiry ? '–' : formatDate($date);
+}
+
+/**
+ * Mengen je Einheit zusammengezählt, z. B. "18 Stück · 12 Paar · 1 Rolle"
+ * statt einer Summe über verschiedene Einheiten. Größte Menge zuerst.
+ *
+ * @param array<int, array{quantity: int|string, unit: string}> $rows
+ */
+function quantitiesByUnit(array $rows): string
+{
+    $sums = [];
+
+    foreach ($rows as $row) {
+        $sums[$row['unit']] = ($sums[$row['unit']] ?? 0) + (int) $row['quantity'];
+    }
+
+    arsort($sums);
+
+    return implode(' · ', array_map(
+        // Geschütztes Leerzeichen: umbrochen wird nur an den Punkten.
+        static fn (string $unit, int $quantity): string => $quantity . "\u{00A0}" . $unit,
+        array_keys($sums),
+        $sums
+    ));
+}
+
+/**
+ * Vorlaufzeit in Tagen, ab der ein MHD als "bald erreicht" gilt – aus
+ * REPORT_EXPIRY_DAYS in der .env (1–365, sonst 90). Derselbe Wert wie im
+ * Wochenbericht (siehe ReportConfig), damit Mail und MHD-Übersicht
+ * dasselbe melden.
+ */
+function expiryWarningDays(): int
+{
+    $value = is_string($_ENV['REPORT_EXPIRY_DAYS'] ?? null)
+        ? trim($_ENV['REPORT_EXPIRY_DAYS'])
+        : '';
+
+    return ctype_digit($value) && (int) $value >= 1 && (int) $value <= 365
+        ? (int) $value
+        : 90;
+}
+
+/**
  * Liefert CSS-Klasse und Warntext für ein MHD in einem Aufwasch,
  * statt Ablaufberechnung und Schwellwerte zweimal zu duplizieren.
  *
@@ -81,7 +131,7 @@ function expiryInfo(?string $date): array
      * als "abgelaufen" werten.
      */
     $today = date('Y-m-d');
-    $warningThreshold = date('Y-m-d', strtotime('+90 days'));
+    $warningThreshold = date('Y-m-d', strtotime('+' . expiryWarningDays() . ' days'));
 
     if ($date < $today) {
         return ['class' => 'expiry-expired', 'warning' => 'ABGELAUFEN'];

@@ -42,6 +42,7 @@ class StockReports
                 a.name AS article_name,
                 a.article_number,
                 a.unit,
+                a.has_expiry,
                 b.expiry_date,
                 sl.name AS location_name,
                 ABS(SUM(sm.quantity)) AS quantity
@@ -75,25 +76,6 @@ class StockReports
     }
 
     /**
-     * Heute ausgebuchte Menge (Stück, abzüglich Rückbuchungen), siehe
-     * getTodayIssues().
-     */
-    public function getTodayIssueCount(): int
-    {
-        $statement = $this->db->prepare(
-            'SELECT COALESCE(-SUM(quantity), 0)
-             FROM stock_movements
-             WHERE movement_type IN (\'issue\', \'issue_reversal\')
-             AND created_at >= :day_start
-             AND created_at < :day_end'
-        );
-
-        $statement->execute($this->todayUtcRange());
-
-        return (int) $statement->fetchColumn();
-    }
-
-    /**
      * Heutige Entsorgungen (`disposal`) je Artikel/Charge/Lagerort,
      * abzüglich Rücknahmen (`disposal_reversal`).
      */
@@ -107,6 +89,7 @@ class StockReports
                 a.name AS article_name,
                 a.article_number,
                 a.unit,
+                a.has_expiry,
                 b.expiry_date,
                 sl.name AS location_name,
                 -SUM(sm.quantity) AS quantity
@@ -157,6 +140,7 @@ class StockReports
                 t.to_location_id,
                 a.name AS article_name,
                 a.unit,
+                a.has_expiry,
                 b.expiry_date,
                 src.name AS from_location_name,
                 dst.name AS to_location_name,

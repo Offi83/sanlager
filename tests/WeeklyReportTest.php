@@ -165,6 +165,19 @@ class WeeklyReportTest extends TestCase
         $this->assertStringContainsString('https://lager.example.org/?page=article&amp;id=' . $this->blanketId, $html);
 
         $this->assertStringContainsString('Hauptlager: Rettungsdecke <gold> – 0 von 2 Stück, fehlen 2', $email->getTextBody());
+
+        // Unterschreitungen: direkt zur Auffüllliste.
+        $this->assertStringContainsString('href="https://lager.example.org/?page=restock"', $html);
+        $this->assertStringContainsString("fehlen 2\nAuffüllliste: https://lager.example.org/?page=restock\n", $email->getTextBody());
+    }
+
+    public function testNoRestockLinkWithoutLowStock(): void
+    {
+        $report = new WeeklyReport($this->reports);
+        $email = $report->createEmail($this->config(['APP_URL' => 'https://lager.example.org']), $report->build());
+
+        $this->assertStringNotContainsString('page=restock', $email->getHtmlBody());
+        $this->assertStringNotContainsString('page=restock', $email->getTextBody());
     }
 
     public function testConfigReportsAllProblemsAtOnce(): void
