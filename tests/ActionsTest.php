@@ -56,7 +56,7 @@ class ActionsTest extends TestCase
 
     private function articleActions(): ArticleActions
     {
-        return new ArticleActions($this->articles, $this->categories, $this->stock);
+        return new ArticleActions($this->articles, $this->categories, $this->stock, $this->locations);
     }
 
     private function receive(int $quantity): void
@@ -83,7 +83,7 @@ class ActionsTest extends TestCase
         $this->assertTrue($result->json['success']);
         $this->assertSame('Mullbinde', $result->json['article_name']);
         $this->assertSame('ausgebucht', $result->json['action_label']);
-        $this->assertSame(1, $this->stock->getTotalStock($this->articleId));
+        $this->assertSame(1, $this->stock->getStockSummary($this->articleId)['total']);
     }
 
     public function testIssueByScannerReportsErrorAsJson(): void
@@ -218,7 +218,7 @@ class ActionsTest extends TestCase
             $this->receiveWithExpiry($expiry, confirmed: true);
         }
 
-        $this->assertSame(2, $this->stock->getTotalStock($this->articleId) + $this->stock->getExpiredStock($this->articleId));
+        $this->assertSame(2, $this->stock->getStockSummary($this->articleId)['total'] + $this->stock->getStockSummary($this->articleId)['expired']);
 
         // Auch in eine vorhandene, abgelaufene Charge nur mit Bestätigung.
         $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
@@ -327,14 +327,14 @@ class ActionsTest extends TestCase
             'minimum_stock' => [(string) $this->mainId => '5'],
         ]);
 
-        $this->assertTrue($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertTrue($this->stock->getStockSummary($this->articleId)['is_low']);
 
         $this->articleActions()->dispatch('set_article_minimums', [
             'article_id' => (string) $this->articleId,
             'minimum_stock' => [(string) $this->mainId => ''],
         ]);
 
-        $this->assertFalse($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertFalse($this->stock->getStockSummary($this->articleId)['is_low']);
     }
 
     public function testReorderRejectsNonArray(): void
@@ -394,7 +394,7 @@ class ActionsTest extends TestCase
 
         $this->assertSame('?page=today_issues', $result->redirectUrl);
         $this->assertSame('Mullbinde – 2 Stück zurück nach Hauptlager gebucht', $result->message);
-        $this->assertSame(3, $this->stock->getTotalStock($this->articleId));
+        $this->assertSame(3, $this->stock->getStockSummary($this->articleId)['total']);
     }
 
     public function testDisposeActionRedirectsBackToOrigin(): void

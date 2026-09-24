@@ -82,7 +82,7 @@ class StockRepositoryTest extends TestCase
 
         $this->assertSame($oldBatch, $result['batch_id']);
         $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $oldBatch));
-        $this->assertSame(4, $this->stock->getTotalStock($this->articleId));
+        $this->assertSame(4, $this->stock->getStockSummary($this->articleId)['total']);
     }
 
     public function testIssueOldestTakesStockWithoutExpiryLast(): void
@@ -147,7 +147,7 @@ class StockRepositoryTest extends TestCase
         $this->assertSame($batch, $result['batch_id']);
         $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
         $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $batch));
-        $this->assertSame(3, $this->stock->getTotalStock($this->articleId));
+        $this->assertSame(3, $this->stock->getStockSummary($this->articleId)['total']);
     }
 
     public function testTransferOldestRejectsSameLocation(): void
@@ -185,8 +185,8 @@ class StockRepositoryTest extends TestCase
         $this->receive(4, $this->day('today'));
 
         // Ein MHD von heute gilt noch als verwendbar.
-        $this->assertSame(7, $this->stock->getTotalStock($this->articleId));
-        $this->assertSame(3, $this->stock->getExpiredStock($this->articleId));
+        $this->assertSame(7, $this->stock->getStockSummary($this->articleId)['total']);
+        $this->assertSame(3, $this->stock->getStockSummary($this->articleId)['expired']);
 
         $main = array_values(array_filter(
             $this->stock->getStockForArticle($this->articleId),
@@ -203,16 +203,16 @@ class StockRepositoryTest extends TestCase
         $this->receive(5, $this->day('-1 day'));
         $this->receive(10, null, $this->boxId);
 
-        $this->assertFalse($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertFalse($this->stock->getStockSummary($this->articleId)['is_low']);
 
         $this->stock->saveMinimums($this->articleId, [$this->mainId => 3]);
-        $this->assertFalse($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertFalse($this->stock->getStockSummary($this->articleId)['is_low']);
 
         $this->stock->saveMinimums($this->articleId, [$this->mainId => 4]);
-        $this->assertTrue($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertTrue($this->stock->getStockSummary($this->articleId)['is_low']);
 
         $this->stock->saveMinimums($this->articleId, [$this->mainId => null]);
-        $this->assertFalse($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertFalse($this->stock->getStockSummary($this->articleId)['is_low']);
     }
 
     public function testTodayIssuesCountOnlyIssuesNotTransfers(): void
@@ -333,7 +333,7 @@ class StockRepositoryTest extends TestCase
 
         $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $expired));
-        $this->assertSame(2, $this->stock->getTotalStock($this->articleId));
+        $this->assertSame(2, $this->stock->getStockSummary($this->articleId)['total']);
 
         // Entsorgen ist kein Verbrauch.
         $this->assertSame(0, $this->reports->getTodayIssueCount());
@@ -464,13 +464,13 @@ class StockRepositoryTest extends TestCase
         $this->receive(5, null);
         $this->stock->saveMinimums($this->articleId, [$this->mainId => 2, $this->boxId => 3]);
 
-        $this->assertTrue($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertTrue($this->stock->getStockSummary($this->articleId)['is_low']);
 
         // Kiste wird aufgelöst: leer, also deaktivierbar – ihr Mindestbestand
         // bleibt gespeichert, darf aber nicht mehr zählen.
         (new LocationRepository($this->db))->deactivate($this->boxId);
 
-        $this->assertFalse($this->stock->hasLowStockAtAnyLocation($this->articleId));
+        $this->assertFalse($this->stock->getStockSummary($this->articleId)['is_low']);
         $this->assertFalse($this->stock->getStockSummaries()[$this->articleId]['is_low']);
         $this->assertSame([], $this->reports->getLowStockItems());
     }

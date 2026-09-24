@@ -19,7 +19,8 @@ class ArticleActions
     public function __construct(
         private ArticleRepository $articles,
         private CategoryRepository $categories,
-        private StockRepository $stock
+        private StockRepository $stock,
+        private LocationRepository $locations
     ) {
     }
 
@@ -197,7 +198,7 @@ class ArticleActions
 
         $minimums = [];
 
-        foreach ($this->stock->locations() as $location) {
+        foreach ($this->locations->all() as $location) {
             $locationId = (int) $location['id'];
             $rawValue = $this->string($submittedMinimums, (string) $locationId);
 

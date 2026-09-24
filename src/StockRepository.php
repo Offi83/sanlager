@@ -33,22 +33,6 @@ class StockRepository
     }
 
     /**
-     * Liefert alle aktiven Lagerorte in ihrer festgelegten Reihenfolge,
-     * z. B. für das Lagerort-Dropdown beim Bestand buchen.
-     */
-    public function locations(): array
-    {
-        return $this->db
-            ->query(
-                'SELECT *
-                 FROM storage_locations
-                 WHERE active = 1
-                 ORDER BY sort_order, name COLLATE NOCASE'
-            )
-            ->fetchAll();
-    }
-
-    /**
      * Prüft, ob an einem Lagerort noch (irgendein) positiver Bestand
      * vorhanden ist. Dient als Schutz davor, einen noch benutzten
      * Lagerort zu deaktivieren.
@@ -127,10 +111,9 @@ class StockRepository
 
     /**
      * Bestand eines Artikels je Lagerort (inkl. Lagerorte ohne Bestand,
-     * dort dann 0). `quantity` enthält auch bereits abgelaufene Chargen –
-     * die Kennzeichnung "abgelaufen" erfolgt separat, siehe
-     * getExpiredStock(). `usable_quantity` zählt abgelaufene Chargen
-     * bewusst nicht mit (siehe getTotalStock()) und ist die Grundlage
+     * dort dann 0). `quantity` enthält auch bereits abgelaufene Chargen,
+     * `usable_quantity` zählt sie bewusst nicht mit (siehe
+     * getStockSummaries()) und ist die Grundlage
      * für den Mindestbestand-Vergleich (`minimum_stock`, NULL wenn für
      * diesen Lagerort nicht überwacht, siehe saveMinimums()).
      */
@@ -219,17 +202,6 @@ class StockRepository
     }
 
     /**
-     * Prüft, ob ein Artikel an mindestens einem überwachten Lagerort
-     * (siehe saveMinimums()) unter seinem dortigen Mindestbestand liegt.
-     * Abgelaufene Chargen zählen dabei nicht als verfügbarer Bestand
-     * (siehe getTotalStock()).
-     */
-    public function hasLowStockAtAnyLocation(int $articleId): bool
-    {
-        return $this->getStockSummary($articleId)['is_low'];
-    }
-
-    /**
      * Bestand eines Artikels je Charge/MHD UND Lagerort (eine Zeile pro
      * Kombination mit positivem Bestand, "ohne MHD" eingeschlossen).
      *
@@ -315,36 +287,9 @@ class StockRepository
     }
 
     /**
-     * Gesamtbestand eines Artikels über alle Lagerorte hinweg – ohne
-     * bereits abgelaufene Chargen. Wird u. a. für den
-     * Mindestbestand-Vergleich verwendet, damit abgelaufenes (nicht mehr
-     * einsatzbereites) Material nicht als verfügbarer Bestand zählt.
-     *
-     * ACHTUNG: Dadurch kann diese Zahl kleiner sein als die Summe der
-     * Werte aus getStockForArticle() bzw. getStockByBatch(), die
-     * abgelaufene Chargen mitzählen (dort aber separat als "abgelaufen"
-     * gekennzeichnet werden, siehe getExpiredStock()). Das ist so
-     * beabsichtigt, kann auf der Artikelseite aber wie ein
-     * Rechenfehler wirken, wenn beides nebeneinander angezeigt wird.
-     */
-    public function getTotalStock(int $articleId): int
-    {
-        return $this->getStockSummary($articleId)['total'];
-    }
-
-    /**
-     * Bestand eines Artikels, dessen MHD bereits überschritten ist
-     * (über alle Lagerorte hinweg). Dient der "X abgelaufen"-Anzeige
-     * in der Artikelliste.
-     */
-    public function getExpiredStock(int $articleId): int
-    {
-        return $this->getStockSummary($articleId)['expired'];
-    }
-
-    /**
      * Gesamter physischer Bestand eines Artikels über alle Lagerorte –
-     * anders als getTotalStock() einschließlich abgelaufener Chargen.
+     * anders als `total` in getStockSummaries() einschließlich
+     * abgelaufener Chargen.
      * Grundlage dafür, ob ein Artikel gelöscht (deaktiviert) werden darf.
      */
     public function getPhysicalStock(int $articleId): int
@@ -377,11 +322,16 @@ class StockRepository
      * Bestandskennzahlen für alle Artikel auf einmal (bzw. nur für
      * $articleId), indiziert nach Artikel-ID:
      *
-     * - `total`   verwendbarer Bestand ohne abgelaufene Chargen
-     *             (siehe getTotalStock())
-     * - `expired` Bestand mit überschrittenem MHD (siehe getExpiredStock())
-     * - `is_low`  an mindestens einem überwachten Lagerort unter dem
-     *             Mindestbestand (siehe hasLowStockAtAnyLocation())
+     * - `total`   verwendbarer Bestand ohne abgelaufene Chargen – damit
+     *             abgelaufenes (nicht mehr einsatzbereites) Material
+     *             nicht als verfügbar zählt. Kann deshalb kleiner sein
+     *             als die Summe aus getStockForArticle() bzw.
+     *             getStockByBatch(), die Abgelaufenes mitzählen.
+     * - `expired` Bestand mit überschrittenem MHD ("X abgelaufen" in der
+     *             Artikelliste)
+     * - `is_low`  an mindestens einem überwachten Lagerort (siehe
+     *             saveMinimums()) unter dem Mindestbestand, ebenfalls
+     *             ohne abgelaufene Chargen
      *
      * Die Artikelliste braucht diese drei Werte für jeden Artikel. Statt
      * drei Abfragen pro Artikel werden sie hier mit zwei Abfragen für

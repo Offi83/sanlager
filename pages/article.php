@@ -57,7 +57,7 @@ if ($page === 'article') {
         $articleId
     );
 
-    $locations = $stock->locations();
+    $locations = $locationRepository->all();
 
     $articleSummary = $stock->getStockSummary($articleId);
 

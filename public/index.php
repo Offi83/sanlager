@@ -83,7 +83,7 @@ $reports = new StockReports($db);
  * in composer.json automatisch geladen werden.
  */
 
-$articleActions = new ArticleActions($articles, $categories, $stock);
+$articleActions = new ArticleActions($articles, $categories, $stock, $locationRepository);
 $categoryActions = new CategoryActions($categories);
 $locationActions = new LocationActions($locationRepository, $stock);
 $stockActions = new StockActions($articles, $locationRepository, $stock, $batches);

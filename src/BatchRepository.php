@@ -20,41 +20,6 @@ class BatchRepository
     }
 
     /**
-     * Alle Chargen eines Artikels mit ihrem aktuellen Bestand
-     * (über alle Lagerorte hinweg), älteste MHD zuerst.
-     */
-    public function allForArticle(int $articleId): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                b.id,
-                b.article_id,
-                b.expiry_date,
-                COALESCE(SUM(sm.quantity), 0) AS quantity
-             FROM batches b
-             LEFT JOIN stock_movements sm
-                ON sm.batch_id = b.id
-             WHERE b.article_id = :article_id
-             GROUP BY
-                b.id,
-                b.article_id,
-                b.expiry_date
-             ORDER BY
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
-                b.expiry_date'
-        );
-
-        $statement->execute([
-            'article_id' => $articleId
-        ]);
-
-        return $statement->fetchAll();
-    }
-
-    /**
      * Liefert eine einzelne Charge unabhängig vom Artikel.
      */
     public function find(int $id): ?array

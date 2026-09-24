@@ -101,23 +101,6 @@ a {
     color: inherit;
 }
 
-/*
- * Pi-Terminal (Querformat mit wenig Höhe, Chromium im Kiosk-Modus):
- * Links nicht antippbar – sie würden die App verlassen, und im Kiosk gibt
- * es keinen Zurück-Button. Der Lizenzhinweis bleibt als Text sichtbar,
- * "Quellcode" entfällt dort ganz.
- */
-@media (max-width: 900px) and (max-height: 560px) {
-
-    .app-footer a {
-        pointer-events: none;
-        text-decoration: none;
-    }
-
-    .footer-source {
-        display: none;
-    }
-}
 
 .page-header {
     display: flex;
@@ -447,11 +430,6 @@ tbody tr:last-child td {
     font-size: 13px;
 }
 
-.location-hint.is-low {
-    color: var(--danger);
-    font-weight: 600;
-}
-
 .minimum-stock-field {
     display: flex;
     align-items: center;
@@ -497,17 +475,6 @@ tbody tr:last-child td {
     grid-template-columns: 1fr 1fr;
     gap: var(--space-3);
     margin-bottom: var(--space-4);
-}
-
-.mindestbestand-hint {
-    display: block;
-    margin-top: 8px;
-    color: var(--muted-light);
-}
-
-.mindestbestand-hint.is-low {
-    color: var(--danger);
-    font-weight: 600;
 }
 
 .stock-low,
@@ -617,12 +584,6 @@ tbody tr:last-child td {
 
 .article-detail-page .back-link:hover {
     color: var(--primary);
-}
-
-.article-detail-page .mindestbestand-hint {
-    margin-top: 10px;
-    font-size: 14px;
-    font-weight: 600;
 }
 
 .article-detail-page .location-row .stock-value {
@@ -828,65 +789,6 @@ tbody tr:last-child td {
     color: #123f80;
 }
 
-/*
- * Mittlere Breiten (u. a. Pi-Display): Artikelnummer bekommt eine
- * eigene, volle Zeile – sie ist das Feld, in das gescannt/getippt wird.
- * Von, Ziel und Button folgen darunter nebeneinander.
- */
-@media (max-width: 900px) {
-
-    .issue-form {
-        flex-wrap: wrap;
-    }
-
-    .issue-form .issue-article-field {
-        flex: 1 1 100%;
-    }
-
-    .issue-form .issue-target-field {
-        flex: 1 1 160px;
-    }
-
-    .issue-form .issue-article-field input {
-        font-size: 22px;
-    }
-}
-
-/*
- * Querformat mit wenig Höhe (Pi-Display 800×480): Erklärtext ausblenden,
- * Überschrift und Karte kompakter – die Richtungsanzeige erklärt, was
- * beim Scannen passiert.
- */
-@media (max-width: 900px) and (max-height: 560px) {
-
-    .issue-page .page-header {
-        margin-bottom: var(--space-2);
-    }
-
-    .issue-page .page-header p {
-        display: none;
-    }
-
-    .issue-card {
-        padding: var(--space-3);
-    }
-
-    .issue-mode {
-        font-size: 16px;
-    }
-}
-
-/* Smartphones: Button und Anzeige wieder untereinander. */
-@media (max-width: 520px) {
-
-    .issue-toolbar {
-        flex-direction: column;
-    }
-
-    .issue-mode {
-        padding: 10px 14px;
-    }
-}
 
 .issue-scanner {
     width: 100%;
@@ -1074,111 +976,8 @@ tbody tr:last-child td {
 
 
 /* =========================================================
-   Responsive
+   Kopfzeile und Navigation
    ========================================================= */
-
-@media (min-width: 701px) {
-    .article-detail-page .stock-form input,
-    .article-detail-page .stock-form select,
-    .form input,
-    .form select {
-        min-height: 48px;
-    }
-}
-
-@media (max-width: 900px) {
-    .article-detail-page .stock-form > .form-grid,
-    .form-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-}
-
-@media (max-width: 700px) {
-    .container {
-        padding: 20px 14px 40px;
-    }
-
-    .page-header {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .page-header .button,
-    .actions .button {
-        width: 100%;
-    }
-
-    .actions {
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--space-1);
-    }
-
-    .form,
-    .issue-card {
-        padding: 18px;
-    }
-
-    .form-grid,
-    .article-detail-page .stock-form > .form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .form-actions,
-    .issue-form {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .issue-form .issue-target-field {
-        flex: 0 0 auto;
-    }
-
-    .form-actions .button,
-    .issue-form .button {
-        width: 100%;
-    }
-
-    th,
-    td {
-        padding: 13px 12px;
-    }
-
-    .article-top-row {
-        grid-template-columns: 1fr;
-    }
-
-    /* Smartphone: QR + Artikelnummer oben, Gesamtbestand darunter. */
-    .article-summary {
-        flex-wrap: wrap;
-        gap: var(--space-3);
-        padding: 16px;
-    }
-
-    .article-summary-qr {
-        flex-basis: 80px;
-        width: 80px;
-        height: 80px;
-    }
-
-    .article-summary-stock {
-        flex: 1 1 100%;
-        margin-left: 0;
-        padding-left: var(--space-3);
-    }
-
-    .article-summary-stock strong {
-        font-size: 28px;
-    }
-
-    .article-detail-page .stock-form {
-        padding: 18px;
-    }
-
-    .today-summary {
-        padding: 18px;
-    }
-}
 
 .topbar-inner {
     display: flex;
@@ -1313,71 +1112,6 @@ tbody tr:last-child td {
     color: #cc0000;
 }
 
-/*
- * Kompakte Kopfzeile, u. a. für das Pi-Touchdisplay (800×480): Das Logo
- * bleibt, der Untertitel entfällt, Abstände werden enger.
- */
-@media (max-width: 1000px) {
-
-    .topbar-inner {
-        gap: 1rem;
-        padding: 0.5rem 0.75rem;
-    }
-
-    .brand img {
-        height: 42px;
-    }
-
-    .brand-text span {
-        display: none;
-    }
-
-    .main-nav a {
-        padding: 0.65rem 0.75rem;
-    }
-}
-
-/*
- * Smartphones: Navigation in eine eigene Zeile unter dem Logo, die vier
- * Bereiche auf die Breite verteilt; bei Bedarf seitlich wischbar statt
- * die ganze Seite zu verbreitern.
- */
-@media (max-width: 640px) {
-
-    .topbar {
-        height: auto;
-        padding: 0;
-    }
-
-    .topbar-inner {
-        flex-wrap: wrap;
-        row-gap: 0.4rem;
-        width: 100%;
-        min-height: 0;
-    }
-
-    .main-nav {
-        width: 100%;
-        margin-left: 0;
-        overflow-x: auto;
-        scrollbar-width: none;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .main-nav::-webkit-scrollbar {
-        display: none;
-    }
-
-    .main-nav a {
-        flex: 1 0 auto;
-        padding: 0.65rem 0.5rem;
-        text-align: center;
-    }
-
-    .sub-nav a {
-        padding: 0.7rem 0.8rem;
-    }
-}
 
 /* ==========================================================================
    Kategorien
@@ -1536,55 +1270,6 @@ tbody tr:last-child td {
     font-size: 13px;
 }
 
-@media (max-width: 800px) {
-
-    .category-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .category-row {
-        grid-template-columns: 24px 10px minmax(0, 1fr);
-    }
-
-    .location-sort-row {
-        grid-template-columns: 24px minmax(0, 1fr);
-    }
-
-    .category-row .category-actions {
-        grid-column: 3;
-        justify-content: flex-start;
-    }
-
-    .location-sort-row .category-actions {
-        grid-column: 2;
-        justify-content: flex-start;
-    }
-}
-
-@media (max-width: 520px) {
-
-    .category-row,
-    .location-sort-row {
-        gap: 10px;
-    }
-
-    .category-row {
-        grid-template-columns: 20px 8px minmax(0, 1fr);
-    }
-
-    .location-sort-row {
-        grid-template-columns: 20px minmax(0, 1fr);
-    }
-
-    .category-info {
-        gap: 8px;
-    }
-
-    .category-actions {
-        flex-wrap: wrap;
-    }
-}
-
 
 /* ==========================================================================
    Kategorieanzeige in der Artikelliste
@@ -1629,7 +1314,104 @@ tbody tr:last-child td {
     font-weight: 600;
 }
 
-@media (max-width: 800px) {
+
+/* =========================================================
+   Bildschirmgrößen
+   =========================================================
+
+   Alle größenabhängigen Regeln stehen hier, in drei Stufen:
+
+   - Kompakt (bis 900 px): Pi-Display (800×480), Tablets. Engere
+     Abstände, kleinere Tabellen, Kopfzeile ohne Untertitel.
+   - Pi-Display (bis 900 × 560 px): zusätzlich für wenig Höhe.
+   - Handy (bis 700 px): einspaltig, Tabellen als Karten, Menü in
+     eigener Zeile. Gilt zusätzlich zu "Kompakt" und steht deshalb
+     danach.
+
+   Ab 701 px gelten die Mindesthöhen für Eingabefelder (Touch).
+   Druck (Etikett) steht beim Etikett.
+   ========================================================= */
+
+@media (min-width: 701px) {
+
+    .article-detail-page .stock-form input,
+    .article-detail-page .stock-form select,
+    .form input,
+    .form select {
+        min-height: 48px;
+    }
+}
+
+@media (max-width: 900px) {
+
+    /*
+     * Mittlere Breiten (u. a. Pi-Display): Artikelnummer bekommt eine
+     * eigene, volle Zeile – sie ist das Feld, in das gescannt/getippt wird.
+     * Von, Ziel und Button folgen darunter nebeneinander.
+     */
+    .issue-form {
+        flex-wrap: wrap;
+    }
+
+    .issue-form .issue-article-field {
+        flex: 1 1 100%;
+    }
+
+    .issue-form .issue-target-field {
+        flex: 1 1 160px;
+    }
+
+    .issue-form .issue-article-field input {
+        font-size: 22px;
+    }
+
+    .article-detail-page .stock-form > .form-grid,
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /*
+     * Kompakte Kopfzeile, u. a. für das Pi-Touchdisplay (800×480): Das Logo
+     * bleibt, der Untertitel entfällt, Abstände werden enger.
+     */
+    .topbar-inner {
+        gap: 1rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .brand img {
+        height: 42px;
+    }
+
+    .brand-text span {
+        display: none;
+    }
+
+    .main-nav a {
+        padding: 0.65rem 0.75rem;
+    }
+
+    .category-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .category-row {
+        grid-template-columns: 24px 10px minmax(0, 1fr);
+    }
+
+    .location-sort-row {
+        grid-template-columns: 24px minmax(0, 1fr);
+    }
+
+    .category-row .category-actions {
+        grid-column: 3;
+        justify-content: flex-start;
+    }
+
+    .location-sort-row .category-actions {
+        grid-column: 2;
+        justify-content: flex-start;
+    }
 
     .page-header {
         margin-bottom: 12px;
@@ -1754,24 +1536,206 @@ tbody tr:last-child td {
         font-size: 12px;
         white-space: nowrap;
     }
-
 }
 
+@media (max-width: 900px) and (max-height: 560px) {
 
-/* =========================================================
-   Smartphone: breite Tabellen als Karten
-   ========================================================= */
+    /*
+     * Pi-Terminal (Querformat mit wenig Höhe, Chromium im Kiosk-Modus):
+     * Links nicht antippbar – sie würden die App verlassen, und im Kiosk gibt
+     * es keinen Zurück-Button. Der Lizenzhinweis bleibt als Text sichtbar,
+     * "Quellcode" entfällt dort ganz.
+     */
+    .app-footer a {
+        pointer-events: none;
+        text-decoration: none;
+    }
 
-/*
- * Tabellen mit Klasse "table-cards" (Heute ausgebucht, MHD-Übersicht,
- * Lagerort-Inhalt) sind für schmale Bildschirme zu breit – die Buttons
- * lägen außerhalb des Bildes. Unter 600 px wird jede Zeile deshalb zu
- * einer Karte: erste Spalte (Artikel) fett, die übrigen Werte kompakt
- * darunter mit kleiner Spaltenbeschriftung (data-label, gesetzt von
- * table-cards.js), Buttons rechts.
- */
-@media (max-width: 600px) {
+    .footer-source {
+        display: none;
+    }
 
+    /*
+     * Querformat mit wenig Höhe (Pi-Display 800×480): Erklärtext ausblenden,
+     * Überschrift und Karte kompakter – die Richtungsanzeige erklärt, was
+     * beim Scannen passiert.
+     */
+    .issue-page .page-header {
+        margin-bottom: var(--space-2);
+    }
+
+    .issue-page .page-header p {
+        display: none;
+    }
+
+    .issue-card {
+        padding: var(--space-3);
+    }
+
+    .issue-mode {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 700px) {
+
+    /* Smartphones: Button und Anzeige wieder untereinander. */
+    .issue-toolbar {
+        flex-direction: column;
+    }
+
+    .issue-mode {
+        padding: 10px 14px;
+    }
+
+    .container {
+        padding: 20px 14px 40px;
+    }
+
+    .page-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .page-header .button,
+    .actions .button {
+        width: 100%;
+    }
+
+    .actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+    }
+
+    .form,
+    .issue-card {
+        padding: 18px;
+    }
+
+    .form-grid,
+    .article-detail-page .stock-form > .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .form-actions,
+    .issue-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .issue-form .issue-target-field {
+        flex: 0 0 auto;
+    }
+
+    .form-actions .button,
+    .issue-form .button {
+        width: 100%;
+    }
+
+    .article-top-row {
+        grid-template-columns: 1fr;
+    }
+
+    /* Smartphone: QR + Artikelnummer oben, Gesamtbestand darunter. */
+    .article-summary {
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        padding: 16px;
+    }
+
+    .article-summary-qr {
+        flex-basis: 80px;
+        width: 80px;
+        height: 80px;
+    }
+
+    .article-summary-stock {
+        flex: 1 1 100%;
+        margin-left: 0;
+        padding-left: var(--space-3);
+    }
+
+    .article-summary-stock strong {
+        font-size: 28px;
+    }
+
+    .article-detail-page .stock-form {
+        padding: 18px;
+    }
+
+    .today-summary {
+        padding: 18px;
+    }
+
+    /*
+     * Smartphones: Navigation in eine eigene Zeile unter dem Logo, die vier
+     * Bereiche auf die Breite verteilt; bei Bedarf seitlich wischbar statt
+     * die ganze Seite zu verbreitern.
+     */
+    .topbar {
+        height: auto;
+        padding: 0;
+    }
+
+    .topbar-inner {
+        flex-wrap: wrap;
+        row-gap: 0.4rem;
+        width: 100%;
+        min-height: 0;
+    }
+
+    .main-nav {
+        width: 100%;
+        margin-left: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .main-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .main-nav a {
+        flex: 1 0 auto;
+        padding: 0.65rem 0.5rem;
+        text-align: center;
+    }
+
+    .sub-nav a {
+        padding: 0.7rem 0.8rem;
+    }
+
+    .category-row,
+    .location-sort-row {
+        gap: 10px;
+    }
+
+    .category-row {
+        grid-template-columns: 20px 8px minmax(0, 1fr);
+    }
+
+    .location-sort-row {
+        grid-template-columns: 20px minmax(0, 1fr);
+    }
+
+    .category-info {
+        gap: 8px;
+    }
+
+    .category-actions {
+        flex-wrap: wrap;
+    }
+
+    /*
+     * Tabellen mit Klasse "table-cards" (Heute ausgebucht, MHD-Übersicht,
+     * Lagerort-Inhalt) sind für schmale Bildschirme zu breit – die Buttons
+     * lägen außerhalb des Bildes. Unter 600 px wird jede Zeile deshalb zu
+     * einer Karte: erste Spalte (Artikel) fett, die übrigen Werte kompakt
+     * darunter mit kleiner Spaltenbeschriftung (data-label, gesetzt von
+     * table-cards.js), Buttons rechts.
+     */
     table.table-cards thead {
         display: none;
     }
