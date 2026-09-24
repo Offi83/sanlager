@@ -272,7 +272,7 @@ class ActionsTest extends TestCase
         ]);
 
         $this->assertSame('?page=location&id=' . $this->mainId, $result->redirectUrl);
-        $this->assertStringContainsString('2 Stück aus Hauptlager entsorgt', $result->message);
+        $this->assertStringContainsString('2 Stück aus Hauptlager entsorgt (rückgängig unter „Heute“)', $result->message);
         $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
 
         $this->expectException(RuntimeException::class);

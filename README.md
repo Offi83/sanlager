@@ -4,14 +4,15 @@
 
 ## Digitale Lagerverwaltung für Sanitätsmaterial
 
-**SanLager** ist eine schlanke Webanwendung zur Verwaltung von Sanitätsmaterial z.B. bei einer Hiorg.
+**SanLager** ist eine schlanke Webanwendung zur Verwaltung von Sanitätsmaterial, z. B. bei einer HiOrg.
 
 Die Anwendung wurde speziell für den praktischen Einsatz im Sanitätslager entwickelt. Im Mittelpunkt stehen eine **einfache Bedienung**, eine **schnelle Bestandsübersicht** und die **Verwaltung von Mindesthaltbarkeitsdaten**.
 
-Das System soll jederzeit einen schnellen Überblick über den aktuellen Bestand ermöglichen. Hierzu wird das Material in Kisten gelagert die entsprechent mit einem QR-Code-Etikett das in der App erzeugt werden kann beschriftet.
+Das System soll jederzeit einen schnellen Überblick über den aktuellen Bestand ermöglichen. Hierzu wird das Material in Kisten gelagert, die mit einem QR-Code-Etikett beschriftet sind. Das Etikett lässt sich in der App erzeugen.
+
 ![SanLager Schema](images/schema_lager.png)
 
-Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
+Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen.
 
 ---
 
@@ -41,9 +42,7 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
-* Ausbuchen mit Anzahl >1
-* Einbuchen via Scan & Anzahl
-* Weitere Umsetzung der Lagerorte (Artikel pro Lagerort, ablaufende MHD pro Lagerort, etc.)
+* Buchen mit Anzahl > 1 (Aus-, Um- und Einbuchen per Scan)
 * Inventurfunktion
 
 ---

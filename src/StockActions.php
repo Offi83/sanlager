@@ -523,7 +523,7 @@ class StockActions
             $return,
             $article['name'] . ' – ' . $quantity . ' ' . $article['unit']
                 . ' aus ' . $location['name'] . ' entsorgt'
-                . ' (rückgängig unter „Heute ausgebucht“)'
+                . ' (rückgängig unter „Heute“)'
         );
     }
 }

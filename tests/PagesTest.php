@@ -269,6 +269,9 @@ class PagesTest extends TestCase
         // Rucksack 1: Umbuchen aus dem Hauptlager direkt vorbelegt.
         $this->assertStringContainsString('?page=issue&source=' . $main . '&target=' . $bag, $response['body']);
         $this->assertStringContainsString('Aus Hauptlager umbuchen', $response['body']);
+
+        // Kategorie-Überschriften: Heftpflaster (Verbandmaterial) fehlt im Hauptlager.
+        $this->assertMatchesRegularExpression('#article-category-row.*?<th colspan="4">\s*<span class="article-category-name">\s*Verbandmaterial#s', $response['body']);
     }
 
     public function testBookingShowsMessageOnceAndKeepsDirection(): void

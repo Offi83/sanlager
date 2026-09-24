@@ -99,7 +99,34 @@
 
                             <tbody>
 
+                                <?php $currentCategory = null; ?>
+
                                 <?php foreach ($group['items'] as $row): ?>
+
+                                    <?php
+                                    /*
+                                     * Kategorie-Überschriften wie auf der Lagerort-Seite:
+                                     * So lässt sich ein Rucksack Fach für Fach packen.
+                                     */
+                                    $rowCategory = $row['category_name'] ?? '';
+                                    ?>
+
+                                    <?php if ($currentCategory !== $rowCategory): ?>
+
+                                        <?php $currentCategory = $rowCategory; ?>
+
+                                        <tr
+                                            class="article-category-row"
+                                            style="background-color: <?= h($row['category_color'] ?? '#64748b') ?>;"
+                                        >
+                                            <th colspan="<?= $group['is_default'] ? 4 : 5 ?>">
+                                                <span class="article-category-name">
+                                                    <?= h($row['category_name'] ?? 'Ohne Kategorie') ?>
+                                                </span>
+                                            </th>
+                                        </tr>
+
+                                    <?php endif; ?>
 
                                     <tr>
 

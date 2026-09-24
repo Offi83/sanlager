@@ -270,6 +270,7 @@ class StockReports
                 sl.id AS location_id,
                 sl.name AS location_name,
                 c.name AS category_name,
+                c.color AS category_color,
                 alm.minimum_stock,
                 COALESCE(SUM(
                     CASE
