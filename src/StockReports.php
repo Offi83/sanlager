@@ -11,6 +11,7 @@ use PDO;
  * - MHD-Übersicht: abgelaufene und bald ablaufende Chargen
  * - Wochenbericht: Entnahmen eines Zeitraums, Unterschreitung der
  *   Mindestbestände
+ * - Auffüll-Liste: Unterschreitung der Mindestbestände je Lagerort
  *
  * Buchen und Bestandsermittlung liegen in StockRepository.
  */
@@ -268,6 +269,7 @@ class StockReports
                 a.unit,
                 sl.id AS location_id,
                 sl.name AS location_name,
+                c.name AS category_name,
                 alm.minimum_stock,
                 COALESCE(SUM(
                     CASE
@@ -311,6 +313,73 @@ class StockReports
             ],
             $statement->fetchAll()
         );
+    }
+
+    /**
+     * Verwendbarer Bestand (ohne abgelaufene Chargen) je Artikel an einem
+     * Lagerort, als [article_id => Menge]. Artikel ohne verwendbaren
+     * Bestand fehlen. Für die Auffüll-Liste: Wie viel davon ist im
+     * Standard-Lagerort vorhanden, um einen Rucksack aufzufüllen?
+     */
+    public function getUsableQuantitiesAtLocation(int $locationId): array
+    {
+        $statement = $this->db->prepare(
+            'SELECT
+                sm.article_id,
+                SUM(sm.quantity) AS quantity
+             FROM stock_movements sm
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             WHERE sm.location_id = :location_id
+             AND (b.expiry_date IS NULL OR b.expiry_date >= :today)
+             GROUP BY sm.article_id
+             HAVING SUM(sm.quantity) > 0'
+        );
+
+        $statement->execute([
+            'location_id' => $locationId,
+            'today' => $this->today(),
+        ]);
+
+        return array_map(
+            'intval',
+            array_column($statement->fetchAll(), 'quantity', 'article_id')
+        );
+    }
+
+    /**
+     * Anzahl der abgelaufenen Chargen mit Bestand (je Artikel, Charge und
+     * Lagerort gezählt, wie die Zeilen in getExpiringBatches()) – für die
+     * Zahl am Menüpunkt "Kontrolle".
+     */
+    public function countExpiredBatches(): int
+    {
+        $statement = $this->db->prepare(
+            'SELECT COUNT(*) FROM (
+                SELECT 1
+                FROM stock_movements sm
+                INNER JOIN articles a
+                    ON a.id = sm.article_id
+                INNER JOIN batches b
+                    ON b.id = sm.batch_id
+                INNER JOIN storage_locations sl
+                    ON sl.id = sm.location_id
+                WHERE a.active = 1
+                AND sl.active = 1
+                AND b.expiry_date < :today
+                GROUP BY
+                    sm.article_id,
+                    sm.location_id,
+                    sm.batch_id
+                HAVING SUM(sm.quantity) > 0
+            )'
+        );
+
+        $statement->execute([
+            'today' => $this->today(),
+        ]);
+
+        return (int) $statement->fetchColumn();
     }
 
     /**

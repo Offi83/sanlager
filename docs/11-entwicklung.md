@@ -80,7 +80,7 @@ Die `index.php` ist der zentrale Einstiegspunkt der Webanwendung (bewusst ohne F
 2. **Seitendaten** – `pages/<seite>.php` lädt die Daten für die aufgerufene Seite (`?page=…`). Hier sind noch Weiterleitungen möglich, z. B. bei einer unbekannten Artikel-ID. Unbekannte Seiten zeigen die Buchen-Seite.
 3. **HTML** – `templates/layout/header.php` (Head, Navigation, Meldungen), dann die Seitenvorlage `templates/pages/<seite>.php`, dann `templates/layout/footer.php`.
 
-Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintragen, Vorlage `templates/pages/<name>.php` anlegen und bei Bedarf `pages/<name>.php` für die Daten; Menüpunkt in `templates/layout/header.php`.
+Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintragen, Vorlage `templates/pages/<name>.php` anlegen und bei Bedarf `pages/<name>.php` für die Daten; in `templates/layout/header.php` unter `$navSections` einem Bereich zuordnen – als Reiter (`tabs`) oder, bei Detailseiten, nur unter `pages`. Das Hauptmenü hat bewusst nur vier Bereiche (Buchen, Heute, Kontrolle, Verwaltung) und keine Aufklappmenüs, damit es auf dem Pi-Touchdisplay (800×480) bedienbar bleibt.
 
 **Wichtig:** `use`-Anweisungen gelten in PHP nur für die eigene Datei. In Vorlagen und Seitendaten Klassen deshalb immer mit vollem Namen ansprechen, z. B. `new \LagerApp\QrCodeGenerator()` – `TemplatesTest` prüft das.
 
@@ -91,7 +91,7 @@ Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintrag
 Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale Helper-Funktionen. Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
 * **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
-* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Ausbuchen, Umbuchen, Entsorgen, Rückgängig) und ermittelt Bestände; `StockReports` enthält die reinen Auswertungen (Heute ausgebucht, MHD-Übersicht, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
+* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Ausbuchen, Umbuchen, Entsorgen, Rückgängig) und ermittelt Bestände; `StockReports` enthält die reinen Auswertungen (Heute ausgebucht, MHD-Übersicht, Auffüll-Liste, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
 * **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
 * **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.

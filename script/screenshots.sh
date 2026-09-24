@@ -113,8 +113,11 @@ ARTICLE_ID=$(id_of articles "article_number = 'verb-vp-m'")
 echo "Screenshots:"
 
 # Buchen: echte Umbuchung ausführen und die Seite danach aufnehmen
-# (zeigt Erfolgsmeldung, beibehaltene Auswahl und Richtungsanzeige).
+# (zeigt beibehaltene Auswahl und Richtungsanzeige). Origin wie vom
+# Browser, sonst lehnt der CSRF-Schutz die Buchung ab. Die
+# Erfolgsmeldung fehlt im Bild: Sie liegt in der Session von curl.
 REDIRECT=$(curl -s -o /dev/null -w '%{redirect_url}' \
+    -H "Origin: ${BASE}" \
     -d "action=issue&article_number=verb-mullbinde-8&source=${MAIN_ID}&target=${BAG_ID}" \
     "${BASE}/?page=issue")
 
@@ -125,6 +128,7 @@ shot buchen.png "${REDIRECT:-${BASE}/?page=issue}"
 
 shot ausgebucht.png "${BASE}/?page=today_issues"
 shot mhd.png "${BASE}/?page=expiry"
+shot auffuellen.png "${BASE}/?page=restock"
 shot artikel.png "${BASE}/?page=articles"
 
 shot artikel-detail.png "${BASE}/?page=article&id=${ARTICLE_ID}"

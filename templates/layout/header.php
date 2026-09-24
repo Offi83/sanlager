@@ -1,8 +1,55 @@
 <?php
 /*
  * Seitenkopf: HTML-Head, Navigation und Meldungen. Erwartet $page,
- * $message, $messageType und $error aus public/index.php.
+ * $navCounts, $message, $messageType und $error aus public/index.php.
+ *
+ * Die Navigation hat vier Bereiche. Kontrolle und Verwaltung fassen
+ * mehrere Seiten zusammen; deren Übersichtsseiten zeigen darunter
+ * Reiter (kein Aufklappmenü – auf dem Touchdisplay bräuchte das einen
+ * Tipp mehr und verdeckt den Inhalt). Detailseiten (Artikel, Lagerort,
+ * Etikett, ...) markieren nur ihren Bereich; sie haben einen Zurück-Link.
+ *
+ * Die Zahlen an Kontrolle und den Reitern zeigen, wo etwas zu tun ist:
+ * abgelaufene Chargen bzw. Artikel unter Mindestbestand.
  */
+
+$navSections = [
+    [
+        'label' => 'Buchen',
+        'href' => '?page=issue',
+        'pages' => ['issue'],
+        'tabs' => [],
+    ],
+    [
+        'label' => 'Heute',
+        'href' => '?page=today_issues',
+        'pages' => ['today_issues'],
+        'tabs' => [],
+    ],
+    [
+        'label' => 'Kontrolle',
+        'href' => '?page=expiry',
+        'pages' => ['expiry', 'restock'],
+        'tabs' => ['expiry' => 'MHD', 'restock' => 'Auffüllen'],
+    ],
+    [
+        'label' => 'Verwaltung',
+        'href' => '?page=articles',
+        'pages' => [
+            'articles', 'article', 'new_article', 'edit_article', 'label',
+            'categories', 'locations', 'location',
+        ],
+        'tabs' => [
+            'articles' => 'Artikel',
+            'categories' => 'Kategorien',
+            'locations' => 'Lagerorte',
+        ],
+    ],
+];
+
+$navBadge = static fn (int $count): string => $count > 0
+    ? ' <span class="nav-badge">' . $count . '</span>'
+    : '';
 ?>
 <!DOCTYPE html>
 <html lang="de">
@@ -42,25 +89,17 @@
     </div>
 </a>
 
-<nav>
-    <a href="?page=issue" class="<?= $page === 'issue' ? 'active' : '' ?>">
-        Buchen
-    </a>
-    <a href="?page=today_issues" class="<?= $page === 'today_issues' ? 'active' : '' ?>">
-        Heute ausgebucht
-    </a>
-    <a href="?page=expiry" class="<?= $page === 'expiry' ? 'active' : '' ?>">
-        MHD-Übersicht
-    </a>
-    <a href="?page=articles" class="<?= $page === 'articles' ? 'active' : '' ?>">
-        Artikel
-    </a>
-    <a href="?page=categories" class="<?= $page === 'categories' ? 'active' : '' ?>">
-        Kategorien
-    </a>
-    <a href="?page=locations" class="<?= $page === 'locations' ? 'active' : '' ?>">
-        Lagerorte
-    </a>
+<nav class="main-nav">
+    <?php foreach ($navSections as $section): ?>
+        <a
+            href="<?= $section['href'] ?>"
+            class="<?= in_array($page, $section['pages'], true) ? 'active' : '' ?>"
+        >
+            <?= h($section['label']) ?><?= $navBadge(array_sum(
+                array_intersect_key($navCounts, $section['tabs'])
+            )) ?>
+        </a>
+    <?php endforeach; ?>
 </nav>
 
     </div>
@@ -68,6 +107,25 @@
 </header>
 
 <main class="container">
+
+    <?php foreach ($navSections as $section): ?>
+
+        <?php if (isset($section['tabs'][$page])): ?>
+
+            <nav class="sub-nav" aria-label="<?= h($section['label']) ?>">
+                <?php foreach ($section['tabs'] as $tabPage => $tabLabel): ?>
+                    <a
+                        href="?page=<?= $tabPage ?>"
+                        class="<?= $tabPage === $page ? 'active' : '' ?>"
+                    >
+                        <?= h($tabLabel) ?><?= $navBadge($navCounts[$tabPage] ?? 0) ?>
+                    </a>
+                <?php endforeach; ?>
+            </nav>
+
+        <?php endif; ?>
+
+    <?php endforeach; ?>
 
     <?php if ($message): ?>
 

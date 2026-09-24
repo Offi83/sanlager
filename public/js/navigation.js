@@ -7,7 +7,7 @@
 document.addEventListener('DOMContentLoaded', function () {
 
     const nav =
-        document.querySelector('nav');
+        document.querySelector('.main-nav');
 
     const active =
         nav && nav.querySelector('a.active');

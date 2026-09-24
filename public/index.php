@@ -168,7 +168,7 @@ if ($flash !== null) {
 | eine Datendatei (z. B. new_article).
 */
 $pageNames = [
-    'issue', 'today_issues', 'expiry', 'articles', 'article', 'label',
+    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label',
     'new_article', 'edit_article', 'categories', 'locations', 'location',
 ];
 
@@ -185,6 +185,15 @@ if (is_file(__DIR__ . '/../pages/' . $page . '.php')) {
 | HTML
 |--------------------------------------------------------------------------
 */
+
+/*
+ * Zahlen für die Navigation (siehe templates/layout/header.php): wo in
+ * "Kontrolle" etwas zu tun ist.
+ */
+$navCounts = [
+    'expiry' => $reports->countExpiredBatches(),
+    'restock' => $restockItemCount ?? count($reports->getLowStockItems()),
+];
 
 require __DIR__ . '/../templates/layout/header.php';
 require __DIR__ . '/../templates/pages/' . $page . '.php';

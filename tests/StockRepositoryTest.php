@@ -475,6 +475,37 @@ class StockRepositoryTest extends TestCase
         $this->assertSame([], $this->reports->getLowStockItems());
     }
 
+    public function testUsableQuantitiesAtLocationSkipExpiredAndEmpty(): void
+    {
+        $this->receive(4, $this->day('-1 day'));
+        $this->receive(3, $this->day('+1 year'));
+        $this->receive(2, null);
+        $this->receive(5, null, $this->boxId);
+
+        $this->assertSame([$this->articleId => 5], $this->reports->getUsableQuantitiesAtLocation($this->mainId));
+        $this->assertSame([$this->articleId => 5], $this->reports->getUsableQuantitiesAtLocation($this->boxId));
+
+        // Nur noch Abgelaufenes übrig: Artikel taucht nicht mehr auf.
+        $this->stock->move($this->articleId, $this->mainId, 3, 'issue', null, $this->batches->findOrCreate($this->articleId, $this->day('+1 year')));
+        $this->stock->move($this->articleId, $this->mainId, 2, 'issue', null, null);
+
+        $this->assertSame([], $this->reports->getUsableQuantitiesAtLocation($this->mainId));
+    }
+
+    public function testCountExpiredBatchesCountsOnlyExpiredStockPerLocation(): void
+    {
+        $this->receive(4, $this->day('-1 day'));
+        $this->receive(2, $this->day('-1 day'), $this->boxId);
+        $this->receive(3, $this->day('+1 year'));
+
+        $this->assertSame(2, $this->reports->countExpiredBatches());
+
+        // Aus der Kiste entsorgt: dort kein Bestand mehr, zählt nicht.
+        $this->stock->move($this->articleId, $this->boxId, 2, 'disposal', null, $this->batches->findOrCreate($this->articleId, $this->day('-1 day')));
+
+        $this->assertSame(1, $this->reports->countExpiredBatches());
+    }
+
     public function testArticleStockIsListedInLocationSortOrder(): void
     {
         $locations = new LocationRepository($this->db);

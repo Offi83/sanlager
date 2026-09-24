@@ -29,6 +29,7 @@ Es gibt eine an 800x480px angepasste Ansicht für den Raspberry Pi Touchscreen.
 * „Scanner starten“ erscheint nur auf Geräten mit Kamera
 * Aus-, Umbuchungen und Entsorgungen des Tages mit einem Klick rückgängig machen – als Gegenbuchung, die Historie bleibt erhalten
 * abgelaufene Chargen mit einem Klick entsorgen (MHD-Übersicht, Artikel- und Lagerort-Seite)
+* Auffüll-Liste: was je Lagerort unter dem Mindestbestand liegt, wie viel davon im Hauptlager vorhanden ist, und mit einem Klick zum Umbuchen in den Rucksack
 * Wöchentlicher Bericht per E-Mail: abgelaufenes und bald ablaufendes Material, Unterschreitung der Mindestbestände, Entnahmen der Woche
 * Artikelseite: Einlagern, Ausbuchen und Umbuchen einer bestimmten Charge und Menge – mit Anzeige, was am gewählten Lagerort liegt
 * QR-Code je Artikel und Etikettendruck
@@ -62,6 +63,9 @@ Die Screenshots zeigen Beispieldaten im Format des Raspberry-Pi-Displays (800×4
 
 *MHD-Übersicht – abgelaufenes und bald ablaufendes Material je Lagerort*
 ![MHD-Übersicht](images/mhd.png)
+
+*Auffüllen – was je Lagerort unter dem Mindestbestand liegt und wie viel davon im Hauptlager vorhanden ist*
+![Auffüllen](images/auffuellen.png)
 
 *Artikelübersicht – rot: unter Mindestbestand*
 ![Artikelübersicht](images/artikel.png)

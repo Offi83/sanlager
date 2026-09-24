@@ -909,6 +909,24 @@ tbody tr:last-child td {
 }
 
 
+/*
+ * Auffüll-Liste: Lagerort-Name links, Umbuchen-Button rechts; auf
+ * schmalen Bildschirmen rutscht der Button unter den Namen.
+ */
+.restock-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+}
+
+.restock-header p {
+    margin: 4px 0 0;
+    color: var(--muted);
+}
+
+
 /* =========================================================
    Etikettendruck
    ========================================================= */
@@ -1174,40 +1192,102 @@ tbody tr:last-child td {
     font-size: 0.8rem;
 }
 
-nav {
+.main-nav {
     display: flex;
     align-items: center;
     gap: 0.2rem;
     margin-left: auto;
 }
 
-nav a {
+.main-nav a {
     display: block;
-    padding: 0.55rem 0.8rem;
+    padding: 0.65rem 0.9rem;
     color: #555;
     text-decoration: none;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 500;
     white-space: nowrap;
     border-radius: 0.4rem;
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-nav a:hover {
+.main-nav a:hover {
     background: #f5f5f5;
     color: #cc0000;
 }
 
-nav a.active {
+.main-nav a.active {
     background: #cc0000;
     color: #fff;
 }
 
 /*
- * Kompakte Kopfzeile, u. a. für das Pi-Touchdisplay (800×480): Die
- * Navigation passt sonst nicht in die Breite (Seite scrollt seitlich,
- * "Lagerorte" ist abgeschnitten). Das Logo bleibt, der Untertitel
- * entfällt, Abstände werden enger.
+ * Zahl am Menüpunkt/Reiter: wie viel dort zu tun ist (abgelaufene
+ * Chargen, Artikel unter Mindestbestand).
+ */
+.nav-badge {
+    display: inline-block;
+    min-width: 1.5em;
+    margin-left: 0.3em;
+    padding: 0 0.4em;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
+    vertical-align: 0.1em;
+}
+
+.main-nav a.active .nav-badge {
+    background: #fff;
+    color: #cc0000;
+}
+
+/*
+ * Reiter unter der Kopfzeile für die Bereiche Kontrolle (MHD,
+ * Auffüllen) und Verwaltung (Artikel, Kategorien, Lagerorte).
+ * Große Tippflächen fürs Touchdisplay.
+ */
+.sub-nav {
+    display: flex;
+    gap: 0.25rem;
+    /* Näher an die Kopfzeile: Platz ist auf dem Pi-Display knapp. */
+    margin-top: -14px;
+    margin-bottom: var(--space-3);
+    border-bottom: 2px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.sub-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.sub-nav a {
+    display: block;
+    margin-bottom: -2px;
+    padding: 0.7rem 1.1rem;
+    border-bottom: 3px solid transparent;
+    color: #555;
+    text-decoration: none;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.sub-nav a:hover {
+    color: #cc0000;
+}
+
+.sub-nav a.active {
+    border-bottom-color: #cc0000;
+    color: #cc0000;
+}
+
+/*
+ * Kompakte Kopfzeile, u. a. für das Pi-Touchdisplay (800×480): Das Logo
+ * bleibt, der Untertitel entfällt, Abstände werden enger.
  */
 @media (max-width: 1000px) {
 
@@ -1224,19 +1304,15 @@ nav a.active {
         display: none;
     }
 
-    nav {
-        gap: 0.1rem;
-    }
-
-    nav a {
-        padding: 0.65rem 0.55rem;
-        font-size: 0.85rem;
+    .main-nav a {
+        padding: 0.65rem 0.75rem;
     }
 }
 
 /*
- * Smartphones: Navigation in eine eigene Zeile unter dem Logo, bei
- * Bedarf seitlich wischbar statt die ganze Seite zu verbreitern.
+ * Smartphones: Navigation in eine eigene Zeile unter dem Logo, die vier
+ * Bereiche auf die Breite verteilt; bei Bedarf seitlich wischbar statt
+ * die ganze Seite zu verbreitern.
  */
 @media (max-width: 640px) {
 
@@ -1252,7 +1328,7 @@ nav a.active {
         min-height: 0;
     }
 
-    nav {
+    .main-nav {
         width: 100%;
         margin-left: 0;
         overflow-x: auto;
@@ -1260,8 +1336,18 @@ nav a.active {
         -webkit-overflow-scrolling: touch;
     }
 
-    nav::-webkit-scrollbar {
+    .main-nav::-webkit-scrollbar {
         display: none;
+    }
+
+    .main-nav a {
+        flex: 1 0 auto;
+        padding: 0.65rem 0.5rem;
+        text-align: center;
+    }
+
+    .sub-nav a {
+        padding: 0.7rem 0.8rem;
     }
 }
 

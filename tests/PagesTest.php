@@ -195,6 +195,7 @@ class PagesTest extends TestCase
             'Unbekannte Seite' => ['?page=gibt-es-nicht', 'Buchen'],
             'Heute ausgebucht' => ['?page=today_issues', 'Heute umgebucht'],
             'MHD-Übersicht' => ['?page=expiry', 'ABGELAUFEN'],
+            'Auffüllen' => ['?page=restock', 'Heftpflaster 2,5 cm'],
             'Artikelliste' => ['?page=articles', 'Mullbinde 8 cm'],
             'Artikelliste Suche' => ['?page=articles&search=binde', 'Mullbinde 8 cm'],
             'Artikelliste Kategorie' => ['?page=articles&category={category}', 'Artikel'],
@@ -228,6 +229,46 @@ class PagesTest extends TestCase
             $this->assertSame(302, $response['status'], $path);
             $this->assertStringContainsString($target, (string) $response['location'], $path);
         }
+    }
+
+    public function testNavigationShowsSectionsTabsAndCounts(): void
+    {
+        $expiry = self::request('?page=expiry')['body'];
+
+        $this->assertMatchesRegularExpression('#href="\?page=expiry"\s+class="active"\s*>\s*Kontrolle <span class="nav-badge">\d+</span>#', $expiry);
+        $this->assertStringContainsString('class="sub-nav"', $expiry);
+        $this->assertStringContainsString('href="?page=restock"', $expiry);
+
+        $articles = self::request('?page=articles')['body'];
+
+        $this->assertMatchesRegularExpression('#class="active"\s*>\s*Verwaltung#', $articles);
+        $this->assertStringContainsString('href="?page=categories"', $articles);
+
+        // Detailseiten: Bereich markiert, aber keine Reiter (Zurück-Link genügt).
+        $location = self::request(self::resolve('?page=location&id={location}'))['body'];
+
+        $this->assertMatchesRegularExpression('#class="active"\s*>\s*Verwaltung#', $location);
+        $this->assertStringNotContainsString('class="sub-nav"', $location);
+
+        // Buchen: keine Reiter.
+        $this->assertStringNotContainsString('class="sub-nav"', self::request('?page=issue')['body']);
+    }
+
+    public function testRestockListGroupsByLocation(): void
+    {
+        $main = self::id("SELECT id FROM storage_locations WHERE name = 'Hauptlager'");
+        $bag = self::id("SELECT id FROM storage_locations WHERE name = 'Rucksack 1'");
+
+        $response = self::request('?page=restock');
+
+        $this->assertCleanPage($response, 'Auffüllen');
+
+        // Hauptlager ist der Standard-Lagerort: Fehlendes muss nachbestellt werden.
+        $this->assertStringContainsString('nachbestellen', $response['body']);
+
+        // Rucksack 1: Umbuchen aus dem Hauptlager direkt vorbelegt.
+        $this->assertStringContainsString('?page=issue&source=' . $main . '&target=' . $bag, $response['body']);
+        $this->assertStringContainsString('Aus Hauptlager umbuchen', $response['body']);
     }
 
     public function testBookingShowsMessageOnceAndKeepsDirection(): void
