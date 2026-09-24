@@ -204,11 +204,19 @@ class ActionsTest extends TestCase
         $this->assertSame([], $this->stock->getStockByBatch($this->articleId));
     }
 
+    public function testReceiptWithTwentyYearExpiryNeedsNoConfirmation(): void
+    {
+        // Viele Verbandmittel sind 20 Jahre haltbar.
+        $this->receiveWithExpiry(date('d.m.Y', strtotime('+20 years')));
+
+        $this->assertSame(1, $this->stock->getStockSummary($this->articleId)['total']);
+    }
+
     public function testReceiptWithUnusualExpiryNeedsConfirmation(): void
     {
         foreach ([
             date('d.m.Y', strtotime('-1 day')) => 'ist bereits abgelaufen',
-            date('d.m.Y', strtotime('+11 years')) => 'über 10 Jahre in der Zukunft',
+            date('d.m.Y', strtotime('+21 years')) => 'über 20 Jahre in der Zukunft',
         ] as $expiry => $message) {
             try {
                 $this->receiveWithExpiry($expiry);

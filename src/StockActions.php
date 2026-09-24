@@ -407,8 +407,9 @@ class StockActions
      * Prüft das MHD beim Einlagern auf Tippfehler: Offensichtlich falsche
      * Jahre (vor 2000, mehr als 30 Jahre voraus – z. B. "0027" bei
      * Handeingabe) werden abgelehnt. Ein MHD in der Vergangenheit oder
-     * mehr als 10 Jahre voraus kann stimmen, muss aber bestätigt werden
-     * (Rückfrage in stock-form.js, setzt `confirm_expiry=1`).
+     * mehr als 20 Jahre voraus kann stimmen, muss aber bestätigt werden
+     * (Rückfrage in stock-form.js, setzt `confirm_expiry=1`). 20 Jahre,
+     * weil viele Verbandmittel so lange haltbar sind.
      *
      * @param string $expiryDate Y-m-d
      */
@@ -431,9 +432,9 @@ class StockActions
             );
         }
 
-        if ($expiryDate > date('Y-m-d', strtotime('+10 years'))) {
+        if ($expiryDate > date('Y-m-d', strtotime('+20 years'))) {
             throw new RuntimeException(
-                'Das MHD ' . formatDate($expiryDate) . ' liegt über 10 Jahre in der Zukunft. '
+                'Das MHD ' . formatDate($expiryDate) . ' liegt über 20 Jahre in der Zukunft. '
                 . 'Bitte prüfen und beim Einlagern bestätigen.'
             );
         }

@@ -222,7 +222,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /*
      * Einlagern mit ungewöhnlichem MHD (schon abgelaufen oder mehr als
-     * 10 Jahre voraus): meist ein Tippfehler, daher nachfragen. Der
+     * 20 Jahre voraus – so lange halten viele Verbandmittel): meist ein
+     * Tippfehler, daher nachfragen. Der
      * Server lehnt solche Daten ohne diese Bestätigung ab, siehe
      * StockActions::assertPlausibleExpiry().
      */
@@ -267,8 +268,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             const today = new Date();
-            const inTenYears = new Date();
-            inTenYears.setFullYear(today.getFullYear() + 10);
+            const inTwentyYears = new Date();
+            inTwentyYears.setFullYear(today.getFullYear() + 20);
 
             const shown = expiry.split('-').reverse().join('.');
 
@@ -276,8 +277,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (expiry < isoDate(today)) {
                 question = 'Das MHD ' + shown + ' ist bereits abgelaufen. Trotzdem einlagern?';
-            } else if (expiry > isoDate(inTenYears)) {
-                question = 'Das MHD ' + shown + ' liegt über 10 Jahre in der Zukunft. Stimmt das Jahr?';
+            } else if (expiry > isoDate(inTwentyYears)) {
+                question = 'Das MHD ' + shown + ' liegt über 20 Jahre in der Zukunft. Stimmt das Jahr?';
             }
 
             if (question === null) {
