@@ -11,7 +11,7 @@ $expiringBatches = [];
 $expiredCount = 0;
 $expiringSoonCount = 0;
 
-$expiringBatches = $stock->getExpiringBatches(90);
+$expiringBatches = $reports->getExpiringBatches(90);
 
 foreach ($expiringBatches as $row) {
 

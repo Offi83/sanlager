@@ -27,7 +27,7 @@
 */
 
 use LagerApp\ReportConfig;
-use LagerApp\StockRepository;
+use LagerApp\StockReports;
 use LagerApp\WeeklyReport;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport;
@@ -66,7 +66,7 @@ try {
 
     $config = ReportConfig::fromEnv($env);
 
-    $report = new WeeklyReport(new StockRepository($db), $config->expiryDays);
+    $report = new WeeklyReport(new StockReports($db), $config->expiryDays);
     $data = $report->build();
 
     if ($dryRun) {

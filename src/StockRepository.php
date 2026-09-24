@@ -15,6 +15,8 @@ use RuntimeException;
  */
 class StockRepository
 {
+    use LocalDay;
+
     /**
      * Kennzahlen eines Artikels ohne Bewegungen, siehe getStockSummaries().
      */
@@ -330,75 +332,6 @@ class StockRepository
     }
 
     /**
-     * Heute erfolgte Ausbuchungen (`issue`), gruppiert nach
-     * Artikel/Charge/Lagerort. Umbuchungen (`transfer_out`/`transfer_in`)
-     * und Entsorgungen (`disposal`) zählen bewusst nicht dazu, da dabei
-     * kein Material verbraucht wird. Rückgängig gemachte Ausbuchungen
-     * (`issue_reversal`, siehe reverseTodayIssue()) werden abgezogen;
-     * vollständig zurückgenommene Zeilen entfallen.
-     */
-    public function getTodayIssues(): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                a.id AS article_id,
-                sm.batch_id,
-                sl.id AS location_id,
-                a.name AS article_name,
-                a.article_number,
-                a.unit,
-                b.expiry_date,
-                sl.name AS location_name,
-                ABS(SUM(sm.quantity)) AS quantity
-             FROM stock_movements sm
-             INNER JOIN articles a
-                ON a.id = sm.article_id
-             LEFT JOIN batches b
-                ON b.id = sm.batch_id
-             INNER JOIN storage_locations sl
-                ON sl.id = sm.location_id
-             WHERE sm.movement_type IN (\'issue\', \'issue_reversal\')
-             AND sm.created_at >= :day_start
-             AND sm.created_at < :day_end
-             GROUP BY
-                sm.article_id,
-                sm.batch_id,
-                sm.location_id
-             HAVING SUM(sm.quantity) < 0
-             ORDER BY
-                a.name COLLATE NOCASE,
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
-                b.expiry_date'
-        );
-
-        $statement->execute($this->todayUtcRange());
-
-        return $statement->fetchAll();
-    }
-
-    /**
-     * Heute ausgebuchte Menge (Stück, abzüglich Rückbuchungen), siehe
-     * getTodayIssues().
-     */
-    public function getTodayIssueCount(): int
-    {
-        $statement = $this->db->prepare(
-            'SELECT COALESCE(-SUM(quantity), 0)
-             FROM stock_movements
-             WHERE movement_type IN (\'issue\', \'issue_reversal\')
-             AND created_at >= :day_start
-             AND created_at < :day_end'
-        );
-
-        $statement->execute($this->todayUtcRange());
-
-        return (int) $statement->fetchColumn();
-    }
-
-    /**
      * Bestand eines Artikels, dessen MHD bereits überschritten ist
      * (über alle Lagerorte hinweg). Dient der "X abgelaufen"-Anzeige
      * in der Artikelliste.
@@ -509,7 +442,7 @@ class StockRepository
          * Unterschreitung je überwachtem Lagerort (siehe saveMinimums()),
          * ebenfalls ohne abgelaufene Chargen. Deaktivierte Lagerorte zählen
          * nicht – ihr Mindestbestand bleibt gespeichert (für eine spätere
-         * Reaktivierung), wie in getLowStockItems().
+         * Reaktivierung), wie in StockReports::getLowStockItems().
          */
         $statement = $this->db->prepare(
             'SELECT DISTINCT alm.article_id
@@ -542,161 +475,6 @@ class StockRepository
         }
 
         return $summaries;
-    }
-
-    /**
-     * Ausbuchungen (`issue`) im Zeitraum [$from, $to), je Artikel und
-     * Lagerort zusammengefasst, meistentnommene zuerst. Wie bei
-     * getTodayIssues() zählen Umbuchungen und Entsorgungen nicht dazu,
-     * Rückbuchungen werden abgezogen.
-     */
-    public function getIssuesBetween(
-        \DateTimeImmutable $from,
-        \DateTimeImmutable $to
-    ): array {
-        [$start, $end] = $this->utcRange($from, $to);
-
-        $statement = $this->db->prepare(
-            'SELECT
-                a.id AS article_id,
-                a.name AS article_name,
-                a.article_number,
-                a.unit,
-                sl.name AS location_name,
-                ABS(SUM(sm.quantity)) AS quantity
-             FROM stock_movements sm
-             INNER JOIN articles a
-                ON a.id = sm.article_id
-             INNER JOIN storage_locations sl
-                ON sl.id = sm.location_id
-             WHERE sm.movement_type IN (\'issue\', \'issue_reversal\')
-             AND sm.created_at >= :period_start
-             AND sm.created_at < :period_end
-             GROUP BY
-                a.id,
-                sl.id
-             HAVING SUM(sm.quantity) < 0
-             ORDER BY
-                ABS(SUM(sm.quantity)) DESC,
-                a.name COLLATE NOCASE,
-                sl.sort_order'
-        );
-
-        $statement->execute([
-            'period_start' => $start,
-            'period_end' => $end,
-        ]);
-
-        return $statement->fetchAll();
-    }
-
-    /**
-     * Alle überwachten Artikel/Lagerort-Kombinationen (siehe
-     * saveMinimums()), deren verwendbarer Bestand – ohne abgelaufene
-     * Chargen – unter dem Mindestbestand liegt, inkl. Fehlmenge.
-     * Nur aktive Artikel und Lagerorte, sortiert nach Lagerort und
-     * Kategorie, damit sich daraus direkt eine Auffüll-Liste ergibt.
-     */
-    public function getLowStockItems(): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                a.id AS article_id,
-                a.name AS article_name,
-                a.article_number,
-                a.unit,
-                sl.id AS location_id,
-                sl.name AS location_name,
-                alm.minimum_stock,
-                COALESCE(SUM(
-                    CASE
-                        WHEN b.expiry_date IS NULL
-                            OR b.expiry_date >= :today
-                        THEN sm.quantity
-                        ELSE 0
-                    END
-                ), 0) AS usable_quantity
-             FROM article_location_minimums alm
-             INNER JOIN articles a
-                ON a.id = alm.article_id
-             INNER JOIN storage_locations sl
-                ON sl.id = alm.location_id
-             LEFT JOIN article_categories c
-                ON c.id = a.category_id
-             LEFT JOIN stock_movements sm
-                ON sm.article_id = alm.article_id
-                AND sm.location_id = alm.location_id
-             LEFT JOIN batches b
-                ON b.id = sm.batch_id
-             WHERE a.active = 1
-             AND sl.active = 1
-             GROUP BY alm.id
-             HAVING usable_quantity < alm.minimum_stock
-             ORDER BY
-                sl.sort_order,
-                sl.name COLLATE NOCASE,
-                COALESCE(c.sort_order, 9999),
-                a.name COLLATE NOCASE'
-        );
-
-        $statement->execute([
-            'today' => $this->today()
-        ]);
-
-        return array_map(
-            static fn (array $row): array => $row + [
-                'missing_quantity' => (int) $row['minimum_stock']
-                    - (int) $row['usable_quantity'],
-            ],
-            $statement->fetchAll()
-        );
-    }
-
-    /**
-     * Liefert alle Chargen (über alle Artikel und Lagerorte hinweg),
-     * deren MHD bereits abgelaufen ist oder innerhalb der nächsten
-     * `$withinDays` Tage abläuft – für die globale MHD-Übersicht.
-     *
-     * Älteste MHD zuerst, damit die dringendsten Fälle oben stehen.
-     */
-    public function getExpiringBatches(int $withinDays = 90): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                a.id AS article_id,
-                a.name AS article_name,
-                a.article_number,
-                a.unit,
-                sl.id AS location_id,
-                sl.name AS location_name,
-                b.id AS batch_id,
-                b.expiry_date,
-                SUM(sm.quantity) AS quantity
-             FROM stock_movements sm
-             INNER JOIN articles a
-                ON a.id = sm.article_id
-             INNER JOIN batches b
-                ON b.id = sm.batch_id
-             INNER JOIN storage_locations sl
-                ON sl.id = sm.location_id
-             WHERE a.active = 1
-             AND sl.active = 1
-             AND b.expiry_date <= :until
-             GROUP BY
-                a.id,
-                sl.id,
-                b.id
-             HAVING SUM(sm.quantity) > 0
-             ORDER BY
-                b.expiry_date,
-                a.name COLLATE NOCASE'
-        );
-
-        $statement->execute([
-            'until' => date('Y-m-d', strtotime('+' . $withinDays . ' days'))
-        ]);
-
-        return $statement->fetchAll();
     }
 
     /**
@@ -847,8 +625,7 @@ class StockRepository
         }
 
         $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note): void {
-            $this->move($articleId, $fromLocationId, $quantity, 'transfer_out', $note, $batchId);
-            $this->move($articleId, $toLocationId, $quantity, 'transfer_in', $note, $batchId);
+            $this->transferPair($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note, false);
         });
     }
 
@@ -899,8 +676,7 @@ class StockRepository
                     : null;
                 $quantity = (int) $row['quantity'];
 
-                $this->move($articleId, $fromLocationId, $quantity, 'transfer_out', $note, $batchId);
-                $this->move($articleId, $toLocationId, $quantity, 'transfer_in', $note, $batchId);
+                $this->transferPair($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note, false);
 
                 $totalMoved += $quantity;
             }
@@ -999,48 +775,6 @@ class StockRepository
     }
 
     /**
-     * Heutige Entsorgungen (`disposal`) je Artikel/Charge/Lagerort,
-     * abzüglich Rücknahmen (`disposal_reversal`).
-     */
-    public function getTodayDisposals(): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                a.id AS article_id,
-                sm.batch_id,
-                sl.id AS location_id,
-                a.name AS article_name,
-                a.article_number,
-                a.unit,
-                b.expiry_date,
-                sl.name AS location_name,
-                -SUM(sm.quantity) AS quantity
-             FROM stock_movements sm
-             INNER JOIN articles a
-                ON a.id = sm.article_id
-             LEFT JOIN batches b
-                ON b.id = sm.batch_id
-             INNER JOIN storage_locations sl
-                ON sl.id = sm.location_id
-             WHERE sm.movement_type IN (\'disposal\', \'disposal_reversal\')
-             AND sm.created_at >= :day_start
-             AND sm.created_at < :day_end
-             GROUP BY
-                sm.article_id,
-                sm.batch_id,
-                sm.location_id
-             HAVING SUM(sm.quantity) < 0
-             ORDER BY
-                a.name COLLATE NOCASE,
-                b.expiry_date'
-        );
-
-        $statement->execute($this->todayUtcRange());
-
-        return $statement->fetchAll();
-    }
-
-    /**
      * Nimmt eine heutige Entsorgung ganz oder teilweise zurück
      * (Gegenbuchung `disposal_reversal`), siehe reverseTodayIssue().
      *
@@ -1071,81 +805,6 @@ class StockRepository
     }
 
     /**
-     * Heutige Umbuchungen je Artikel/Charge und Richtung (von → nach),
-     * abzüglich Rücknahmen.
-     *
-     * Eine Umbuchung besteht aus zwei Bewegungen, die stets direkt
-     * nacheinander in einer Transaktion gespeichert werden (Abgang, dann
-     * Zugang mit der nächsten ID, siehe transferOldest()/transferAllStock()).
-     * Darüber werden die beiden Hälften hier einander zugeordnet. Eine
-     * Rücknahme (`transfer_reversal_out` am ursprünglichen Ziel,
-     * `transfer_reversal_in` an der ursprünglichen Quelle) wird der
-     * ursprünglichen Richtung zugerechnet und abgezogen – eine echte
-     * Rück-Umbuchung (z. B. Rucksack nach dem Dienst zurück ins Lager)
-     * dagegen bleibt als eigene Zeile stehen.
-     */
-    public function getTodayTransfers(): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                t.article_id,
-                t.batch_id,
-                t.from_location_id,
-                t.to_location_id,
-                a.name AS article_name,
-                a.unit,
-                b.expiry_date,
-                src.name AS from_location_name,
-                dst.name AS to_location_name,
-                SUM(t.quantity) AS quantity
-             FROM (
-                SELECT
-                    o.article_id,
-                    o.batch_id,
-                    CASE WHEN o.movement_type = \'transfer_out\'
-                        THEN o.location_id ELSE i.location_id END AS from_location_id,
-                    CASE WHEN o.movement_type = \'transfer_out\'
-                        THEN i.location_id ELSE o.location_id END AS to_location_id,
-                    CASE WHEN o.movement_type = \'transfer_out\'
-                        THEN -o.quantity ELSE o.quantity END AS quantity
-                FROM stock_movements o
-                INNER JOIN stock_movements i
-                    ON i.id = o.id + 1
-                    AND i.article_id = o.article_id
-                    AND i.batch_id IS o.batch_id
-                    AND i.quantity = -o.quantity
-                    AND (
-                        (o.movement_type = \'transfer_out\' AND i.movement_type = \'transfer_in\')
-                        OR (o.movement_type = \'transfer_reversal_out\' AND i.movement_type = \'transfer_reversal_in\')
-                    )
-                WHERE o.created_at >= :day_start
-                AND o.created_at < :day_end
-             ) t
-             INNER JOIN articles a
-                ON a.id = t.article_id
-             LEFT JOIN batches b
-                ON b.id = t.batch_id
-             INNER JOIN storage_locations src
-                ON src.id = t.from_location_id
-             INNER JOIN storage_locations dst
-                ON dst.id = t.to_location_id
-             GROUP BY
-                t.article_id,
-                t.batch_id,
-                t.from_location_id,
-                t.to_location_id
-             HAVING SUM(t.quantity) > 0
-             ORDER BY
-                a.name COLLATE NOCASE,
-                b.expiry_date'
-        );
-
-        $statement->execute($this->todayUtcRange());
-
-        return $statement->fetchAll();
-    }
-
-    /**
      * Nimmt eine heutige Umbuchung ganz oder teilweise zurück: Das Material
      * wandert vom Ziel zurück an die Quelle (gleiche Charge). Scheitert,
      * wenn am Ziel davon nicht mehr genug liegt (z. B. schon verbraucht).
@@ -1162,7 +821,7 @@ class StockRepository
         $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity): void {
             $transferredToday = 0;
 
-            foreach ($this->getTodayTransfers() as $row) {
+            foreach ((new StockReports($this->db))->getTodayTransfers() as $row) {
                 if (
                     (int) $row['article_id'] === $articleId
                     && ($row['batch_id'] === null ? null : (int) $row['batch_id']) === $batchId
@@ -1177,8 +836,7 @@ class StockRepository
 
             $note = 'Umbuchung rückgängig gemacht';
 
-            $this->move($articleId, $toLocationId, $quantity, 'transfer_reversal_out', $note, $batchId);
-            $this->move($articleId, $fromLocationId, $quantity, 'transfer_reversal_in', $note, $batchId);
+            $this->transferPair($articleId, $batchId, $toLocationId, $fromLocationId, $quantity, $note, true);
         });
     }
 
@@ -1308,6 +966,8 @@ class StockRepository
      * einem Lagerort + Zugang an einem anderen) siehe transferOldest(),
      * das move() zweimal in einer Transaktion aufruft.
      *
+     * @param int|null $transferId verbindet die beiden Hälften einer
+     *                             Umbuchung, siehe transferPair()
      * @param string $type receipt|issue|issue_reversal|disposal|disposal_reversal|correction|
      *                     transfer_out|transfer_in|transfer_reversal_out|transfer_reversal_in
      * @throws RuntimeException bei Menge 0, ungültigem Typ oder nicht
@@ -1319,7 +979,8 @@ class StockRepository
         int $quantity,
         string $type,
         ?string $note = null,
-        ?int $batchId = null
+        ?int $batchId = null,
+        ?int $transferId = null
     ): void {
         if ($quantity === 0) {
             throw new RuntimeException(
@@ -1353,7 +1014,7 @@ class StockRepository
          * transactional(): Bei Einzelbuchungen eigene Transaktion mit
          * Schreibsperre, sonst Teil der laufenden (Umbuchung, Komplettumzug).
          */
-        $this->transactional(function () use ($articleId, $locationId, $quantity, $type, $note, $batchId): void {
+        $this->transactional(function () use ($articleId, $locationId, $quantity, $type, $note, $batchId, $transferId): void {
             if (in_array($type, ['issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
                 $current = $this->getStockAtLocation(
                     $articleId,
@@ -1378,7 +1039,8 @@ class StockRepository
                         location_id,
                         quantity,
                         movement_type,
-                        note
+                        note,
+                        transfer_id
                     )
                  VALUES
                     (
@@ -1387,7 +1049,8 @@ class StockRepository
                         :location_id,
                         :quantity,
                         :movement_type,
-                        :note
+                        :note,
+                        :transfer_id
                     )'
             );
 
@@ -1397,60 +1060,41 @@ class StockRepository
                 'location_id' => $locationId,
                 'quantity' => $quantity,
                 'movement_type' => $type,
-                'note' => $note
+                'note' => $note,
+                'transfer_id' => $transferId,
             ]);
         });
     }
 
     /**
-     * Heutiges Datum (Y-m-d) in der Zeitzone der Anwendung.
-     *
-     * Wird bewusst in PHP statt per `date('now')` in SQLite ermittelt:
-     * SQLite rechnet in UTC, die MHD-Anzeige (expiryInfo()) aber in der
-     * PHP-Zeitzone. So gelten beide Seiten rund um Mitternacht
-     * denselben Tag als "heute".
+     * Speichert die beiden Hälften einer Umbuchung (Abgang und Zugang,
+     * gleiche Charge) mit gemeinsamer transfer_id in einer Transaktion.
+     * Bei $reversal als Rücknahme (transfer_reversal_out/_in).
      */
-    private function today(): string
-    {
-        return date('Y-m-d');
-    }
+    private function transferPair(
+        int $articleId,
+        ?int $batchId,
+        int $fromLocationId,
+        int $toLocationId,
+        int $quantity,
+        ?string $note,
+        bool $reversal
+    ): void {
+        $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note, $reversal): void {
+            /*
+             * Neue, eindeutige Kennung. Unter der Schreibsperre der
+             * Transaktion (IMMEDIATE, siehe Database) kann kein anderes
+             * Gerät dieselbe Nummer ziehen.
+             */
+            $transferId = 1 + (int) $this->db
+                ->query('SELECT COALESCE(MAX(transfer_id), 0) FROM stock_movements')
+                ->fetchColumn();
 
-    /**
-     * Beginn und Ende des heutigen (lokalen) Tages als UTC-Zeitstempel,
-     * siehe utcRange().
-     *
-     * @return array{day_start: string, day_end: string}
-     */
-    private function todayUtcRange(): array
-    {
-        $start = new \DateTimeImmutable('today');
-        [$dayStart, $dayEnd] = $this->utcRange($start, $start->modify('+1 day'));
+            $prefix = $reversal ? 'transfer_reversal_' : 'transfer_';
 
-        return [
-            'day_start' => $dayStart,
-            'day_end' => $dayEnd,
-        ];
-    }
-
-    /**
-     * Übersetzt einen Zeitraum in lokaler Zeit in UTC-Zeitstempel im
-     * Format von `created_at`.
-     *
-     * `created_at` wird per CURRENT_TIMESTAMP in UTC gespeichert. Statt
-     * jede Zeile per date(..., 'localtime') umzurechnen, wird der
-     * Zeitraum einmal übersetzt – das nutzt zudem den Index auf
-     * `created_at`.
-     *
-     * @return array{0: string, 1: string}
-     */
-    private function utcRange(\DateTimeImmutable $from, \DateTimeImmutable $to): array
-    {
-        $utc = new \DateTimeZone('UTC');
-
-        return [
-            $from->setTimezone($utc)->format('Y-m-d H:i:s'),
-            $to->setTimezone($utc)->format('Y-m-d H:i:s'),
-        ];
+            $this->move($articleId, $fromLocationId, $quantity, $prefix . 'out', $note, $batchId, $transferId);
+            $this->move($articleId, $toLocationId, $quantity, $prefix . 'in', $note, $batchId, $transferId);
+        });
     }
 
     /**

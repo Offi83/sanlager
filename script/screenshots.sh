@@ -137,7 +137,7 @@ shot lagerorte.png "${BASE}/?page=locations" 1024 640
 # Wochenbericht (HTML-Mail), Entnahmen inkl. heute.
 DB_DATABASE="$DB" php -d variables_order=EGPCS -r '
     $db = require "bootstrap.php";
-    $report = new LagerApp\WeeklyReport(new LagerApp\StockRepository($db));
+    $report = new LagerApp\WeeklyReport(new LagerApp\StockReports($db));
     file_put_contents($argv[1], $report->renderHtml(
         $report->build(new DateTimeImmutable("tomorrow")),
         "https://lager.example.org"

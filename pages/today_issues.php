@@ -12,8 +12,8 @@ $todayIssueCount = 0;
 $todayTransfers = [];
 $todayDisposedCount = 0;
 
-$todayIssueCount = $stock->getTodayIssueCount();
-$todayTransfers = $stock->getTodayTransfers();
+$todayIssueCount = $reports->getTodayIssueCount();
+$todayTransfers = $reports->getTodayTransfers();
 
 /*
  * Entsorgungen erscheinen in derselben Liste wie die Ausbuchungen
@@ -23,11 +23,11 @@ $todayTransfers = $stock->getTodayTransfers();
 $todayIssues = array_merge(
     array_map(
         static fn (array $row): array => $row + ['kind' => 'issue'],
-        $stock->getTodayIssues()
+        $reports->getTodayIssues()
     ),
     array_map(
         static fn (array $row): array => $row + ['kind' => 'disposal'],
-        $stock->getTodayDisposals()
+        $reports->getTodayDisposals()
     )
 );
 

@@ -8,6 +8,7 @@ use LagerApp\BatchRepository;
 use LagerApp\Database;
 use LagerApp\LocationRepository;
 use LagerApp\ReportConfig;
+use LagerApp\StockReports;
 use LagerApp\StockRepository;
 use LagerApp\WeeklyReport;
 use PDO;
@@ -18,6 +19,7 @@ class WeeklyReportTest extends TestCase
 {
     private PDO $db;
     private StockRepository $stock;
+    private StockReports $reports;
     private BatchRepository $batches;
     private int $mainId;
     private int $boxId;
@@ -29,6 +31,8 @@ class WeeklyReportTest extends TestCase
         $this->db = (new Database(':memory:'))->connection();
 
         $this->stock = new StockRepository($this->db);
+
+        $this->reports = new StockReports($this->db);
         $this->batches = new BatchRepository($this->db);
 
         $locations = new LocationRepository($this->db);
@@ -74,7 +78,7 @@ class WeeklyReportTest extends TestCase
         $this->stock->saveMinimums($this->bandageId, [$this->mainId => 10]);
         $this->stock->saveMinimums($this->blanketId, [$this->boxId => 4]);
 
-        $data = (new WeeklyReport($this->stock, 90))->build();
+        $data = (new WeeklyReport($this->reports, 90))->build();
 
         $this->assertSame([$this->day('-5 days')], array_column($data['expired'], 'expiry_date'));
         $this->assertSame([$this->day('+30 days')], array_column($data['expiring'], 'expiry_date'));
@@ -89,7 +93,7 @@ class WeeklyReportTest extends TestCase
         $this->receive($this->bandageId, 20, $this->day('-1 day'), $this->mainId);
         $this->stock->saveMinimums($this->bandageId, [$this->mainId => 5]);
 
-        $data = (new WeeklyReport($this->stock))->build();
+        $data = (new WeeklyReport($this->reports))->build();
 
         $this->assertSame(5, $data['low_stock'][0]['missing_quantity']);
     }
@@ -99,7 +103,7 @@ class WeeklyReportTest extends TestCase
         $this->stock->saveMinimums($this->bandageId, [$this->boxId => 5]);
         (new LocationRepository($this->db))->deactivate($this->boxId);
 
-        $this->assertSame([], $this->stock->getLowStockItems());
+        $this->assertSame([], $this->reports->getLowStockItems());
     }
 
     public function testIssuesCoverOnlyTheLastSevenDays(): void
@@ -120,7 +124,7 @@ class WeeklyReportTest extends TestCase
         $update->execute(['id' => $ids[1], 'created_at' => (new DateTimeImmutable('-10 days'))->setTimezone($utc)->format('Y-m-d H:i:s')]);
 
         // Stichtag morgen 0 Uhr: Zeitraum umfasst die letzten 7 Tage inkl. heute.
-        $data = (new WeeklyReport($this->stock))->build(new DateTimeImmutable('tomorrow'));
+        $data = (new WeeklyReport($this->reports))->build(new DateTimeImmutable('tomorrow'));
 
         $this->assertSame(3, $data['issue_total']);
         $this->assertCount(1, $data['issues']);
@@ -129,7 +133,7 @@ class WeeklyReportTest extends TestCase
 
     public function testSubjectSummarizesFindings(): void
     {
-        $report = new WeeklyReport($this->stock);
+        $report = new WeeklyReport($this->reports);
 
         $this->assertStringContainsString('keine Auffälligkeiten', $report->subject($report->build()));
 
@@ -146,7 +150,7 @@ class WeeklyReportTest extends TestCase
     {
         $this->stock->saveMinimums($this->blanketId, [$this->mainId => 2]);
 
-        $report = new WeeklyReport($this->stock);
+        $report = new WeeklyReport($this->reports);
         $email = $report->createEmail(
             $this->config(['APP_URL' => 'https://lager.example.org/']),
             $report->build()

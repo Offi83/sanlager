@@ -21,7 +21,7 @@ use Symfony\Component\Mime\Email;
 final class WeeklyReport
 {
     public function __construct(
-        private StockRepository $stock,
+        private StockReports $reports,
         private int $expiryDays = 90
     ) {
     }
@@ -40,7 +40,7 @@ final class WeeklyReport
         $expired = [];
         $expiring = [];
 
-        foreach ($this->stock->getExpiringBatches($this->expiryDays) as $row) {
+        foreach ($this->reports->getExpiringBatches($this->expiryDays) as $row) {
             if ($row['expiry_date'] < $today) {
                 $expired[] = $row;
             } else {
@@ -48,7 +48,7 @@ final class WeeklyReport
             }
         }
 
-        $issues = $this->stock->getIssuesBetween($periodStart, $periodEnd);
+        $issues = $this->reports->getIssuesBetween($periodStart, $periodEnd);
 
         return [
             'period_start' => $periodStart,
@@ -56,7 +56,7 @@ final class WeeklyReport
             'expiry_days' => $this->expiryDays,
             'expired' => $expired,
             'expiring' => $expiring,
-            'low_stock' => $this->stock->getLowStockItems(),
+            'low_stock' => $this->reports->getLowStockItems(),
             'issues' => $issues,
             'issue_total' => array_sum(array_map('intval', array_column($issues, 'quantity'))),
         ];

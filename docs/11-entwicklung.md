@@ -43,12 +43,14 @@ sanlager/
 │   ├── CategoryRepository.php
 │   ├── Database.php
 │   ├── helpers.php
+│   ├── LocalDay.php
 │   ├── LocationActions.php
 │   ├── LocationRepository.php
 │   ├── QrCodeGenerator.php
 │   ├── ReadsInput.php
 │   ├── ReportConfig.php
 │   ├── StockActions.php
+│   ├── StockReports.php
 │   ├── StockRepository.php
 │   └── WeeklyReport.php
 ├── templates/
@@ -89,6 +91,7 @@ Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintrag
 Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale Helper-Funktionen. Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
 * **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
+* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Ausbuchen, Umbuchen, Entsorgen, Rückgängig) und ermittelt Bestände; `StockReports` enthält die reinen Auswertungen (Heute ausgebucht, MHD-Übersicht, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
 * **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
 * **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.

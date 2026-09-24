@@ -12,6 +12,7 @@ use LagerApp\Database;
 use LagerApp\LocationActions;
 use LagerApp\LocationRepository;
 use LagerApp\StockActions;
+use LagerApp\StockReports;
 use LagerApp\StockRepository;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -26,6 +27,7 @@ class ActionsTest extends TestCase
     private PDO $db;
     private ArticleRepository $articles;
     private StockRepository $stock;
+    private StockReports $reports;
     private BatchRepository $batches;
     private LocationRepository $locations;
     private CategoryRepository $categories;
@@ -38,6 +40,7 @@ class ActionsTest extends TestCase
 
         $this->articles = new ArticleRepository($this->db);
         $this->stock = new StockRepository($this->db);
+        $this->reports = new StockReports($this->db);
         $this->batches = new BatchRepository($this->db);
         $this->locations = new LocationRepository($this->db);
         $this->categories = new CategoryRepository($this->db);
@@ -340,7 +343,7 @@ class ActionsTest extends TestCase
         $this->assertSame('3 Stück umgebucht: Hauptlager → Kiste 1', $result->message);
 
         // Erscheint in "Heute umgebucht" und lässt sich zurücknehmen.
-        $this->assertSame(3, (int) $this->stock->getTodayTransfers()[0]['quantity']);
+        $this->assertSame(3, (int) $this->reports->getTodayTransfers()[0]['quantity']);
     }
 
     public function testStockMoveDerivesMovementFromVonNach(): void
@@ -360,7 +363,7 @@ class ActionsTest extends TestCase
         ]);
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
-        $this->assertSame(1, $this->stock->getTodayIssueCount());
+        $this->assertSame(1, $this->reports->getTodayIssueCount());
         $this->assertSame('1 Stück ausgebucht aus Hauptlager', $result->message);
         $this->assertStringContainsString('&from=' . $this->mainId . '&to=issue', $result->redirectUrl);
     }

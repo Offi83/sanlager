@@ -96,6 +96,7 @@ Die Bestandsverwaltung basiert ausschließlich auf dieser Bewegungs-Tabelle. Der
 | `quantity`      | Menge, positiv (Zugang) oder negativ (Abgang) |
 | `movement_type` | Art der Bewegung, siehe unten                  |
 | `note`          | Freitext-Notiz, optional                       |
+| `transfer_id`   | Verbindet Abgang und Zugang einer Umbuchung (sonst leer) |
 | `created_at`    | Zeitpunkt der Bewegung                         |
 
 Mögliche Werte für `movement_type`:
@@ -116,7 +117,7 @@ Eine Umbuchung („Nach“ ist ein Lagerort – auf der Buchen- oder der Artikel
 
 Buchungen werden nie gelöscht. Versehentliche Ausbuchungen, Umbuchungen und Entsorgungen werden über „Rückgängig“ auf der Seite „Heute ausgebucht“ durch eine **Gegenbuchung** (`issue_reversal`, `transfer_reversal_out`/`_in`, `disposal_reversal`, jeweils gleiche Charge) ausgeglichen; das ist nur für Buchungen des aktuellen Tages und höchstens bis zur heute gebuchten Menge möglich. Eine Umbuchung lässt sich nur zurücknehmen, solange das Material noch am Ziel liegt.
 
-Die beiden Hälften einer Umbuchung (`transfer_out` + `transfer_in` bzw. die Rücknahme-Varianten) werden immer direkt nacheinander in einer Transaktion gespeichert; der Zugang hat dadurch stets die ID des Abgangs + 1. Darüber ordnet `StockRepository::getTodayTransfers()` sie einander zu – neue Buchungsarten müssen diese Reihenfolge einhalten. Abgelaufene Chargen lassen sich in MHD-Übersicht, Artikel- und Lagerort-Detailseite mit „Entsorgen“ vollständig entnehmen (`disposal`).
+Die beiden Hälften einer Umbuchung (`transfer_out` + `transfer_in` bzw. die Rücknahme-Varianten) tragen dieselbe `transfer_id` und werden gemeinsam in einer Transaktion gespeichert (`StockRepository::transferPair()`); darüber ordnet `getTodayTransfers()` sie einander zu. Umbuchungen aus der Zeit vor Migration 009 hat die Migration anhand der damaligen Regel (Zugang = ID des Abgangs + 1) nachträglich verknüpft. Abgelaufene Chargen lassen sich in MHD-Übersicht, Artikel- und Lagerort-Detailseite mit „Entsorgen“ vollständig entnehmen (`disposal`).
 
 ## Datenbank lokal prüfen
 

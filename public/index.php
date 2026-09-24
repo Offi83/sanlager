@@ -34,6 +34,7 @@ use LagerApp\CategoryRepository;
 use LagerApp\LocationActions;
 use LagerApp\LocationRepository;
 use LagerApp\StockActions;
+use LagerApp\StockReports;
 use LagerApp\StockRepository;
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -74,6 +75,7 @@ $batches = new BatchRepository($db);
 $categories = new CategoryRepository($db);
 $locationRepository = new LocationRepository($db);
 $stock = new StockRepository($db);
+$reports = new StockReports($db);
 
 /*
  * h(), redirect(), formatDate() und expiryInfo() sind globale
