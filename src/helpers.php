@@ -120,6 +120,18 @@ function normalizeDate(string $value): ?string
 }
 
 /**
+ * Vergleichsform eines Namens (Artikel, Lagerort, Kategorie): ohne
+ * Groß-/Kleinschreibung und mit zusammengefassten Leerzeichen, damit
+ * "mullbinde" neben "Mullbinde" nicht als zweiter Artikel durchgeht.
+ * In PHP statt per COLLATE NOCASE, weil SQLite dabei nur A–Z
+ * berücksichtigt, nicht Ä/Ö/Ü.
+ */
+function nameKey(string $name): string
+{
+    return mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $name)));
+}
+
+/**
  * Kleines Inline-SVG-Symbol für Buttons (übernimmt die Textfarbe via
  * currentColor, funktioniert ohne Internet). Dekorativ – der Button
  * braucht zusätzlich Text oder ein aria-label/title.

@@ -97,14 +97,43 @@ class LocationRepository
     /**
      * Legt einen neuen Lagerort an und hängt ihn ans Ende der Sortierung an.
      *
-     * @throws RuntimeException wenn der Name bereits vergeben ist
+     * Heißt ein deaktivierter Lagerort so, wird stattdessen dieser wieder
+     * aktiviert (Name und Beschreibung wie eingegeben, ans Ende der
+     * Sortierung). Seine gespeicherten Mindestbestände gelten dann wieder;
+     * Bestand hat er keinen, deaktivieren geht nur leer.
+     *
+     * @return int ID des neuen bzw. wieder aktivierten Lagerorts
+     * @throws RuntimeException wenn ein aktiver Lagerort so heißt
      */
     public function create(string $name, string $description): int
     {
-        if ($this->existsWithName($name)) {
+        $existing = $this->findWithName($name);
+
+        if ($existing && (int) $existing['active'] === 1) {
             throw new RuntimeException(
-                'Ein Lagerort mit diesem Namen existiert bereits.'
+                'Ein Lagerort mit diesem Namen existiert bereits ('
+                . $existing['name'] . ').'
             );
+        }
+
+        if ($existing) {
+            $statement = $this->db->prepare(
+                'UPDATE storage_locations
+                 SET name = :name,
+                     description = :description,
+                     sort_order = :sort_order,
+                     active = 1
+                 WHERE id = :id'
+            );
+
+            $statement->execute([
+                'id' => $existing['id'],
+                'name' => $name,
+                'description' => $description !== '' ? $description : null,
+                'sort_order' => $this->nextSortOrder()
+            ]);
+
+            return (int) $existing['id'];
         }
 
         $statement = $this->db->prepare(
@@ -124,14 +153,40 @@ class LocationRepository
     }
 
     /**
+     * Ob create() mit diesem Namen einen deaktivierten Lagerort wieder
+     * aktivieren würde – für die passende Meldung.
+     */
+    public function isDeactivatedName(string $name): bool
+    {
+        $existing = $this->findWithName($name);
+
+        return $existing !== null && (int) $existing['active'] === 0;
+    }
+
+    /**
      * @throws RuntimeException wenn der Name bereits von einem anderen
-     *                          Lagerort verwendet wird
+     *                          (auch deaktivierten) Lagerort verwendet wird
      */
     public function update(int $id, string $name, string $description): void
     {
-        if ($this->existsWithName($name, $id)) {
+        $existing = $this->findWithName($name, $id);
+
+        if ($existing && (int) $existing['active'] === 1) {
             throw new RuntimeException(
-                'Ein Lagerort mit diesem Namen existiert bereits.'
+                'Ein Lagerort mit diesem Namen existiert bereits ('
+                . $existing['name'] . ').'
+            );
+        }
+
+        /*
+         * Der Name ist in der Datenbank eindeutig, auch gegenüber
+         * deaktivierten Lagerorten.
+         */
+        if ($existing) {
+            throw new RuntimeException(
+                'So heißt ein deaktivierter Lagerort. Um ihn wieder zu nutzen, '
+                . 'einen neuen Lagerort mit diesem Namen anlegen – er wird dann '
+                . 'wieder aktiviert.'
             );
         }
 
@@ -241,21 +296,29 @@ class LocationRepository
         return ((int) $sortOrder) + 10;
     }
 
-    private function existsWithName(string $name, ?int $excludeId = null): bool
+    /**
+     * Lagerort (aktiv oder deaktiviert) mit diesem Namen, ohne Groß-/
+     * Kleinschreibung verglichen (siehe nameKey()).
+     */
+    private function findWithName(string $name, ?int $excludeId = null): ?array
     {
         $statement = $this->db->prepare(
-            'SELECT 1
+            'SELECT id, name, active
              FROM storage_locations
-             WHERE name = :name
-             AND id != :exclude_id
-             LIMIT 1'
+             WHERE id != :exclude_id
+             ORDER BY active DESC'
         );
 
         $statement->execute([
-            'name' => $name,
             'exclude_id' => $excludeId ?? 0
         ]);
 
-        return $statement->fetchColumn() !== false;
+        foreach ($statement->fetchAll() as $location) {
+            if (nameKey($location['name']) === nameKey($name)) {
+                return $location;
+            }
+        }
+
+        return null;
     }
 }

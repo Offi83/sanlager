@@ -10,8 +10,9 @@ use RuntimeException;
  *
  * Es gibt keine eigene Bestandstabelle: Der Bestand eines Artikels an
  * einem Lagerort/einer Charge ergibt sich stets aus der Summe seiner
- * Bewegungen. Zugänge (`receipt`, `transfer_in`) werden als positive,
- * Abgänge (`issue`, `transfer_out`) als negative Menge gespeichert.
+ * Bewegungen. Zugänge (z. B. `receipt`, `transfer_in`) werden als
+ * positive, Abgänge (z. B. `issue`, `disposal`, `transfer_out`) als
+ * negative Menge gespeichert, siehe move().
  */
 class StockRepository
 {
@@ -530,7 +531,7 @@ class StockRepository
      * ist die älteste verfügbare Charge abgelaufen, wird genau diese
      * gebucht. Der Aufrufer muss das zurückgelieferte `expiry_date`
      * selbst gegen das heutige Datum prüfen, um eine Warnung anzuzeigen
-     * (siehe expiryInfo() in public/index.php).
+     * (siehe expiryInfo() in src/helpers.php).
      *
      * @throws RuntimeException wenn kein Bestand an diesem Lagerort vorhanden ist
      */
@@ -960,10 +961,9 @@ class StockRepository
      *
      * `$quantity` wird immer positiv übergeben; bei den Abgangstypen
      * `issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
-     * hier intern negiert, nachdem
-     * geprüft wurde, dass genug Bestand der betroffenen Charge an diesem
-     * Lagerort vorhanden ist. Für eine vollständige Umbuchung (Abgang an
-     * einem Lagerort + Zugang an einem anderen) siehe transferOldest(),
+     * hier intern negiert, nachdem geprüft wurde, dass genug Bestand der
+     * betroffenen Charge an diesem Lagerort vorhanden ist. Für eine vollständige Umbuchung (Abgang an
+     * einem Lagerort + Zugang an einem anderen) siehe transferPair(),
      * das move() zweimal in einer Transaktion aufruft.
      *
      * @param int|null $transferId verbindet die beiden Hälften einer

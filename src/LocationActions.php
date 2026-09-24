@@ -48,9 +48,16 @@ class LocationActions
             );
         }
 
+        $reactivated = $this->locations->isDeactivatedName($name);
+
         $this->locations->create($name, $description);
 
-        return ActionResult::redirect('?page=locations', 'Lagerort angelegt');
+        return ActionResult::redirect(
+            '?page=locations',
+            $reactivated
+                ? 'Lagerort „' . $name . '“ war deaktiviert und ist wieder aktiv'
+                : 'Lagerort angelegt'
+        );
     }
 
     private function update(array $input): ActionResult

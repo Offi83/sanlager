@@ -42,6 +42,13 @@ class HelpersTest extends TestCase
         $this->assertNull(normalizeDate($input));
     }
 
+    public function testNameKeyIgnoresCaseUmlautsAndSpaces(): void
+    {
+        $this->assertSame(nameKey('Mullbinde 8 cm'), nameKey('  MULLBINDE   8 cm '));
+        $this->assertSame(nameKey('Ärmelschoner'), nameKey('ärmelschoner'));
+        $this->assertNotSame(nameKey('Mullbinde 8 cm'), nameKey('Mullbinde 10 cm'));
+    }
+
     public function testExpiryInfo(): void
     {
         $this->assertSame('', expiryInfo(null)['class']);

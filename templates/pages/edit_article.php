@@ -99,6 +99,7 @@
                             type="text"
                             name="article_number"
                             value="<?= h($editArticle['article_number']) ?>"
+                            required
                         >
 
                     </label>

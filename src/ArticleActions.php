@@ -108,9 +108,19 @@ class ArticleActions
             );
         }
 
+        /*
+         * Wie beim Anlegen Pflicht: Ohne Nummer ließe sich der Artikel
+         * nicht mehr scannen, und das Etikett hätte keinen Code.
+         */
+        if ($articleNumber === '') {
+            throw new RuntimeException(
+                'Bitte eine Artikelnummer eingeben.'
+            );
+        }
+
         $this->articles->update(
             $id,
-            $articleNumber !== '' ? $articleNumber : null,
+            $articleNumber,
             $name,
             $description,
             $unit !== '' ? $unit : 'Stück',

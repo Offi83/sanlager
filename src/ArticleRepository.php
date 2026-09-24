@@ -96,7 +96,11 @@ class ArticleRepository
     /**
      * Legt einen neuen Artikel an.
      *
-     * @throws RuntimeException wenn Artikelnummer oder Name bereits vergeben sind
+     * Die Artikelnummer eines gelöschten Artikels wird dabei frei gegeben
+     * (siehe releaseNumberOfDeleted()), sein Name zählt nicht mehr.
+     *
+     * @throws RuntimeException wenn Artikelnummer oder Name bereits von
+     *                          einem aktiven Artikel verwendet werden
      */
     public function create(
         ?string $articleNumber,
@@ -107,6 +111,7 @@ class ArticleRepository
     ): int {
         $this->assertArticleNumberAvailable($articleNumber);
         $this->assertNameAvailable($name);
+        $this->releaseNumberOfDeleted($articleNumber);
 
         $statement = $this->db->prepare(
             'INSERT INTO articles
@@ -139,10 +144,10 @@ class ArticleRepository
     }
 
     /**
-     * Aktualisiert einen bestehenden Artikel.
+     * Aktualisiert einen bestehenden Artikel, siehe create().
      *
      * @throws RuntimeException wenn Artikelnummer oder Name bereits von
-     *                          einem anderen Artikel verwendet werden
+     *                          einem anderen aktiven Artikel verwendet werden
      */
     public function update(
         int $id,
@@ -154,6 +159,7 @@ class ArticleRepository
     ): void {
         $this->assertArticleNumberAvailable($articleNumber, $id);
         $this->assertNameAvailable($name, $id);
+        $this->releaseNumberOfDeleted($articleNumber, $id);
 
         $statement = $this->db->prepare(
             'UPDATE articles
@@ -223,7 +229,11 @@ class ArticleRepository
     }
 
     /**
-     * @throws RuntimeException wenn die Artikelnummer bereits vergeben ist
+     * Gelöschte (deaktivierte) Artikel zählen nicht: Ihre Nummer gibt
+     * releaseNumberOfDeleted() frei.
+     *
+     * @throws RuntimeException wenn ein aktiver Artikel die Artikelnummer
+     *                          bereits verwendet
      */
     private function assertArticleNumberAvailable(
         ?string $articleNumber,
@@ -234,10 +244,11 @@ class ArticleRepository
         }
 
         $statement = $this->db->prepare(
-            'SELECT id
+            'SELECT name
              FROM articles
              WHERE article_number = :article_number
              AND id != :exclude_id
+             AND active = 1
              LIMIT 1'
         );
 
@@ -246,37 +257,71 @@ class ArticleRepository
             'exclude_id' => $excludeId ?? 0
         ]);
 
-        if ($statement->fetchColumn() !== false) {
+        $usedBy = $statement->fetchColumn();
+
+        if ($usedBy !== false) {
             throw new RuntimeException(
-                'Diese Artikelnummer wird bereits verwendet'
+                'Diese Artikelnummer wird bereits verwendet (' . $usedBy . ').'
             );
         }
     }
 
     /**
-     * @throws RuntimeException wenn der Name bereits vergeben ist
+     * Nimmt einem gelöschten Artikel seine Artikelnummer, damit ein neuer
+     * oder umbenannter Artikel sie verwenden kann (in der Datenbank ist
+     * sie eindeutig). Der gelöschte Artikel bleibt mit seinen Buchungen
+     * erhalten, ist aber ohnehin nirgends mehr sichtbar oder scanbar.
+     */
+    private function releaseNumberOfDeleted(
+        ?string $articleNumber,
+        ?int $excludeId = null
+    ): void {
+        if ($articleNumber === null || $articleNumber === '') {
+            return;
+        }
+
+        $statement = $this->db->prepare(
+            'UPDATE articles
+             SET article_number = NULL
+             WHERE article_number = :article_number
+             AND id != :exclude_id
+             AND active = 0'
+        );
+
+        $statement->execute([
+            'article_number' => $articleNumber,
+            'exclude_id' => $excludeId ?? 0
+        ]);
+    }
+
+    /**
+     * Vergleich ohne Groß-/Kleinschreibung (siehe nameKey()); gelöschte
+     * Artikel zählen nicht.
+     *
+     * @throws RuntimeException wenn ein aktiver Artikel so heißt
      */
     private function assertNameAvailable(
         string $name,
         ?int $excludeId = null
     ): void {
         $statement = $this->db->prepare(
-            'SELECT id
+            'SELECT name
              FROM articles
-             WHERE name = :name
-             AND id != :exclude_id
-             LIMIT 1'
+             WHERE id != :exclude_id
+             AND active = 1'
         );
 
         $statement->execute([
-            'name' => $name,
             'exclude_id' => $excludeId ?? 0
         ]);
 
-        if ($statement->fetchColumn() !== false) {
-            throw new RuntimeException(
-                'Ein Artikel mit diesem Namen existiert bereits.'
-            );
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $existingName) {
+            if (nameKey($existingName) === nameKey($name)) {
+                throw new RuntimeException(
+                    'Ein Artikel mit diesem Namen existiert bereits ('
+                    . $existingName . ').'
+                );
+            }
         }
     }
 }

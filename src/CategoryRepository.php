@@ -199,22 +199,28 @@ class CategoryRepository
     /**
      * @param int|null $excludeId eigene ID beim Bearbeiten ausschließen
      */
+    /**
+     * Vergleich ohne Groß-/Kleinschreibung, siehe nameKey().
+     */
     private function existsWithName(string $name, ?int $excludeId = null): bool
     {
         $statement = $this->db->prepare(
-            'SELECT 1
+            'SELECT name
              FROM article_categories
-             WHERE name = :name
-             AND id != :exclude_id
-             LIMIT 1'
+             WHERE id != :exclude_id'
         );
 
         $statement->execute([
-            'name' => $name,
             'exclude_id' => $excludeId ?? 0
         ]);
 
-        return $statement->fetchColumn() !== false;
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $existingName) {
+            if (nameKey($existingName) === nameKey($name)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function nextSortOrder(): int

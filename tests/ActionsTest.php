@@ -423,6 +423,111 @@ class ActionsTest extends TestCase
         $this->assertSame(0, (int) $this->articles->find($this->articleId)['active']);
     }
 
+    public function testDeletedArticleFreesNumberAndName(): void
+    {
+        $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
+
+        // Gleiche Nummer und gleicher Name wie der gelöschte Artikel.
+        $newId = $this->articles->create('A-001', 'Mullbinde', '', 'Stück', null);
+
+        $this->assertNotSame($this->articleId, $newId);
+        $this->assertSame($newId, (int) $this->articles->findByArticleNumber('A-001')['id']);
+
+        // Der gelöschte bleibt (mit seinen Buchungen) erhalten, nur ohne Nummer.
+        $this->assertNull($this->articles->find($this->articleId)['article_number']);
+        $this->assertSame(0, (int) $this->articles->find($this->articleId)['active']);
+
+        // Auch beim Bearbeiten lässt sich die Nummer eines gelöschten übernehmen.
+        $otherId = $this->articles->create('B-001', 'Pflaster', '', 'Stück', null);
+        $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $otherId]);
+        $this->articles->update($newId, 'B-001', 'Mullbinde', '', 'Stück', null);
+
+        $this->assertSame($newId, (int) $this->articles->findByArticleNumber('B-001')['id']);
+    }
+
+    public function testActiveArticleKeepsNumberAndNameCaseInsensitive(): void
+    {
+        foreach ([['A-001', 'Andere Binde', 'Artikelnummer wird bereits verwendet (Mullbinde)'],
+                  ['A-002', ' mullBINDE ', 'Namen existiert bereits (Mullbinde)']] as [$number, $name, $expected]) {
+            try {
+                $this->articles->create($number, $name, '', 'Stück', null);
+                $this->fail('Doppelter Artikel angelegt: ' . $name);
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString($expected, $exception->getMessage());
+            }
+        }
+
+        // Umlaute: SQLite (COLLATE NOCASE) würde "ärmel" und "Ärmel" unterscheiden.
+        $this->articles->create('A-003', 'Ärmelschoner', '', 'Stück', null);
+
+        $this->expectExceptionMessage('Namen existiert bereits');
+        $this->articles->create('A-004', 'ärmelschoner', '', 'Stück', null);
+    }
+
+    public function testArticleNumberIsRequiredWhenEditing(): void
+    {
+        $category = (string) $this->categories->all()[0]['id'];
+
+        try {
+            $this->articleActions()->dispatch('update_article', [
+                'id' => (string) $this->articleId,
+                'article_number' => '  ',
+                'name' => 'Mullbinde',
+                'category_id' => $category,
+            ]);
+            $this->fail('Artikelnummer ließ sich leeren.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Bitte eine Artikelnummer eingeben.', $exception->getMessage());
+        }
+
+        $this->assertSame('A-001', $this->articles->find($this->articleId)['article_number']);
+    }
+
+    public function testCreatingDeactivatedLocationReactivatesIt(): void
+    {
+        $boxId = $this->locations->create('Kiste 1', 'alt');
+        $this->stock->saveMinimums($this->articleId, [$boxId => 3]);
+        $this->locations->deactivate($boxId);
+
+        $result = (new LocationActions($this->locations, $this->stock))
+            ->dispatch('create_location', ['name' => 'kiste 1', 'description' => 'neu']);
+
+        $this->assertSame('Lagerort „kiste 1“ war deaktiviert und ist wieder aktiv', $result->message);
+
+        $box = $this->locations->find($boxId);
+        $this->assertSame(1, (int) $box['active']);
+        $this->assertSame('kiste 1', $box['name']);
+        $this->assertSame('neu', $box['description']);
+
+        // Ans Ende der Sortierung, gespeicherter Mindestbestand gilt wieder.
+        $this->assertSame($boxId, (int) array_column($this->locations->all(), 'id')[1]);
+        $this->assertSame([$boxId], array_map('intval', array_column($this->reports->getLowStockItems(), 'location_id')));
+    }
+
+    public function testLocationNamesAreUniqueCaseInsensitive(): void
+    {
+        $boxId = $this->locations->create('Kiste 1', '');
+        $oldId = $this->locations->create('Kiste 2', '');
+        $this->locations->deactivate($oldId);
+
+        try {
+            $this->locations->create('KISTE 1', '');
+            $this->fail('Doppelter Lagerort angelegt.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('existiert bereits (Kiste 1)', $exception->getMessage());
+        }
+
+        // Umbenennen auf den Namen eines deaktivierten: Hinweis, wie es geht.
+        $this->expectExceptionMessage('So heißt ein deaktivierter Lagerort');
+        $this->locations->update($boxId, 'Kiste 2', '');
+    }
+
+    public function testCategoryNamesAreUniqueCaseInsensitive(): void
+    {
+        $this->expectExceptionMessage('Eine Kategorie mit diesem Namen existiert bereits.');
+        $this->categories->create('verbandMATERIAL', 'VM', '#ff0000');
+    }
+
     public function testDefaultSourceIsFirstLocationInSortOrderNotName(): void
     {
         $boxId = $this->locations->create('Kiste 1', '');
