@@ -203,7 +203,7 @@ class PagesTest extends TestCase
             'Artikel bearbeiten' => ['?page=edit_article&id={article}', 'name="unit_id"'],
             'Neuer Artikel' => ['?page=new_article', 'Artikelnummer'],
             'Etikett' => ['?page=label&id={article}', 'diag-bz-streifen'],
-            'Etiketten Auswahl' => ['?page=labels', 'Freie Plätze am Anfang'],
+            'Etiketten Auswahl' => ['?page=labels', 'Alle Artikel'],
             'Etiketten Kategorie' => ['?page=labels&category={category}', 'Etiketten anzeigen'],
             'Kategorien' => ['?page=categories', 'Verbandmaterial'],
             'Kategorie bearbeiten' => ['?page=categories&edit={category}', 'Kategorie speichern'],
@@ -399,7 +399,7 @@ class PagesTest extends TestCase
         $this->assertSame(8, substr_count($body, '<div class="label-number">diag-bz-streifen</div>'));
     }
 
-    public function testCollectiveLabelsSelectionSkipAndSheets(): void
+    public function testCollectiveLabelsSelectionAndSheets(): void
     {
         $diagnostics = self::id("SELECT id FROM article_categories WHERE name = 'Diagnostik'");
         $inCategory = self::id('SELECT COUNT(*) FROM articles WHERE active = 1 AND category_id = ' . $diagnostics);
@@ -411,17 +411,25 @@ class PagesTest extends TestCase
         $this->assertSame($inCategory, preg_match_all('#class="labels-quantity"[^>]*value="1"#s', $body));
         $this->assertStringContainsString('href="?page=labels&category=' . $diagnostics . '"', self::request('?page=articles&category=' . $diagnostics)['body']);
 
-        // 3 freie Plätze + 6 + 1 Etiketten = 10 Plätze → 2 Bögen.
+        // Auswahl: "alle 1×" / "keine" für alle Kategorien auf einmal.
+        $body = self::request('?page=labels')['body'];
+        $this->assertStringContainsString('data-label-all="1"', $body);
+        $this->assertStringContainsString('data-label-all=""', $body);
+
+        // 6 + 1 Etiketten → 1 Bogen, der Rest bleibt am Ende frei. Freie
+        // Plätze am Anfang (angebrochene Bögen) gibt es nicht mehr – ein
+        // altes `skip` in der Adresse wird nicht beachtet.
         $response = self::request('?page=labels&print=1&skip=3&qty[' . $article . ']=6&qty[' . $other . ']=1');
         $this->assertCleanPage($response, 'Sammeletiketten');
         $body = $response['body'];
 
-        $this->assertMatchesRegularExpression('#7\s+Etiketten\s+auf 2\s+Bögen#', $body);
-        $this->assertSame(2, substr_count($body, 'class="label-print-page"'));
+        $this->assertMatchesRegularExpression('#7\s+Etiketten\s+auf 1\s+Bogen#', $body);
+        $this->assertSame(1, substr_count($body, 'class="label-print-page"'));
         $this->assertSame(7, substr_count($body, '<div class="label">'));
         $this->assertSame(6, substr_count($body, '<div class="label-number">diag-bz-streifen</div>'));
-        $this->assertSame(9, substr_count($body, 'label-empty'), '3 frei am Anfang, 6 am Ende des zweiten Bogens');
-        $this->assertLessThan(strpos($body, '<div class="label">'), strpos($body, 'label-empty'));
+        $this->assertSame(1, substr_count($body, 'label-empty'), 'nur am Ende frei');
+        $this->assertGreaterThan(strpos($body, '<div class="label">'), strpos($body, 'label-empty'));
+        $this->assertStringNotContainsString('skip', $body);
 
         // Nichts ausgewählt: Hinweis statt leerer Druckansicht.
         $response = self::request('?page=labels&print=1&qty[' . $article . ']=0');
@@ -432,7 +440,7 @@ class PagesTest extends TestCase
         // Manipulierte Werte: begrenzt bzw. ignoriert.
         $response = self::request('?page=labels&print=1&skip=99&qty[' . $article . ']=500&qty[x]=abc&qty[' . $other . '][]=1');
         $this->assertCleanPage($response, 'Sammeletiketten mit ungültigen Werten');
-        $this->assertMatchesRegularExpression('#99\s+Etiketten\s+auf 14\s+Bögen#', $response['body'], '7 frei + 99 = 106 Plätze');
+        $this->assertMatchesRegularExpression('#99\s+Etiketten\s+auf 13\s+Bögen#', $response['body'], '99 Plätze');
     }
 
     public function testNewArticleKeepsCategory(): void

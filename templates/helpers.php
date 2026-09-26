@@ -72,7 +72,7 @@ function renderUndoForm(
  * Ein A4-Bogen Etiketten (2 × 4 à 105 × 74 mm, siehe .label-print-page in
  * app.css) – für das Einzeletikett und die Sammeletiketten. Ein Platz ist
  * entweder ['article' => Artikel, 'qr' => SVG oder null] oder null für
- * einen frei bleibenden Platz (z. B. auf einem angebrochenen Bogen).
+ * einen frei bleibenden Platz (Rest des letzten Bogens).
  *
  * @param array<int, array{article: array, qr: ?string}|null> $slots
  */

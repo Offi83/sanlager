@@ -8,12 +8,12 @@
  *
  * Zwei Ansichten, beide per GET (es wird nichts gespeichert):
  *
- *   ?page=labels[&category=ID]              Auswahl: Anzahl je Artikel
- *   ?page=labels&print=1&qty[ID]=n&skip=k   Bögen zum Drucken
+ *   ?page=labels[&category=ID]       Auswahl: Anzahl je Artikel
+ *   ?page=labels&print=1&qty[ID]=n   Bögen zum Drucken
  *
  * `category` (aus der Artikelliste) wählt die Artikel dieser Kategorie
- * mit je einem Etikett vor. `skip` lässt am Anfang Plätze frei, damit
- * sich ein angebrochener Bogen weiterverwenden lässt.
+ * mit je einem Etikett vor. Gedruckt wird immer ab dem ersten Platz eines
+ * neuen Bogens: Angebrochene Bögen führten zu oft zu Papierstau.
  */
 
 /*
@@ -42,10 +42,6 @@ foreach ($labelArticles as $labelArticle) {
     }
 }
 
-$labelSkip = is_string($_GET['skip'] ?? null) && ctype_digit($_GET['skip'])
-    ? min((int) $_GET['skip'], $labelsPerSheet - 1)
-    : 0;
-
 /*
  * Vorauswahl aus der Artikelliste: alle Artikel der Kategorie je einmal.
  */
@@ -67,14 +63,14 @@ if (($_GET['print'] ?? '') === '1' && $labelCount === 0) {
 }
 
 /*
- * Bögen zum Drucken: freie Plätze, dann jeder Artikel so oft wie gewählt
+ * Bögen zum Drucken: jeder Artikel so oft wie gewählt
  * (in der Reihenfolge der Artikelliste), aufgeteilt in Bögen zu je acht.
  * Der QR-Code wird je Artikel nur einmal erzeugt.
  */
 $labelSheets = [];
 
 if ($labelPrint) {
-    $labelSlots = array_fill(0, $labelSkip, null);
+    $labelSlots = [];
     $labelQrGenerator = new \LagerApp\QrCodeGenerator();
 
     foreach ($labelArticles as $labelArticle) {

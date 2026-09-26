@@ -6,7 +6,7 @@
             <div>
 
                 <a
-                    href="<?= h('?' . http_build_query(['page' => 'labels', 'qty' => $labelQuantities, 'skip' => $labelSkip])) ?>"
+                    href="<?= h('?' . http_build_query(['page' => 'labels', 'qty' => $labelQuantities])) ?>"
                     class="back-link"
                 >
                     ← Auswahl ändern
@@ -17,9 +17,7 @@
                 <p>
                     <?= $labelCount ?> <?= $labelCount === 1 ? 'Etikett' : 'Etiketten' ?>
                     auf <?= count($labelSheets) ?> <?= count($labelSheets) === 1 ? 'Bogen' : 'Bögen' ?>
-                    (A4, 2 × 4 à 105 × 74 mm)<?= $labelSkip > 0
-                        ? ', die ersten ' . $labelSkip . ' Plätze bleiben frei'
-                        : '' ?>.
+                    (A4, 2 × 4 à 105 × 74 mm), jeweils ab dem ersten Platz eines neuen Bogens.
                     Beim Drucken Skalierung „100 %“ bzw. „Tatsächliche Größe“ wählen.
                 </p>
 
@@ -79,19 +77,32 @@
 
                 <div class="card-body labels-options">
 
-                    <label>
-                        <span>Freie Plätze am Anfang</span>
+                    <?php /* Wie die Knöpfe je Kategorie, aber über alle Kategorien hinweg (label-selection.js). */ ?>
+                    <div class="labels-all">
 
-                        <select name="skip">
-                            <?php for ($skip = 0; $skip < 8; $skip++): ?>
-                                <option value="<?= $skip ?>" <?= $skip === $labelSkip ? 'selected' : '' ?>>
-                                    <?= $skip === 0 ? 'keine (neuer Bogen)' : $skip ?>
-                                </option>
-                            <?php endfor; ?>
-                        </select>
+                        <span>Alle Artikel</span>
 
-                        <small>Für einen angebrochenen Bogen: so viele Etiketten sind schon verbraucht (zeilenweise von links oben).</small>
-                    </label>
+                        <div class="labels-all-buttons">
+
+                            <button
+                                type="button"
+                                class="button button-secondary"
+                                data-label-all="1"
+                            >
+                                alle 1×
+                            </button>
+
+                            <button
+                                type="button"
+                                class="button button-secondary"
+                                data-label-all=""
+                            >
+                                keine
+                            </button>
+
+                        </div>
+
+                    </div>
 
                     <button
                         type="submit"
