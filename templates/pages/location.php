@@ -26,6 +26,20 @@
             <div class="actions">
 
                 <a
+                    href="?page=packlist&id=<?= (int) $viewLocation['id'] ?>"
+                    class="button button-secondary"
+                >
+                    Packliste
+                </a>
+
+                <a
+                    href="?page=inventory&id=<?= (int) $viewLocation['id'] ?>"
+                    class="button button-secondary"
+                >
+                    Inventur
+                </a>
+
+                <a
                     href="?page=locations&edit=<?= (int) $viewLocation['id'] ?>"
                     class="button"
                 >

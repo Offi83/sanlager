@@ -1,7 +1,9 @@
 /*
  * Buchen-Seite: Kamera-Scanner (html5-qrcode) und Buchungs-Logik
- * (Ausbuchen/Umbuchen/Einlagern, Menge, MHD beim Einlagern). Läuft nur, wenn die zugehörigen Elemente auf der
- * Seite vorhanden sind, siehe Guard-Klausel unten.
+ * (Ausbuchen/Umbuchen/Einlagern, Menge, MHD beim Einlagern), Ton und
+ * Vibration als Rückmeldung sowie der Alarm bei abgelaufener Ware. Läuft
+ * nur, wenn die zugehörigen Elemente auf der Seite vorhanden sind, siehe
+ * Guard-Klausel unten.
  */
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -51,6 +53,30 @@ document.addEventListener('DOMContentLoaded', function () {
     const confirmExpiry =
         document.getElementById('issue-confirm-expiry');
 
+    const issueForm =
+        articleNumber ? articleNumber.form : null;
+
+    const soundButton =
+        document.getElementById('issue-sound');
+
+    const alarm =
+        document.getElementById('issue-alarm');
+
+    const alarmText =
+        document.getElementById('issue-alarm-text');
+
+    const alarmWhere =
+        document.getElementById('issue-alarm-where');
+
+    const alarmError =
+        document.getElementById('issue-alarm-error');
+
+    const alarmKeep =
+        document.getElementById('issue-alarm-keep');
+
+    const alarmSortOut =
+        document.getElementById('issue-alarm-sort-out');
+
 
     if (
         !scanButton
@@ -68,6 +94,14 @@ document.addEventListener('DOMContentLoaded', function () {
         || !expiryField
         || !expiryInput
         || !confirmExpiry
+        || !issueForm
+        || !soundButton
+        || !alarm
+        || !alarmText
+        || !alarmWhere
+        || !alarmError
+        || !alarmKeep
+        || !alarmSortOut
     ) {
         return;
     }
@@ -279,10 +313,9 @@ document.addEventListener('DOMContentLoaded', function () {
             /*
              * Meist ein Scan, der im Mengenfeld gelandet ist.
              */
-            showResult(
+            showError(
                 'Ungültige Menge: „' + quantityInput.value
-                    + '“. Menge wurde auf 1 gesetzt – bitte noch einmal scannen.',
-                true
+                    + '“. Menge wurde auf 1 gesetzt – bitte noch einmal scannen.'
             );
 
             setQuantity(1);
@@ -381,6 +414,441 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
+    /*
+     * Rückmeldung per Ton und Vibration (D24): Beim Scannen liegt der
+     * Blick auf Kamera oder Ware, nicht auf dem Display.
+     *
+     *   ok      kurzer hoher Ton
+     *   warnung zwei mittlere Töne (MHD bald erreicht)
+     *   fehler  zwei tiefe Töne
+     *   alarm   auf- und abschwellend, abgelaufene Ware
+     *
+     * Töne per Web Audio (keine Dateien nötig). Browser erlauben Ton erst
+     * nach einer Bedienung der Seite – Tippen, Klicken oder eine Taste
+     * (auch der Hand-Scanner tippt) schaltet ihn frei. Ton an/aus wird je
+     * Gerät gespeichert; vibriert wird immer (nur Android kann das).
+     */
+    const sounds = {
+        ok: { tones: [[1320, 90]], vibrate: [60] },
+        warning: { tones: [[660, 120, 60], [660, 120]], vibrate: [120, 80, 120] },
+        error: { tones: [[220, 180, 80], [220, 180]], vibrate: [250, 100, 250] },
+        alarm: {
+            tones: [[880, 220, 30], [587, 220, 30], [880, 220, 30], [587, 220, 30], [880, 220, 30], [587, 400]],
+            vibrate: [400, 150, 400, 150, 400]
+        }
+    };
+
+    let audio = null;
+
+    function audioContext() {
+
+        const AudioContextClass =
+            window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextClass) {
+            return null;
+        }
+
+        if (!audio) {
+            audio = new AudioContextClass();
+        }
+
+        if (audio.state === 'suspended') {
+            audio.resume();
+        }
+
+        return audio;
+
+    }
+
+    ['pointerdown', 'keydown'].forEach(function (type) {
+        document.addEventListener(type, audioContext, { once: true, capture: true });
+    });
+
+    function soundEnabled() {
+
+        try {
+            return localStorage.getItem('sanlager-sound') !== 'off';
+        } catch (error) {
+            return true;
+        }
+
+    }
+
+    function updateSoundButton() {
+
+        soundButton.setAttribute('aria-pressed', soundEnabled() ? 'true' : 'false');
+
+    }
+
+    soundButton.hidden = false;
+    updateSoundButton();
+
+    soundButton.addEventListener('click', function () {
+
+        try {
+            localStorage.setItem('sanlager-sound', soundEnabled() ? 'off' : 'on');
+        } catch (error) {
+            // Nicht speicherbar (z. B. privates Fenster): bleibt an.
+        }
+
+        updateSoundButton();
+        signal('ok');
+        focusArticleNumber();
+
+    });
+
+    function signal(kind) {
+
+        const sound = sounds[kind];
+
+        if (navigator.vibrate) {
+            navigator.vibrate(sound.vibrate);
+        }
+
+        const context = soundEnabled() ? audioContext() : null;
+
+        if (!context) {
+            return;
+        }
+
+        let time = context.currentTime + 0.02;
+
+        sound.tones.forEach(function (tone) {
+
+            const [frequency, duration, pause = 0] = tone;
+
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+
+            oscillator.type = 'square';
+            oscillator.frequency.value = frequency;
+
+            // Kurz ein- und ausblenden, sonst knackt es.
+            gain.gain.setValueAtTime(0, time);
+            gain.gain.linearRampToValueAtTime(0.2, time + 0.01);
+            gain.gain.setValueAtTime(0.2, time + duration / 1000 - 0.02);
+            gain.gain.linearRampToValueAtTime(0, time + duration / 1000);
+
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+
+            oscillator.start(time);
+            oscillator.stop(time + duration / 1000);
+
+            time += (duration + pause) / 1000;
+
+        });
+
+    }
+
+
+    function showError(message) {
+
+        showResult(message, true);
+        signal('error');
+
+    }
+
+
+    /*
+     * Eine Buchung (Kamera-Scan oder Artikelnummer im Formular) per
+     * fetch, ohne Neuladen: Von/Nach, MHD und Scanner bleiben, und Ton
+     * und Alarm funktionieren auch mit dem Hand-Scanner. Wirft einen
+     * Fehler mit verständlicher Meldung, wenn nicht gebucht wurde.
+     */
+    async function book(code) {
+
+        const formData = new FormData();
+
+        formData.append('action', 'issue');
+        formData.append('ajax', '1');
+        formData.append('article_number', code);
+        formData.append('source', sourceSelect.value);
+        formData.append('target', targetSelect.value);
+        formData.append('quantity', quantityInput.value.trim());
+        formData.append('expiry_date', expiryInput.value);
+        formData.append('confirm_expiry', confirmExpiry.value);
+
+        const data = await post(formData, 'Buchung fehlgeschlagen.');
+
+        /*
+         * Aufeinanderfolgende Buchungen desselben Artikels mit demselben
+         * Von/Nach zusammenfassen.
+         */
+        const resultKey =
+            code + '|' + sourceSelect.value + '|' + targetSelect.value
+            + '|' + (isReceipt() ? expiryInput.value : '');
+
+        if (lastResult === resultKey) {
+
+            lastResultCount += data.quantity;
+
+        } else {
+
+            lastResult = resultKey;
+            lastResultCount = data.quantity;
+
+        }
+
+        // Menge gilt nur für diese eine Buchung.
+        quantityInput.value = '1';
+
+        // Meldung einer früheren Buchung mit Neuladen (oben auf der Seite) ist überholt.
+        document.querySelectorAll('.container > .alert').forEach(function (element) {
+            element.remove();
+        });
+
+        showResult(
+            data.article_name
+            + ' – '
+            + lastResultCount
+            + ' '
+            // Einzahl nur bei genau 1 ("1 Rolle", "2 Rollen").
+            + (lastResultCount === 1 ? data.unit : (data.unit_plural || data.unit))
+            + ' '
+            + data.action_label
+            // Artikel ohne MHD: keine Angabe.
+            + (data.expiry_date ? ' – MHD ' + data.expiry_date : ''),
+            data.expired === true
+        );
+
+        if (data.expired_batches && data.expired_batches.length > 0) {
+            showAlarm(data);
+        } else {
+            signal(data.expired === true ? 'warning' : 'ok');
+        }
+
+        return data;
+
+    }
+
+
+    async function post(formData, fallbackError) {
+
+        const response =
+            await fetch(
+                window.location.href,
+                {
+                    method: 'POST',
+                    body: formData
+                }
+            );
+
+        /*
+         * Kommt kein JSON zurück (z. B. abgelaufene Anmeldung,
+         * Serverfehler), verständlich melden statt "Unexpected token
+         * '<' ...".
+         */
+        const data =
+            await response.json().catch(function () {
+                return {
+                    success: false,
+                    error: 'Unerwartete Antwort vom Server ('
+                        + response.status
+                        + '). Bitte Seite neu laden.'
+                };
+            });
+
+        if (!data.success) {
+
+            throw new Error(
+                data.error || fallbackError
+            );
+
+        }
+
+        return data;
+
+    }
+
+
+    /*
+     * Artikelnummer per Hand-Scanner oder Tastatur (Enter): ebenfalls
+     * ohne Neuladen buchen. Ohne JavaScript schickt das Formular normal
+     * ab (Meldung nach Neuladen, ohne Ton und Alarm).
+     */
+    issueForm.addEventListener('submit', async function (event) {
+
+        event.preventDefault();
+
+        const code = articleNumber.value.trim();
+
+        if (processing || code === '') {
+            return;
+        }
+
+        processing = true;
+
+        try {
+
+            await book(code);
+
+            articleNumber.value = '';
+
+        } catch (error) {
+
+            showError(error.message);
+
+        }
+
+        processing = false;
+
+        if (!alarmOpen()) {
+            focusArticleNumber();
+        }
+
+    });
+
+
+    /*
+     * Alarm (D22a): Beim Aus-/Umbuchen wurde eine abgelaufene Charge
+     * genommen (bewusst, das älteste MHD zuerst). Der Alarm muss
+     * weggetippt werden: „Aussortieren“ macht aus der Buchung eine
+     * Entsorgung und entsorgt auch den Rest dieser Charge am Lagerort
+     * (Aktion sort_out_expired), „Trotzdem verwenden“ lässt alles so.
+     */
+    let alarmData = null;
+
+    function alarmOpen() {
+
+        return alarm.open === true;
+
+    }
+
+    function unitText(quantity, data) {
+
+        return quantity + ' ' + (quantity === 1 ? data.unit : (data.unit_plural || data.unit));
+
+    }
+
+    function showAlarm(data) {
+
+        alarmData = data;
+
+        const batches = data.expired_batches;
+
+        const booked = batches.reduce(function (sum, batch) {
+            return sum + batch.quantity;
+        }, 0);
+
+        const remaining = batches.reduce(function (sum, batch) {
+            return sum + batch.remaining;
+        }, 0);
+
+        alarmText.textContent =
+            data.article_name + ': ' + unitText(booked, data)
+            + ' mit MHD ' + batches.map(function (batch) {
+                return batch.expiry_date;
+            }).join(', ')
+            + ' ' + data.action_label + '.';
+
+        alarmWhere.textContent =
+            'in ' + data.source_name
+            + (remaining > 0
+                ? ' – dort liegen davon noch ' + unitText(remaining, data)
+                : '');
+
+        alarmError.hidden = true;
+        alarmKeep.disabled = false;
+        alarmSortOut.disabled = false;
+
+        signal('alarm');
+
+        if (typeof alarm.showModal === 'function') {
+
+            alarm.showModal();
+            alarmText.focus();
+
+        } else if (confirm(alarmText.textContent + '\n\nAussortieren?')) {
+
+            sortOut();
+
+        }
+
+    }
+
+    function closeAlarm() {
+
+        if (alarmOpen()) {
+            alarm.close();
+        }
+
+        alarmData = null;
+        focusArticleNumber();
+
+    }
+
+    /*
+     * Enter und Leertaste im Alarm nicht als Knopfdruck werten: Ein
+     * Hand-Scanner schickt nach jedem Code ein Enter. Escape schließt
+     * ihn auch nicht – bewusst tippen.
+     */
+    alarm.addEventListener('keydown', function (event) {
+
+        if (['Enter', ' ', 'Escape'].includes(event.key)) {
+            event.preventDefault();
+        }
+
+    });
+
+    alarm.addEventListener('cancel', function (event) {
+
+        event.preventDefault();
+
+    });
+
+    alarmKeep.addEventListener('click', closeAlarm);
+
+    alarmSortOut.addEventListener('click', sortOut);
+
+    async function sortOut() {
+
+        if (!alarmData) {
+            return;
+        }
+
+        const data = alarmData;
+        const formData = new FormData();
+
+        formData.append('action', 'sort_out_expired');
+        formData.append('ajax', '1');
+        formData.append('article_id', data.article_id);
+        formData.append('source', data.source);
+        formData.append('target', data.target);
+
+        data.expired_batches.forEach(function (batch) {
+            formData.append('batches[' + batch.batch_id + ']', batch.quantity);
+        });
+
+        alarmKeep.disabled = true;
+        alarmSortOut.disabled = true;
+
+        try {
+
+            const result = await post(formData, 'Aussortieren fehlgeschlagen.');
+
+            // Die Buchung ist zurückgenommen: nicht mehr mitzählen.
+            lastResult = null;
+            lastResultCount = 0;
+
+            closeAlarm();
+            showResult(result.message);
+            signal('ok');
+
+        } catch (error) {
+
+            alarmError.textContent = error.message;
+            alarmError.hidden = false;
+            alarmKeep.disabled = false;
+            alarmSortOut.disabled = false;
+            signal('error');
+
+        }
+
+    }
+
+
     async function stopScanner() {
 
         if (!scanner) {
@@ -459,7 +927,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 async function (decodedText) {
 
-                    if (processing) {
+                    if (processing || alarmOpen()) {
                         return;
                     }
 
@@ -485,85 +953,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     try {
 
-                        const formData =
-                            new FormData();
-
-                        formData.append(
-                            'action',
-                            'issue'
-                        );
-
-                        formData.append(
-                            'ajax',
-                            '1'
-                        );
-
-                        formData.append(
-                            'article_number',
-                            code
-                        );
-
-                        formData.append(
-                            'source',
-                            sourceSelect.value
-                        );
-
-                        formData.append(
-                            'target',
-                            targetSelect.value
-                        );
-
-                        formData.append(
-                            'quantity',
-                            quantityInput.value.trim()
-                        );
-
-                        formData.append(
-                            'expiry_date',
-                            expiryInput.value
-                        );
-
-                        formData.append(
-                            'confirm_expiry',
-                            confirmExpiry.value
-                        );
-
-
-                        const response =
-                            await fetch(
-                                window.location.href,
-                                {
-                                    method: 'POST',
-                                    body: formData
-                                }
-                            );
-
-
-                        /*
-                         * Kommt kein JSON zurück (z. B. abgelaufene
-                         * Anmeldung, Serverfehler), verständlich melden
-                         * statt "Unexpected token '<' ...".
-                         */
-                        const data =
-                            await response.json().catch(function () {
-                                return {
-                                    success: false,
-                                    error: 'Unerwartete Antwort vom Server ('
-                                        + response.status
-                                        + '). Bitte Seite neu laden.'
-                                };
-                            });
-
-
-                        if (!data.success) {
-
-                            throw new Error(
-                                data.error
-                                    || 'Buchung fehlgeschlagen.'
-                            );
-
-                        }
-
+                        await book(code);
 
                         /*
                          * Gleichen QR-Code für 7 Sekunden
@@ -574,50 +964,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         ignoreLastScannedUntil =
                             Date.now() + 7000;
 
-
-                        /*
-                         * Aufeinanderfolgende Buchungen
-                         * desselben Artikels mit demselben Von/Nach
-                         * zusammenfassen.
-                         */
-                        const resultKey =
-                            code + '|' + sourceSelect.value + '|' + targetSelect.value
-                            + '|' + (isReceipt() ? expiryInput.value : '');
-
-                        if (lastResult === resultKey) {
-
-                            lastResultCount += data.quantity;
-
-                        } else {
-
-                            lastResult = resultKey;
-                            lastResultCount = data.quantity;
-
-                        }
-
-                        // Menge gilt nur für diese eine Buchung.
-                        quantityInput.value = '1';
-
-
-                        showResult(
-                            data.article_name
-                            + ' – '
-                            + lastResultCount
-                            + ' '
-                            // Einzahl nur bei genau 1 ("1 Rolle", "2 Rollen").
-                            + (lastResultCount === 1 ? data.unit : (data.unit_plural || data.unit))
-                            + ' '
-                            + data.action_label
-                            // Artikel ohne MHD: keine Angabe.
-                            + (data.expiry_date ? ' – MHD ' + data.expiry_date : ''),
-                            data.expired === true
-                        );
-
-
                         showStatus(
                             'Bereit für den nächsten Scan.'
                         );
-
 
                     } catch (error) {
 
@@ -632,10 +981,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         ignoreLastScannedUntil =
                             Date.now() + 3000;
 
-                        showResult(
-                            error.message,
-                            true
-                        );
+                        showError(error.message);
 
                         showStatus(
                             'Fehler – nächster Scan möglich.'

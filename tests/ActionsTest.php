@@ -977,4 +977,132 @@ class ActionsTest extends TestCase
 
         $this->assertDoesNotMatchRegularExpression('/[?&](message|success|expired)=/', $sources);
     }
+
+    public function testInventoryCorrectsCountsAndAddsFoundBatch(): void
+    {
+        $boxId = $this->locations->create('Kiste 1', '');
+        $batch = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('+1 year')));
+        $this->stock->move($this->articleId, $boxId, 4, 'receipt', null, $batch);
+
+        $result = $this->stockActions()->dispatch('inventory', [
+            'location_id' => (string) $boxId,
+            'count' => [(string) $this->articleId => [(string) $batch => '3']],
+            'found' => [(string) $this->articleId => ['expiry_date' => '31.12.2030', 'quantity' => '2']],
+        ]);
+
+        $this->assertSame('?page=location&id=' . $boxId, $result->redirectUrl);
+        $this->assertSame('Inventur gespeichert, 2 Abweichungen korrigiert: Mullbinde −1, Mullbinde +2', $result->message);
+
+        $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $boxId, $batch));
+        $found = $this->batches->findOrCreate($this->articleId, '2030-12-31');
+        $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $boxId, $found));
+
+        // Unverändert abgeschickt: nichts gebucht.
+        $result = $this->stockActions()->dispatch('inventory', [
+            'location_id' => (string) $boxId,
+            'count' => [(string) $this->articleId => [(string) $batch => '3', (string) $found => '2']],
+            'found' => [(string) $this->articleId => ['expiry_date' => '', 'quantity' => '']],
+        ]);
+
+        $this->assertSame('Inventur gespeichert, keine Abweichungen.', $result->message);
+        $this->assertSame(2, (int) $this->db->query("SELECT COUNT(*) FROM stock_movements WHERE movement_type = 'correction'")->fetchColumn());
+    }
+
+    public function testInventoryRejectsInvalidInputAndBooksNothing(): void
+    {
+        $boxId = $this->locations->create('Kiste 1', '');
+        $this->stock->move($this->articleId, $boxId, 4, 'receipt');
+        $other = $this->articles->create('A-002', 'Pflaster', '', 'Stück', null);
+        $otherBatch = $this->batches->findOrCreate($other, '2030-01-01');
+
+        foreach ([
+            'Ungültige Zahl' => ['count' => [(string) $this->articleId => ['none' => 'drei']]],
+            'Negativ' => ['count' => [(string) $this->articleId => ['none' => '-1']]],
+            'Fremde Charge' => ['count' => [(string) $this->articleId => [(string) $otherBatch => '1']]],
+            'Gefunden ohne MHD' => ['found' => [(string) $this->articleId => ['expiry_date' => '', 'quantity' => '1']]],
+            'Gefunden mit falschem Jahr' => ['found' => [(string) $this->articleId => ['expiry_date' => '01.01.0027', 'quantity' => '1']]],
+            'Unbekannter Artikel' => ['count' => ['999' => ['none' => '1']]],
+        ] as $case => $input) {
+            try {
+                $this->stockActions()->dispatch('inventory', ['location_id' => (string) $boxId] + $input + [
+                    'count' => [(string) $this->articleId => ['none' => '1']],
+                ]);
+                $this->fail($case . ': angenommen');
+            } catch (RuntimeException) {
+            }
+        }
+
+        $this->assertSame(4, $this->stock->getStockAtLocation($this->articleId, $boxId));
+
+        $this->expectException(RuntimeException::class);
+        $this->stockActions()->dispatch('inventory', ['location_id' => '999']);
+    }
+
+    public function testScanOfExpiredBatchReportsItForSortingOut(): void
+    {
+        $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
+        $this->stock->move($this->articleId, $this->mainId, 3, 'receipt', null, $expired);
+        $this->receive(5);
+
+        $result = $this->stockActions()->dispatch('issue', [
+            'ajax' => '1',
+            'article_number' => 'A-001',
+            'quantity' => '2',
+        ]);
+
+        $this->assertTrue($result->json['expired']);
+        $this->assertSame([[
+            'batch_id' => $expired,
+            'expiry_date' => date('d.m.Y', strtotime('-1 day')),
+            'quantity' => 2,
+            'remaining' => 1,
+        ]], $result->json['expired_batches']);
+        $this->assertSame($this->articleId, $result->json['article_id']);
+        $this->assertSame((string) $this->mainId, $result->json['source']);
+        $this->assertSame('issue', $result->json['target']);
+        $this->assertSame('Hauptlager', $result->json['source_name']);
+
+        // Nichts Abgelaufenes mehr gebucht: leere Liste.
+        $this->stock->issueOldest($this->articleId, $this->mainId);
+
+        $result = $this->stockActions()->dispatch('issue', [
+            'ajax' => '1',
+            'article_number' => 'A-001',
+            'quantity' => '2',
+        ]);
+
+        $this->assertSame([], $result->json['expired_batches']);
+    }
+
+    public function testSortOutExpiredAction(): void
+    {
+        $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-1 day')));
+        $this->stock->move($this->articleId, $this->mainId, 3, 'receipt', null, $expired);
+        $this->stock->issueOldest($this->articleId, $this->mainId, null, 2);
+
+        $result = $this->stockActions()->dispatch('sort_out_expired', [
+            'ajax' => '1',
+            'article_id' => (string) $this->articleId,
+            'source' => (string) $this->mainId,
+            'target' => 'issue',
+            'batches' => [(string) $expired => '2'],
+        ]);
+
+        $this->assertTrue($result->json['success']);
+        $this->assertSame('Mullbinde – 3 Stück aus Hauptlager entsorgt (MHD abgelaufen)', $result->json['message']);
+        $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
+
+        // Noch einmal (z. B. doppelt getippt): Fehler als JSON, nichts gebucht.
+        $result = $this->stockActions()->dispatch('sort_out_expired', [
+            'ajax' => '1',
+            'article_id' => (string) $this->articleId,
+            'source' => (string) $this->mainId,
+            'target' => 'issue',
+            'batches' => [(string) $expired => '2'],
+        ]);
+
+        $this->assertSame(400, $result->status);
+        $this->assertFalse($result->json['success']);
+        $this->assertSame(1, (int) $this->db->query("SELECT COUNT(*) FROM stock_movements WHERE movement_type = 'disposal'")->fetchColumn());
+    }
 }

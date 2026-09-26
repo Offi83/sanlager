@@ -9,7 +9,7 @@ Folgende Bestandteile stammen von Dritten und stehen unter eigenen, mit der GPL-
 | Bestandteil | Verwendung | Lizenz | Lizenztext |
 |---|---|---|---|
 | [html5-qrcode](https://github.com/mebjas/html5-qrcode) – Copyright 2020 Minhaz | Kamera-Scanner auf der Buchen-Seite (`public/js/vendor/html5-qrcode.min.js`) | Apache-2.0 | [licenses/html5-qrcode-Apache-2.0.txt](licenses/html5-qrcode-Apache-2.0.txt) |
-| [Lucide](https://lucide.dev) – Symbole „undo-2“ und „trash-2“ (letzteres ursprünglich aus [Feather](https://feathericons.com), Cole Bemis) | Rückgängig- und Entsorgen-Buttons (`icon()` in `src/helpers.php`) | ISC bzw. MIT | [licenses/lucide-ISC.txt](licenses/lucide-ISC.txt) |
+| [Lucide](https://lucide.dev) – Symbole „undo-2“, „trash-2“ (letzteres ursprünglich aus [Feather](https://feathericons.com), Cole Bemis), „volume-2“ und „volume-x“ | Rückgängig- und Entsorgen-Buttons, Ton an/aus beim Buchen (`icon()` in `src/helpers.php`) | ISC bzw. MIT | [licenses/lucide-ISC.txt](licenses/lucide-ISC.txt) |
 | `public/images/pflaster.svg` | Logo in der Kopfzeile | gemeinfrei | – |
 
 ## Über Composer bezogen

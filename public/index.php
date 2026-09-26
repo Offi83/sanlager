@@ -174,7 +174,7 @@ if ($flash !== null) {
 */
 $pageNames = [
     'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label', 'labels',
-    'new_article', 'edit_article', 'categories', 'units', 'locations', 'location',
+    'new_article', 'edit_article', 'categories', 'units', 'locations', 'location', 'packlist', 'inventory',
 ];
 
 if (!in_array($page, $pageNames, true)) {

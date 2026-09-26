@@ -624,4 +624,150 @@ class StockRepositoryTest extends TestCase
 
         $this->assertSame(4, (int) $this->reports->getTodayTransfers()[0]['quantity']);
     }
+
+    public function testLocationChecklistListsStockAndMonitoredArticles(): void
+    {
+        $articles = new ArticleRepository($this->db);
+
+        // Mullbinde: zwei Chargen in der Kiste (eine abgelaufen), Mindestbestand 5.
+        $old = $this->receive(1, $this->day('-1 month'), $this->boxId);
+        $new = $this->receive(2, $this->day('+1 year'), $this->boxId);
+        $this->stock->saveMinimums($this->articleId, [$this->boxId => 5]);
+
+        // Überwacht, aber nichts da; ohne MHD – zum Zählen eine Zeile mit 0.
+        $gauze = $articles->create('A-002', 'Kompresse', '', 'Stück', null, false);
+        $this->stock->saveMinimums($gauze, [$this->boxId => 2]);
+
+        // Überwacht, mit MHD, nichts da: keine Charge, nur der Artikel.
+        $plaster = $articles->create('A-003', 'Pflaster', '', 'Stück', null);
+        $this->stock->saveMinimums($plaster, [$this->boxId => 1]);
+
+        // Nur im Hauptlager: gehört nicht auf die Liste der Kiste.
+        $scissors = $articles->create('A-004', 'Schere', '', 'Stück', null, false);
+        $this->stock->move($scissors, $this->mainId, 1, 'receipt');
+
+        $list = $this->stock->getLocationChecklist($this->boxId);
+
+        $this->assertSame(['Kompresse', 'Mullbinde', 'Pflaster'], array_column($list, 'article_name'));
+
+        [$gauzeRow, $bandageRow, $plasterRow] = $list;
+
+        $this->assertSame(5, $bandageRow['minimum_stock']);
+        $this->assertSame(3, $bandageRow['quantity']);
+        $this->assertSame(2, $bandageRow['usable_quantity']);
+        $this->assertSame(3, $bandageRow['missing_quantity']);
+        $this->assertSame([$old, $new], array_column($bandageRow['batches'], 'batch_id'));
+        $this->assertSame([1, 2], array_column($bandageRow['batches'], 'quantity'));
+
+        $this->assertSame([['batch_id' => null, 'expiry_date' => null, 'quantity' => 0]], $gauzeRow['batches']);
+        $this->assertSame(2, $gauzeRow['missing_quantity']);
+
+        $this->assertSame([], $plasterRow['batches']);
+        $this->assertSame(1, $plasterRow['missing_quantity']);
+
+        // Nicht überwacht, aber vorhanden: ohne Soll.
+        $this->stock->saveMinimums($this->articleId, [$this->boxId => null]);
+        $bandageRow = $this->stock->getLocationChecklist($this->boxId)[1];
+        $this->assertNull($bandageRow['minimum_stock']);
+        $this->assertSame(0, $bandageRow['missing_quantity']);
+    }
+
+    public function testApplyInventoryBooksOnlyDifferencesAsCorrection(): void
+    {
+        $batch = $this->receive(5, $this->day('+1 year'), $this->boxId);
+        $this->receive(2, null, $this->boxId);
+
+        $changes = $this->stock->applyInventory($this->boxId, [
+            ['article_id' => $this->articleId, 'batch_id' => $batch, 'counted' => 3],
+            ['article_id' => $this->articleId, 'batch_id' => null, 'counted' => 2],
+        ]);
+
+        $this->assertSame([[
+            'article_id' => $this->articleId,
+            'batch_id' => $batch,
+            'expected' => 5,
+            'counted' => 3,
+            'difference' => -2,
+        ]], $changes);
+
+        $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $batch));
+        $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->boxId));
+
+        $movement = $this->db->query(
+            "SELECT quantity, note FROM stock_movements WHERE movement_type = 'correction'"
+        )->fetchAll();
+
+        $this->assertSame([['quantity' => -2, 'note' => 'Inventur: 3 gezählt, 5 erwartet']], $movement);
+
+        // Mehr gefunden: Zugang. Korrekturen sind kein Verbrauch.
+        $this->stock->applyInventory($this->boxId, [
+            ['article_id' => $this->articleId, 'batch_id' => null, 'counted' => 4],
+        ]);
+
+        $this->assertSame(4, $this->stock->getStockAtLocation($this->articleId, $this->boxId));
+        $this->assertSame([], $this->reports->getTodayIssues());
+        $this->assertSame([], $this->reports->getTodayDisposals());
+        $this->assertSame([], $this->reports->getIssuesBetween(new \DateTimeImmutable('-1 day'), new \DateTimeImmutable('+1 day')));
+    }
+
+    public function testApplyInventoryRejectsNegativeCountAndBooksNothing(): void
+    {
+        $batch = $this->receive(5, $this->day('+1 year'), $this->boxId);
+
+        try {
+            $this->stock->applyInventory($this->boxId, [
+                ['article_id' => $this->articleId, 'batch_id' => $batch, 'counted' => 1],
+                ['article_id' => $this->articleId, 'batch_id' => null, 'counted' => -1],
+            ]);
+            $this->fail('Negative Zählung wurde angenommen.');
+        } catch (\RuntimeException) {
+        }
+
+        $this->assertSame(5, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $batch));
+    }
+
+    public function testSortOutExpiredTurnsIssueIntoDisposalOfWholeBatch(): void
+    {
+        $expired = $this->receive(3, $this->day('-1 day'));
+        $this->receive(2, $this->day('+1 year'));
+
+        $this->stock->issueOldest($this->articleId, $this->mainId);
+
+        $disposed = $this->stock->sortOutExpired($this->articleId, $expired, $this->mainId, null, 1);
+
+        // Das ausgebuchte Stück und der Rest der Charge: entsorgt, nicht verbraucht.
+        $this->assertSame(3, $disposed);
+        $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
+        $this->assertSame(2, $this->stock->getStockSummary($this->articleId)['total']);
+        $this->assertSame([], $this->reports->getTodayIssues());
+        $this->assertSame(3, (int) $this->reports->getTodayDisposals()[0]['quantity']);
+    }
+
+    public function testSortOutExpiredAfterTransferTakesItBack(): void
+    {
+        $expired = $this->receive(2, $this->day('-1 day'));
+
+        $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId);
+
+        $this->assertSame(2, $this->stock->sortOutExpired($this->articleId, $expired, $this->mainId, $this->boxId, 1));
+        $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $expired));
+        $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
+        $this->assertSame([], $this->reports->getTodayTransfers());
+    }
+
+    public function testSortOutRejectsBatchThatIsNotExpiredAndBooksNothing(): void
+    {
+        $batch = $this->receive(2, $this->day('+1 year'));
+
+        $this->stock->issueOldest($this->articleId, $this->mainId);
+
+        try {
+            $this->stock->sortOutExpired($this->articleId, $batch, $this->mainId, null, 1);
+            $this->fail('Nicht abgelaufene Charge wurde aussortiert.');
+        } catch (\RuntimeException) {
+        }
+
+        $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
+        $this->assertCount(1, $this->reports->getTodayIssues());
+    }
 }

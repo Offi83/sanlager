@@ -30,12 +30,30 @@
                         Scanner starten
                     </button>
 
-                    <?php /* Richtung der Buchung, gut sichtbar direkt über dem Kamerabild – wird von booking.js aktualisiert. */ ?>
-                    <div
-                        id="issue-mode"
-                        class="issue-mode <?= $issueModeClass ?>"
-                        aria-live="polite"
-                    ><?= h($issueModeText) ?></div>
+                    <div class="issue-mode-row">
+
+                        <?php /* Richtung der Buchung, gut sichtbar direkt über dem Kamerabild – wird von booking.js aktualisiert. */ ?>
+                        <div
+                            id="issue-mode"
+                            class="issue-mode <?= $issueModeClass ?>"
+                            aria-live="polite"
+                        ><?= h($issueModeText) ?></div>
+
+                        <?php /* Ton an/aus (je Gerät gespeichert), erst mit JavaScript sichtbar – booking.js. */ ?>
+                        <button
+                            type="button"
+                            class="button button-secondary icon-button issue-sound-button"
+                            id="issue-sound"
+                            aria-pressed="true"
+                            aria-label="Ton beim Scannen"
+                            title="Ton beim Scannen an/aus"
+                            hidden
+                        >
+                            <span class="issue-sound-on"><?= icon('volume') ?></span>
+                            <span class="issue-sound-off"><?= icon('volume-off') ?></span>
+                        </button>
+
+                    </div>
 
                 </div>
 
@@ -56,6 +74,62 @@
                     class="scan-result"
                     hidden
                 ></div>
+
+                <?php
+                /*
+                 * Alarm, wenn beim Aus-/Umbuchen eine abgelaufene Charge
+                 * gebucht wurde (booking.js). Muss weggetippt werden; der
+                 * Fokus liegt auf dem Text, damit ein Enter vom Hand-Scanner
+                 * keinen der Knöpfe auslöst.
+                 */
+                ?>
+                <dialog
+                    id="issue-alarm"
+                    class="issue-alarm"
+                    aria-labelledby="issue-alarm-title"
+                >
+
+                    <h2 id="issue-alarm-title">ABGELAUFEN</h2>
+
+                    <p
+                        id="issue-alarm-text"
+                        tabindex="-1"
+                        autofocus
+                    ></p>
+
+                    <p>
+                        Nicht verwenden! „Aussortieren“ nimmt die Buchung
+                        zurück und entsorgt diese Charge
+                        <span id="issue-alarm-where"></span>.
+                    </p>
+
+                    <p
+                        id="issue-alarm-error"
+                        class="issue-alarm-error"
+                        hidden
+                    ></p>
+
+                    <div class="issue-alarm-actions">
+
+                        <button
+                            type="button"
+                            class="button button-secondary"
+                            id="issue-alarm-keep"
+                        >
+                            Trotzdem verwenden
+                        </button>
+
+                        <button
+                            type="button"
+                            class="button button-danger icon-button"
+                            id="issue-alarm-sort-out"
+                        >
+                            <?= icon('trash') ?> Aussortieren
+                        </button>
+
+                    </div>
+
+                </dialog>
 
                 <form
                     method="post"

@@ -37,7 +37,7 @@ $navSections = [
         'href' => '?page=articles',
         'pages' => [
             'articles', 'article', 'new_article', 'edit_article', 'label', 'labels',
-            'categories', 'units', 'locations', 'location',
+            'categories', 'units', 'locations', 'location', 'packlist', 'inventory',
         ],
         'tabs' => [
             'articles' => 'Artikel',

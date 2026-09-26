@@ -124,7 +124,7 @@ Mögliche Werte für `movement_type`:
 | `issue_reversal` | Rücknahme einer Ausbuchung (Zugang) – über „Rückgängig“ auf „Heute“, wird dort und im Wochenbericht abgezogen |
 | `disposal`     | Entsorgung einer abgelaufenen Charge (Abgang) – zählt **nicht** als Ausbuchung/Verbrauch |
 | `disposal_reversal` | Rücknahme einer Entsorgung (Zugang) |
-| `correction`   | Bestandskorrektur – derzeit von keiner Funktion erzeugt, vorgesehen für eine Inventur |
+| `correction`   | Bestandskorrektur aus der Inventur eines Lagerorts (`StockRepository::applyInventory()`): positiv = mehr gefunden, negativ = fehlt. Zählt nicht als Verbrauch |
 | `transfer_out` | Abgang durch Umbuchung an einen anderen Lagerort              |
 | `transfer_in`  | Zugang durch Umbuchung von einem anderen Lagerort              |
 | `transfer_reversal_out` / `transfer_reversal_in` | Rücknahme einer Umbuchung: Abgang am ursprünglichen Ziel, Zugang an der ursprünglichen Quelle |

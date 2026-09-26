@@ -212,6 +212,8 @@ class PagesTest extends TestCase
             'Lagerorte' => ['?page=locations', 'Rucksack 3'],
             'Lagerort bearbeiten' => ['?page=locations&edit={location}', 'Lagerort speichern'],
             'Lagerort-Inhalt' => ['?page=location&id={location}', 'Blutzuckermessstreifen'],
+            'Packliste' => ['?page=packlist&id={location}', 'Blutzuckermessstreifen'],
+            'Inventur' => ['?page=inventory&id={location}', 'Blutzuckermessstreifen'],
         ];
     }
 
@@ -232,6 +234,8 @@ class PagesTest extends TestCase
             '?page=edit_article&id=999999' => 'page=articles',
             '?page=label&id=999999' => 'page=articles',
             '?page=location&id=999999' => 'page=locations',
+            '?page=packlist&id=999999' => 'page=locations',
+            '?page=inventory&id=999999' => 'page=locations',
         ] as $path => $target) {
             $response = self::request($path);
 
@@ -388,6 +392,73 @@ class PagesTest extends TestCase
 
         self::$db->exec("DELETE FROM article_location_minimums WHERE location_id = $bag3");
         self::$db->exec("UPDATE articles SET active = 0 WHERE article_number = 'nicht-da'");
+    }
+
+    public function testPacklistAndInventoryOfLocation(): void
+    {
+        $bag = self::id("SELECT id FROM storage_locations WHERE name = 'Rucksack 1'");
+        $article = self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'");
+
+        $location = self::request('?page=location&id=' . $bag)['body'];
+        $this->assertStringContainsString('href="?page=packlist&id=' . $bag . '"', $location);
+        $this->assertStringContainsString('href="?page=inventory&id=' . $bag . '"', $location);
+
+        // Packliste: Soll/Ist je Artikel, Druckbereich, Kästchen zum Abhaken.
+        $packlist = self::request('?page=packlist&id=' . $bag)['body'];
+        $this->assertStringContainsString('class="packlist"', $packlist);
+        $this->assertStringContainsString('class="packlist-check"', $packlist);
+        $this->assertStringContainsString('Heftpflaster', $packlist);
+
+        // Inventur: Eingabefelder mit dem erwarteten Bestand vorbelegt.
+        $inventory = self::request('?page=inventory&id=' . $bag)['body'];
+        $this->assertMatchesRegularExpression('#name="count\[' . $article . '\]\[(\d+|none)\]"[^>]*value="\d+"#', $inventory);
+
+        preg_match('#name="count\[' . $article . '\]\[(\d+|none)\]"[^>]*value="(\d+)"#', $inventory, $field);
+        $expected = (int) $field[2];
+
+        $response = self::request('?page=inventory&id=' . $bag, [
+            'action' => 'inventory',
+            'location_id' => (string) $bag,
+            'count' => [(string) $article => [$field[1] => (string) ($expected + 1)]],
+        ]);
+
+        $this->assertSame(302, $response['status']);
+        $this->assertStringContainsString('page=location&id=' . $bag, (string) $response['location']);
+
+        $after = self::request('?page=location&id=' . $bag)['body'];
+        $this->assertCleanPage(['status' => 200, 'body' => $after], 'Lagerort nach Inventur');
+        $this->assertStringContainsString('1 Abweichung korrigiert', $after);
+    }
+
+    public function testExpiredScanRaisesAlarmAndCanBeSortedOut(): void
+    {
+        $page = self::request('?page=issue')['body'];
+        $this->assertStringContainsString('<dialog', $page);
+        $this->assertStringContainsString('id="issue-alarm-sort-out"', $page);
+        $this->assertStringContainsString('id="issue-sound"', $page);
+
+        $main = self::id("SELECT id FROM storage_locations WHERE name = 'Hauptlager'");
+        self::$db->exec("INSERT INTO articles (article_number, name, unit_id) VALUES ('alarm-test', 'Alarmtest', 1)");
+        $article = self::id("SELECT id FROM articles WHERE article_number = 'alarm-test'");
+        self::$db->exec("INSERT INTO batches (article_id, expiry_date) VALUES ($article, '2020-01-31')");
+        $batch = self::id("SELECT id FROM batches WHERE article_id = $article");
+        self::$db->exec("INSERT INTO stock_movements (article_id, batch_id, location_id, quantity, movement_type) VALUES ($article, $batch, $main, 3, 'receipt')");
+
+        $scan = json_decode(self::request('', [
+            'action' => 'issue', 'ajax' => '1', 'article_number' => 'alarm-test', 'source' => (string) $main,
+        ])['body'], true);
+
+        $this->assertSame([['batch_id' => $batch, 'expiry_date' => '31.01.2020', 'quantity' => 1, 'remaining' => 2]], $scan['expired_batches']);
+
+        $sortOut = self::request('', [
+            'action' => 'sort_out_expired', 'ajax' => '1', 'article_id' => (string) $article,
+            'source' => $scan['source'], 'target' => $scan['target'], 'batches' => [(string) $batch => '1'],
+        ]);
+
+        $this->assertSame(200, $sortOut['status'], $sortOut['body']);
+        $this->assertStringContainsString('3 Stück aus Hauptlager entsorgt', json_decode($sortOut['body'], true)['message']);
+
+        self::$db->exec("UPDATE articles SET active = 0 WHERE id = $article");
     }
 
     public function testSingleLabelPrintsEightLabelsOfOneArticle(): void

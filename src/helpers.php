@@ -209,10 +209,11 @@ function nameKey(string $name): string
  * braucht zusätzlich Text oder ein aria-label/title.
  *
  * Die Pfade stammen aus Lucide (https://lucide.dev, ISC-Lizenz):
- * "undo-2" und "trash-2" (letzteres ursprünglich aus Feather, MIT).
+ * "undo-2", "trash-2" (letzteres ursprünglich aus Feather, MIT),
+ * "volume-2" und "volume-x".
  * Lizenztext siehe licenses/lucide-ISC.txt und THIRD-PARTY-NOTICES.md.
  *
- * @param string $name undo|trash
+ * @param string $name undo|trash|volume|volume-off
  */
 function icon(string $name): string
 {
@@ -221,6 +222,10 @@ function icon(string $name): string
         'trash' => '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
             . '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
             . '<path d="M10 11v6"/><path d="M14 11v6"/>',
+        'volume' => '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/>'
+            . '<path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/>',
+        'volume-off' => '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/>'
+            . '<line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
         default => '',
     };
 

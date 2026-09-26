@@ -8,7 +8,7 @@ Die durch `.htaccess` geschützte HTTP-Basic-Authentication wird automatisch üb
 
 ![Buchen-Seite auf dem Pi-Display](../images/buchen.png)
 
-Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite stehen Menge, Artikelnummer und beim Einlagern das MHD in der ersten Zeile, Von, Nach und der Button in der zweiten; darüber zeigt ein farbiger Balken die Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen, grün = Einlagern). Die gewählte Richtung – beim Einlagern auch das MHD – bleibt nach jeder Buchung erhalten, sodass mit einem **Hand-Barcodescanner** (tippt die Nummer ein und sendet Enter) mehrere Artikel nacheinander in dieselbe Richtung gebucht werden können. Die Menge lässt sich ohne Tastatur mit − / + einstellen; der Cursor bleibt dabei im Feld Artikelnummer, und nach der Buchung steht die Menge wieder auf 1. Der Button „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt – ohne Kamera bleibt er ausgeblendet.
+Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite stehen Menge, Artikelnummer und beim Einlagern das MHD in der ersten Zeile, Von, Nach und der Button in der zweiten; darüber zeigt ein farbiger Balken die Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen, grün = Einlagern). Die gewählte Richtung – beim Einlagern auch das MHD – bleibt nach jeder Buchung erhalten, sodass mit einem **Hand-Barcodescanner** (tippt die Nummer ein und sendet Enter) mehrere Artikel nacheinander in dieselbe Richtung gebucht werden können. Die Menge lässt sich ohne Tastatur mit − / + einstellen; der Cursor bleibt dabei im Feld Artikelnummer, und nach der Buchung steht die Menge wieder auf 1. Der Button „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt – ohne Kamera bleibt er ausgeblendet. Jede Buchung wird ohne Neuladen der Seite bestätigt, mit kurzem Ton (Lautsprecher-Knopf neben dem Balken schaltet ihn ab). Weder der Pi 4 noch das 7"-Display haben einen eingebauten Lautsprecher – für die Töne ist ein kleiner Lautsprecher nötig (siehe Hardware), ohne ihn bleibt es beim Hinweis auf dem Display. Wurde abgelaufene Ware gebucht, erscheint ein roter Alarm, der angetippt werden muss – ein Enter vom Hand-Scanner löst darin nichts aus.
 
 ## Hardware
 
@@ -16,6 +16,7 @@ Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite st
 * offizielles Raspberry Pi 7" Touch Display
 * Gehäuse für Pi und Display
 * microSD-Karte
+* optional: kleiner Lautsprecher für die Töne beim Buchen, z. B. USB-Lautsprecher oder Aktivlautsprecher an der 3,5-mm-Klinkenbuchse des Pi. Tonausgabe ggf. unter `sudo raspi-config` → *System Options* → *Audio* auf diesen Ausgang stellen.
 
 ## Software
 

@@ -39,6 +39,8 @@ class StockActions
             'undo_transfer' => $this->undoToday('transfer', $input),
             'undo_disposal' => $this->undoToday('disposal', $input),
             'dispose_batch' => $this->disposeBatch($input),
+            'inventory' => $this->inventory($input),
+            'sort_out_expired' => $this->sortOutExpired($input),
             default => null,
         };
     }
@@ -177,6 +179,30 @@ class StockActions
                 ? 'ABGELAUFEN'
                 : (string) current(array_filter($warnings));
 
+            /*
+             * Abgelaufene Chargen dieser Buchung für den Alarm mit
+             * „Aussortieren“ (booking.js, Aktion sort_out_expired):
+             * gebuchte Menge und was davon am Lagerort noch liegt.
+             */
+            $expiredBatches = [];
+
+            foreach ($result['batches'] as $batch) {
+                if (expiryInfo($batch['expiry_date'])['warning'] !== 'ABGELAUFEN') {
+                    continue;
+                }
+
+                $expiredBatches[] = [
+                    'batch_id' => $batch['batch_id'],
+                    'expiry_date' => formatDate($batch['expiry_date']),
+                    'quantity' => $batch['quantity'],
+                    'remaining' => $this->stock->getStockAtLocation(
+                        (int) $article['id'],
+                        $sourceLocationId,
+                        $batch['batch_id']
+                    ),
+                ];
+            }
+
             return $this->bookingResult(
                 $isAjax,
                 $article,
@@ -185,7 +211,14 @@ class StockActions
                 $actionLabel,
                 $this->batchesText($result['batches'], $article),
                 $expiryWarning,
-                '?page=issue&source=' . $sourceLocationId . '&target=' . urlencode($target)
+                '?page=issue&source=' . $sourceLocationId . '&target=' . urlencode($target),
+                [
+                    'article_id' => (int) $article['id'],
+                    'source' => (string) $sourceLocationId,
+                    'source_name' => $sourceLocation['name'],
+                    'target' => $target,
+                    'expired_batches' => $expiredBatches,
+                ]
             );
         } catch (Throwable $exception) {
             if ($isAjax) {
@@ -307,7 +340,8 @@ class StockActions
      * Kamera-Scanner, sonst Redirect mit Meldung. $redirectUrl behält
      * Von/Nach (und beim Einlagern das MHD) für die nächste Buchung, z. B.
      * per Hand-Barcodescanner mit Enter – wie beim Kamera-Scan ohne
-     * Neuladen. Die Menge gilt nur für diese eine Buchung.
+     * Neuladen. Die Menge gilt nur für diese eine Buchung. $json ergänzt
+     * die JSON-Antwort (z. B. abgelaufene Chargen für den Alarm).
      */
     private function bookingResult(
         bool $isAjax,
@@ -317,7 +351,8 @@ class StockActions
         string $actionLabel,
         string $expiryText,
         string $expiryWarning,
-        string $redirectUrl
+        string $redirectUrl,
+        array $json = []
     ): ActionResult {
         if ($expiryWarning !== '') {
             $expiryText .= ' – ' . $expiryWarning;
@@ -334,7 +369,7 @@ class StockActions
                 'expiry_date' => $expiryText,
                 'action_label' => $actionLabel,
                 'expired' => $expiryWarning !== ''
-            ]);
+            ] + $json);
         }
 
         return ActionResult::redirect(
@@ -735,5 +770,215 @@ class StockActions
                 . ' aus ' . $location['name'] . ' entsorgt'
                 . ' (rückgängig unter „Heute“)'
         );
+    }
+
+    /**
+     * Übernimmt eine Inventur (Seite ?page=inventory): `count[Artikel][Charge]`
+     * ist die gezählte Menge je vorhandener Charge (`none` = ohne MHD,
+     * leer = nicht gezählt), `found[Artikel]` mit `expiry_date` und
+     * `quantity` eine zusätzlich gefundene Charge. Abweichungen werden als
+     * Korrektur gebucht, siehe StockRepository::applyInventory().
+     *
+     * Erst wird alles geprüft, dann gebucht – bei einem Fehler bleibt der
+     * Bestand unverändert.
+     */
+    private function inventory(array $input): ActionResult
+    {
+        $location = $this->locations->find($this->int($input, 'location_id'));
+
+        if (!$location) {
+            throw new RuntimeException(
+                'Der Lagerort wurde nicht gefunden.'
+            );
+        }
+
+        $counts = [];
+        $found = [];
+        $names = [];
+
+        $article = function (string|int $articleId) use (&$names): array {
+            $article = $this->articles->find((int) $articleId);
+
+            if (!$article || (int) $article['active'] !== 1) {
+                throw new RuntimeException(
+                    'Ein Artikel der Inventur wurde nicht gefunden.'
+                );
+            }
+
+            $names[(int) $article['id']] = $article['name'];
+
+            return $article;
+        };
+
+        $number = static function (mixed $value, string $name): ?int {
+            $value = is_string($value) ? trim($value) : '';
+
+            if ($value === '') {
+                return null;
+            }
+
+            if (!preg_match('/^\d{1,4}$/', $value)) {
+                throw new RuntimeException(
+                    $name . ': ungültige Menge „' . $value . '“ (erlaubt: 0 bis 9999).'
+                );
+            }
+
+            return (int) $value;
+        };
+
+        foreach ($this->array($input, 'count') as $articleId => $batches) {
+            $row = $article($articleId);
+
+            foreach (is_array($batches) ? $batches : [] as $batchKey => $value) {
+                $counted = $number($value, $row['name']);
+
+                if ($counted === null) {
+                    continue;
+                }
+
+                $batchId = null;
+
+                if ($batchKey !== 'none') {
+                    $batch = $this->batches->find((int) $batchKey);
+
+                    if (!$batch || (int) $batch['article_id'] !== (int) $row['id']) {
+                        throw new RuntimeException(
+                            $row['name'] . ': Das MHD gehört nicht zu diesem Artikel.'
+                        );
+                    }
+
+                    $batchId = (int) $batch['id'];
+                }
+
+                $counts[(int) $row['id'] . ':' . $batchId] = [
+                    'article_id' => (int) $row['id'],
+                    'batch_id' => $batchId,
+                    'counted' => $counted,
+                ];
+            }
+        }
+
+        foreach ($this->array($input, 'found') as $articleId => $values) {
+            $values = is_array($values) ? $values : [];
+            $row = $article($articleId);
+            $quantity = $number($values['quantity'] ?? '', $row['name']);
+
+            if (!$quantity) {
+                continue;
+            }
+
+            $expiryInput = is_string($values['expiry_date'] ?? null) ? trim($values['expiry_date']) : '';
+            $expiryDate = null;
+
+            if ((int) $row['has_expiry'] === 1) {
+                $expiryDate = normalizeDate($expiryInput);
+
+                if ($expiryDate === null) {
+                    throw new RuntimeException(
+                        $row['name'] . ': Bitte zur gefundenen Menge ein gültiges MHD eingeben (z. B. 31.12.2027).'
+                    );
+                }
+
+                // Abgelaufenes kann gefunden werden – nur Tippfehler im Jahr abfangen.
+                $this->assertPlausibleExpiry($expiryDate, true);
+            }
+
+            $found[] = ['article' => $row, 'expiry_date' => $expiryDate, 'quantity' => $quantity];
+        }
+
+        /*
+         * Gefundene Charge: zählt zu dem, was bei dieser Charge schon
+         * gezählt wurde (falls sie in der Liste stand).
+         */
+        foreach ($found as $item) {
+            $articleId = (int) $item['article']['id'];
+            $batchId = $this->batches->findOrCreate($articleId, $item['expiry_date'] ?? '');
+            $key = $articleId . ':' . $batchId;
+
+            $counts[$key] = [
+                'article_id' => $articleId,
+                'batch_id' => $batchId,
+                'counted' => ($counts[$key]['counted'] ?? $this->stock->getStockAtLocation($articleId, (int) $location['id'], $batchId))
+                    + $item['quantity'],
+            ];
+        }
+
+        $changes = $this->stock->applyInventory((int) $location['id'], array_values($counts));
+
+        $message = match (count($changes)) {
+            0 => 'Inventur gespeichert, keine Abweichungen.',
+            1 => 'Inventur gespeichert, 1 Abweichung korrigiert: ',
+            default => 'Inventur gespeichert, ' . count($changes) . ' Abweichungen korrigiert: ',
+        };
+
+        $message .= implode(', ', array_map(
+            static fn (array $change): string => $names[$change['article_id']] . ' '
+                . ($change['difference'] > 0 ? '+' : '−') . abs($change['difference']),
+            $changes
+        ));
+
+        return ActionResult::redirect(
+            '?page=location&id=' . (int) $location['id'],
+            $message
+        );
+    }
+
+    /**
+     * „Aussortieren“ im Alarm der Buchen-Seite: Eine gerade gebuchte
+     * abgelaufene Charge wird zurückgenommen und am Lagerort `source`
+     * vollständig entsorgt, siehe StockRepository::sortOutExpired().
+     * `target` ist wie beim Buchen `issue` oder der Ziel-Lagerort,
+     * `batches[Charge]` die jeweils gebuchte Menge.
+     *
+     * Mit `ajax=1` JSON (Buchen-Seite), sonst Redirect zurück zum Buchen.
+     */
+    private function sortOutExpired(array $input): ActionResult
+    {
+        $isAjax = $this->string($input, 'ajax') === '1';
+        $target = $this->string($input, 'target', 'issue');
+
+        try {
+            $article = $this->articles->find($this->int($input, 'article_id'));
+            $source = $this->locations->find($this->int($input, 'source'));
+            $targetLocation = $target !== 'issue' ? $this->locations->find((int) $target) : null;
+            $batches = $this->array($input, 'batches');
+
+            if (!$article || !$source || ($target !== 'issue' && !$targetLocation) || !$batches) {
+                throw new RuntimeException(
+                    'Aussortieren nicht möglich: Angaben unvollständig.'
+                );
+            }
+
+            $disposed = $this->stock->sortOutExpiredBatches(
+                (int) $article['id'],
+                (int) $source['id'],
+                $targetLocation ? (int) $targetLocation['id'] : null,
+                array_map(static fn (mixed $quantity): int => is_string($quantity) ? (int) $quantity : 0, $batches)
+            );
+
+            $message = $article['name'] . ' – ' . quantityText($disposed, $article)
+                . ' aus ' . $source['name'] . ' entsorgt (MHD abgelaufen)';
+
+            if ($isAjax) {
+                return ActionResult::json([
+                    'success' => true,
+                    'message' => $message,
+                ]);
+            }
+
+            return ActionResult::redirect(
+                '?page=issue&source=' . (int) $source['id'] . '&target=' . urlencode($target),
+                $message
+            );
+        } catch (Throwable $exception) {
+            if ($isAjax) {
+                return ActionResult::json([
+                    'success' => false,
+                    'error' => userMessage($exception),
+                ], 400);
+            }
+
+            throw $exception;
+        }
     }
 }

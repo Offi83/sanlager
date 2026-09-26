@@ -914,6 +914,87 @@ tbody tr:last-child td {
     width: 100%;
 }
 
+/* Richtungsanzeige und Ton-Knopf bleiben auch auf dem Handy in einer Zeile. */
+.issue-mode-row {
+    display: flex;
+    flex: 1;
+    align-items: stretch;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+/* Ton an/aus: durchgestrichener Lautsprecher, wenn aus (booking.js). */
+.issue-sound-button {
+    flex-shrink: 0;
+    padding: 0 12px;
+}
+
+.issue-sound-button span {
+    display: inline-flex;
+}
+
+.issue-sound-button .issue-sound-off,
+.issue-sound-button[aria-pressed="false"] .issue-sound-on {
+    display: none;
+}
+
+.issue-sound-button[aria-pressed="false"] .issue-sound-off {
+    display: inline-flex;
+}
+
+/*
+ * Alarm bei abgelaufener Ware: roter Hintergrund über der ganzen Seite,
+ * damit er beim Scannen (Blick auf Kamera oder Ware) nicht übersehen wird.
+ */
+.issue-alarm {
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: var(--space-5);
+    border: 0;
+    border-top: 14px solid var(--danger);
+    border-radius: var(--radius-card);
+    background: #fff;
+    color: var(--text);
+}
+
+.issue-alarm::backdrop {
+    background: rgba(176, 0, 32, .75);
+}
+
+.issue-alarm h2 {
+    margin: 0 0 var(--space-2);
+    color: var(--danger);
+    font-size: 32px;
+    letter-spacing: .04em;
+}
+
+.issue-alarm p {
+    margin: 0 0 var(--space-3);
+    line-height: 1.4;
+}
+
+#issue-alarm-text {
+    font-size: 20px;
+    font-weight: 700;
+    outline: none;
+}
+
+.issue-alarm-error {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.issue-alarm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+}
+
+.issue-alarm-actions .button {
+    min-height: 52px;
+}
+
 .issue-scan-status {
     margin-bottom: var(--space-3);
     padding: var(--space-2) 12px;
@@ -1117,6 +1198,137 @@ tbody tr:last-child td {
 
 
 /* =========================================================
+   Packliste und Inventur (Lagerort)
+   ========================================================= */
+
+/* Packliste: auf dem Bildschirm wie ein Blatt, gedruckt A4 (siehe Druck). */
+.packlist {
+    padding: var(--space-5);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    color: #000;
+}
+
+.packlist-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+
+.packlist-head h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.packlist table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.packlist th,
+.packlist td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #bbb;
+    text-align: left;
+    vertical-align: top;
+}
+
+.packlist thead th {
+    border-bottom: 2px solid #000;
+    font-size: 13px;
+}
+
+.packlist-category th {
+    padding-top: 14px;
+    border-left: 6px solid;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.packlist-check-column {
+    width: 28px;
+}
+
+.packlist-check {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid #000;
+    border-radius: 3px;
+}
+
+.packlist-number {
+    display: block;
+    color: #555;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.packlist-quantity {
+    white-space: nowrap;
+}
+
+.packlist-expired,
+.packlist-missing {
+    font-weight: 700;
+}
+
+.packlist-count {
+    width: 20%;
+}
+
+.packlist-empty {
+    color: var(--muted);
+}
+
+.packlist-signature {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-6);
+    margin-top: var(--space-6);
+}
+
+/* Inventur */
+.inventory-table [hidden] {
+    display: none !important;
+}
+
+.inventory-table .inventory-count {
+    width: 90px;
+}
+
+.inventory-table .inventory-expiry {
+    width: 140px;
+}
+
+.inventory-changed {
+    outline: 3px solid #f59e0b;
+    outline-offset: 1px;
+}
+
+.inventory-found-label {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.inventory-add {
+    min-height: 36px;
+    padding: 0 12px;
+    white-space: nowrap;
+}
+
+.inventory-actions {
+    justify-content: flex-end;
+    margin-top: var(--space-4);
+}
+
+
+/* =========================================================
    Druck
    ========================================================= */
 
@@ -1143,8 +1355,37 @@ tbody tr:last-child td {
 
     .topbar,
     .app-footer,
-    .container > *:not(.label-print-page) {
+    .container > *:not(.label-print-page):not(.packlist) {
         display: none !important;
+    }
+
+    /* Packliste: eigene Druckseite mit Rand (@page oben hat keinen, wegen der Etiketten). */
+    @page packlist {
+        margin: 12mm;
+    }
+
+    html:has(.packlist),
+    html:has(.packlist) body,
+    html:has(.packlist) .container {
+        width: auto;
+    }
+
+    .packlist {
+        page: packlist;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        font-size: 10.5pt;
+    }
+
+    /* Bedruckbare Breite liegt nahe der Handy-Stufe (700px): Spalte trotzdem zeigen. */
+    .packlist .packlist-count {
+        display: table-cell !important;
+    }
+
+    .packlist tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
     }
 
     .container {
@@ -1773,6 +2014,16 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 700px) {
+
+    /* Packliste: Spalte „Gezählt“ nur auf Papier, sonst zu breit. */
+    .packlist {
+        padding: var(--space-3);
+    }
+
+    .packlist .packlist-count {
+        display: none;
+    }
+
 
     /* Smartphones: Button und Anzeige wieder untereinander. */
     .issue-toolbar {

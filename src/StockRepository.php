@@ -114,6 +114,184 @@ class StockRepository
     }
 
     /**
+     * Soll/Ist eines Lagerorts für Packliste und Inventur: alle Artikel,
+     * die dort liegen oder für die dort ein Mindestbestand (Soll) gilt,
+     * sortiert wie getStockAtLocationDetailed().
+     *
+     * Je Artikel: `minimum_stock` (null = nicht überwacht), `quantity`
+     * (alles, was da ist), `usable_quantity` (ohne Abgelaufenes),
+     * `missing_quantity` (was bis zum Soll fehlt) und `batches` – die
+     * vorhandenen Chargen mit Menge, ältestes MHD zuerst. Für einen
+     * überwachten Artikel ohne MHD, von dem nichts da ist, steht dort
+     * eine Zeile mit Menge 0, damit er bei der Inventur gezählt werden
+     * kann; Artikel mit MHD haben dann keine Charge (bei der Inventur
+     * „Gefunden“ mit MHD eintragen).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getLocationChecklist(int $locationId): array
+    {
+        $statement = $this->db->prepare(
+            'SELECT
+                a.id AS article_id,
+                a.name AS article_name,
+                a.article_number,
+                COALESCE(u.name, \'Stück\') AS unit,
+                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                a.has_expiry,
+                c.name AS category_name,
+                c.color AS category_color,
+                alm.minimum_stock,
+                sm.batch_id,
+                b.expiry_date,
+                COALESCE(SUM(sm.quantity), 0) AS quantity
+             FROM articles a
+             LEFT JOIN units u
+                ON u.id = a.unit_id
+             LEFT JOIN article_categories c
+                ON c.id = a.category_id
+             LEFT JOIN article_location_minimums alm
+                ON alm.article_id = a.id
+                AND alm.location_id = :location_id
+             LEFT JOIN stock_movements sm
+                ON sm.article_id = a.id
+                AND sm.location_id = :location_id
+             LEFT JOIN batches b
+                ON b.id = sm.batch_id
+             WHERE a.active = 1
+             AND (alm.id IS NOT NULL OR sm.id IS NOT NULL)
+             GROUP BY
+                a.id,
+                sm.batch_id
+             ORDER BY
+                COALESCE(c.sort_order, 9999),
+                c.name COLLATE NOCASE,
+                a.name COLLATE NOCASE,
+                CASE
+                    WHEN b.expiry_date IS NULL THEN 1
+                    ELSE 0
+                END,
+                b.expiry_date'
+        );
+
+        $statement->execute([
+            'location_id' => $locationId,
+        ]);
+
+        $today = $this->today();
+        $list = [];
+
+        foreach ($statement->fetchAll() as $row) {
+            $articleId = (int) $row['article_id'];
+            $quantity = (int) $row['quantity'];
+
+            $list[$articleId] ??= [
+                'article_id' => $articleId,
+                'article_name' => $row['article_name'],
+                'article_number' => $row['article_number'],
+                'unit' => $row['unit'],
+                'unit_plural' => $row['unit_plural'],
+                'has_expiry' => (int) $row['has_expiry'],
+                'category_name' => $row['category_name'],
+                'category_color' => $row['category_color'],
+                'minimum_stock' => $row['minimum_stock'] !== null ? (int) $row['minimum_stock'] : null,
+                'quantity' => 0,
+                'usable_quantity' => 0,
+                'batches' => [],
+            ];
+
+            if ($quantity <= 0) {
+                continue;
+            }
+
+            $list[$articleId]['batches'][] = [
+                'batch_id' => $row['batch_id'] !== null ? (int) $row['batch_id'] : null,
+                'expiry_date' => $row['expiry_date'],
+                'quantity' => $quantity,
+            ];
+
+            $list[$articleId]['quantity'] += $quantity;
+
+            if ($row['expiry_date'] === null || $row['expiry_date'] >= $today) {
+                $list[$articleId]['usable_quantity'] += $quantity;
+            }
+        }
+
+        foreach ($list as &$article) {
+            if (!$article['batches'] && $article['has_expiry'] === 0) {
+                $article['batches'][] = ['batch_id' => null, 'expiry_date' => null, 'quantity' => 0];
+            }
+
+            $article['missing_quantity'] = max(0, (int) $article['minimum_stock'] - $article['usable_quantity']);
+        }
+
+        unset($article);
+
+        /*
+         * Artikel ganz ohne Bestand und Soll (alles weggebucht, nicht
+         * überwacht) gehören nicht auf die Liste.
+         */
+        return array_values(array_filter(
+            $list,
+            static fn (array $article): bool => $article['batches'] || $article['minimum_stock'] !== null
+        ));
+    }
+
+    /**
+     * Übernimmt die Zählung einer Inventur: Für jede Zeile
+     * (`article_id`, `batch_id` – null = ohne MHD –, `counted`) wird die
+     * Abweichung zum Bestand an diesem Lagerort als `correction` gebucht
+     * (positiv: mehr gefunden, negativ: fehlt). Korrekturen zählen nicht
+     * als Verbrauch (weder unter „Heute“ noch im Wochenbericht).
+     *
+     * Alles oder nichts: Ist eine Zeile ungültig, wird nichts gebucht.
+     *
+     * @param list<array{article_id: int, batch_id: ?int, counted: int}> $counts
+     * @return list<array{article_id: int, batch_id: ?int, expected: int, counted: int, difference: int}>
+     *         nur die Zeilen mit Abweichung
+     */
+    public function applyInventory(int $locationId, array $counts): array
+    {
+        return $this->transactional(function () use ($locationId, $counts): array {
+            $changes = [];
+
+            foreach ($counts as $count) {
+                if ($count['counted'] < 0) {
+                    throw new RuntimeException(
+                        'Die gezählte Menge darf nicht negativ sein.'
+                    );
+                }
+
+                $expected = $this->getStockAtLocation($count['article_id'], $locationId, $count['batch_id']);
+                $difference = $count['counted'] - $expected;
+
+                if ($difference === 0) {
+                    continue;
+                }
+
+                $this->move(
+                    $count['article_id'],
+                    $locationId,
+                    $difference,
+                    'correction',
+                    'Inventur: ' . $count['counted'] . ' gezählt, ' . $expected . ' erwartet',
+                    $count['batch_id']
+                );
+
+                $changes[] = [
+                    'article_id' => $count['article_id'],
+                    'batch_id' => $count['batch_id'],
+                    'expected' => $expected,
+                    'counted' => $count['counted'],
+                    'difference' => $difference,
+                ];
+            }
+
+            return $changes;
+        });
+    }
+
+    /**
      * Bestand eines Artikels je Lagerort (inkl. Lagerorte ohne Bestand,
      * dort dann 0). `quantity` enthält auch bereits abgelaufene Chargen,
      * `usable_quantity` zählt sie bewusst nicht mit (siehe
@@ -964,12 +1142,67 @@ class StockRepository
     }
 
     /**
+     * „Aussortieren“ nach dem Alarm auf der Buchen-Seite: Es wurden
+     * gerade $quantity Stück einer abgelaufenen Charge ausgebucht
+     * ($toLocationId = null) bzw. nach $toLocationId umgebucht. Diese
+     * Buchung wird zurückgenommen und die Charge am Lagerort
+     * $fromLocationId dann vollständig entsorgt – das gebuchte Stück
+     * samt dem Rest, der dort noch liegt. Alles oder nichts.
+     *
+     * @return int entsorgte Menge
+     * @throws RuntimeException wenn die Charge nicht abgelaufen ist oder
+     *                          heute nicht so viel gebucht wurde
+     */
+    public function sortOutExpired(
+        int $articleId,
+        int $batchId,
+        int $fromLocationId,
+        ?int $toLocationId,
+        int $quantity
+    ): int {
+        return $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity): int {
+            if ($toLocationId === null) {
+                $this->reverseTodayIssue($articleId, $batchId, $fromLocationId, $quantity);
+            } else {
+                $this->reverseTodayTransfer($articleId, $batchId, $fromLocationId, $toLocationId, $quantity);
+            }
+
+            return $this->disposeExpiredBatch($articleId, $batchId, $fromLocationId);
+        });
+    }
+
+    /**
+     * sortOutExpired() für mehrere Chargen einer Buchung (Menge über
+     * mehrere abgelaufene Chargen hinweg) in einer Transaktion.
+     *
+     * @param array<int|string, int> $quantitiesByBatchId gebuchte Menge je Charge
+     * @return int entsorgte Menge insgesamt
+     */
+    public function sortOutExpiredBatches(
+        int $articleId,
+        int $fromLocationId,
+        ?int $toLocationId,
+        array $quantitiesByBatchId
+    ): int {
+        return $this->transactional(function () use ($articleId, $fromLocationId, $toLocationId, $quantitiesByBatchId): int {
+            $disposed = 0;
+
+            foreach ($quantitiesByBatchId as $batchId => $quantity) {
+                $disposed += $this->sortOutExpired($articleId, (int) $batchId, $fromLocationId, $toLocationId, $quantity);
+            }
+
+            return $disposed;
+        });
+    }
+
+    /**
      * Erzeugt eine einzelne Lagerbewegung (einen Zugang oder Abgang).
      *
      * `$quantity` wird immer positiv übergeben; bei den Abgangstypen
      * `issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
      * hier intern negiert, nachdem geprüft wurde, dass genug Bestand der
-     * betroffenen Charge an diesem Lagerort vorhanden ist. Für eine vollständige Umbuchung (Abgang an
+     * betroffenen Charge an diesem Lagerort vorhanden ist. Nur `correction`
+     * (Inventur, siehe applyInventory()) wird mit Vorzeichen übergeben. Für eine vollständige Umbuchung (Abgang an
      * einem Lagerort + Zugang an einem anderen) siehe transferPair(),
      * das move() zweimal in einer Transaktion aufruft.
      *

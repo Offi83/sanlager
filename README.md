@@ -23,6 +23,8 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 * Ausbuchen oder Umbuchen in einen anderen Lagerort, dabei wird immer das älteste MHD zuerst genommen
 * Einlagern per Scan mit MHD, das für die folgenden Scans stehen bleibt
 * Menge vor dem Scan wählbar (z. B. 3 Packungen auf einmal), danach wieder 1
+* Alarm, wenn dabei abgelaufene Ware gebucht wurde: „Aussortieren“ nimmt die Buchung zurück und entsorgt die ganze abgelaufene Charge am Lagerort
+* Ton und Vibration (Android) als Rückmeldung beim Scannen, Ton je Gerät abschaltbar
 
 **Heute**
 * Alle Buchungen des Tages, Fehlbuchungen können rückgängig gemacht werden
@@ -36,6 +38,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 * Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), mit „alle 1×“ je Kategorie oder für alle Artikel
 * MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien, Einheiten und Lagerorte anlegen und sortieren – Einheiten mit Einzahl und Mehrzahl („1 Rolle“, „5 Rollen“)
+* Je Lagerort eine Packliste zum Ausdrucken (Soll, Ist je MHD, Kästchen zum Abhaken) und eine Inventur: gezählte Mengen eintragen, Abweichungen werden als Korrektur gebucht
 
 **Außerdem**
 * Wöchentlicher Bericht per E-Mail
@@ -46,7 +49,6 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
-* Inventurfunktion
 
 ---
 
