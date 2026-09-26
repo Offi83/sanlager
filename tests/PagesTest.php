@@ -203,6 +203,8 @@ class PagesTest extends TestCase
             'Artikel bearbeiten' => ['?page=edit_article&id={article}', 'name="unit_id"'],
             'Neuer Artikel' => ['?page=new_article', 'Artikelnummer'],
             'Etikett' => ['?page=label&id={article}', 'diag-bz-streifen'],
+            'Etiketten Auswahl' => ['?page=labels', 'Freie Plätze am Anfang'],
+            'Etiketten Kategorie' => ['?page=labels&category={category}', 'Etiketten anzeigen'],
             'Kategorien' => ['?page=categories', 'Verbandmaterial'],
             'Kategorie bearbeiten' => ['?page=categories&edit={category}', 'Kategorie speichern'],
             'Einheiten' => ['?page=units', 'Flasche'],
@@ -388,6 +390,51 @@ class PagesTest extends TestCase
         self::$db->exec("UPDATE articles SET active = 0 WHERE article_number = 'nicht-da'");
     }
 
+    public function testSingleLabelPrintsEightLabelsOfOneArticle(): void
+    {
+        $body = self::request(self::resolve('?page=label&id={article}'))['body'];
+
+        $this->assertSame(1, substr_count($body, 'class="label-print-page"'));
+        $this->assertSame(8, substr_count($body, '<div class="label">'));
+        $this->assertSame(8, substr_count($body, '<div class="label-number">diag-bz-streifen</div>'));
+    }
+
+    public function testCollectiveLabelsSelectionSkipAndSheets(): void
+    {
+        $diagnostics = self::id("SELECT id FROM article_categories WHERE name = 'Diagnostik'");
+        $inCategory = self::id('SELECT COUNT(*) FROM articles WHERE active = 1 AND category_id = ' . $diagnostics);
+        $article = self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'");
+        $other = self::id("SELECT MIN(id) FROM articles WHERE active = 1 AND id <> " . $article);
+
+        // Aus der Artikelliste mit Kategorie: deren Artikel je 1× vorausgewählt.
+        $body = self::request('?page=labels&category=' . $diagnostics)['body'];
+        $this->assertSame($inCategory, preg_match_all('#class="labels-quantity"[^>]*value="1"#s', $body));
+        $this->assertStringContainsString('href="?page=labels&category=' . $diagnostics . '"', self::request('?page=articles&category=' . $diagnostics)['body']);
+
+        // 3 freie Plätze + 6 + 1 Etiketten = 10 Plätze → 2 Bögen.
+        $response = self::request('?page=labels&print=1&skip=3&qty[' . $article . ']=6&qty[' . $other . ']=1');
+        $this->assertCleanPage($response, 'Sammeletiketten');
+        $body = $response['body'];
+
+        $this->assertMatchesRegularExpression('#7\s+Etiketten\s+auf 2\s+Bögen#', $body);
+        $this->assertSame(2, substr_count($body, 'class="label-print-page"'));
+        $this->assertSame(7, substr_count($body, '<div class="label">'));
+        $this->assertSame(6, substr_count($body, '<div class="label-number">diag-bz-streifen</div>'));
+        $this->assertSame(9, substr_count($body, 'label-empty'), '3 frei am Anfang, 6 am Ende des zweiten Bogens');
+        $this->assertLessThan(strpos($body, '<div class="label">'), strpos($body, 'label-empty'));
+
+        // Nichts ausgewählt: Hinweis statt leerer Druckansicht.
+        $response = self::request('?page=labels&print=1&qty[' . $article . ']=0');
+        $this->assertCleanPage($response, 'Sammeletiketten ohne Auswahl');
+        $this->assertStringContainsString('Bitte bei mindestens einem Artikel eine Anzahl eintragen.', $response['body']);
+        $this->assertStringNotContainsString('class="label-print-page"', $response['body']);
+
+        // Manipulierte Werte: begrenzt bzw. ignoriert.
+        $response = self::request('?page=labels&print=1&skip=99&qty[' . $article . ']=500&qty[x]=abc&qty[' . $other . '][]=1');
+        $this->assertCleanPage($response, 'Sammeletiketten mit ungültigen Werten');
+        $this->assertMatchesRegularExpression('#99\s+Etiketten\s+auf 14\s+Bögen#', $response['body'], '7 frei + 99 = 106 Plätze');
+    }
+
     public function testNewArticleKeepsCategory(): void
     {
         $category = self::id("SELECT id FROM article_categories WHERE name = 'Diagnostik'");
@@ -421,6 +468,32 @@ class PagesTest extends TestCase
         $again = self::request('?page=issue');
 
         $this->assertStringNotContainsString('umgebucht nach Rucksack 3', $again['body'], 'Meldung nur einmal');
+    }
+
+    public function testReceiptWithQuantityOnBookingPageKeepsExpiry(): void
+    {
+        $bag = self::id("SELECT id FROM storage_locations WHERE name = 'Rucksack 3'");
+        $expiry = date('Y-m-d', strtotime('+4 years'));
+
+        $response = self::request('?page=issue', [
+            'action' => 'issue',
+            'article_number' => 'verb-mullbinde-8',
+            'source' => 'receipt',
+            'target' => $bag,
+            'quantity' => '3',
+            'expiry_date' => $expiry,
+        ]);
+
+        $this->assertSame(302, $response['status']);
+
+        $page = self::request((string) $response['location']);
+
+        $this->assertCleanPage($page, 'nach Einlagern');
+        $this->assertStringContainsString('Mullbinde 8 cm – 3 Stück eingelagert in Rucksack 3', $page['body']);
+        $this->assertStringContainsString('Einlagern in Rucksack 3', $page['body']);
+        $this->assertMatchesRegularExpression('#<option value="receipt" selected>#', $page['body']);
+        $this->assertStringContainsString('value="' . $expiry . '"', $page['body'], 'MHD bleibt stehen');
+        $this->assertMatchesRegularExpression('#id="issue-quantity"\s+value="1"#', $page['body'], 'Menge wieder 1');
     }
 
     public function testForeignPostIsRejected(): void
@@ -508,5 +581,19 @@ class PagesTest extends TestCase
 
         $this->assertCleanPage($response, 'ungültige Kategorie');
         $this->assertStringContainsString('Ungültige Farbe.', $response['body']);
+    }
+
+    /**
+     * Manipulierte Adressen und Formulare (Array statt Text) zeigen die
+     * normale Seite bzw. eine Meldung, keinen technischen Fehler.
+     */
+    public function testArrayParametersDoNotCauseErrors(): void
+    {
+        $this->assertCleanPage(self::request('?page=articles&search[]=x'), 'Suche als Array');
+        $this->assertCleanPage(self::request('?page[]=articles'), 'Seite als Array');
+        $this->assertCleanPage(
+            self::request('?page=issue', ['action' => ['issue'], 'article_number' => 'x']),
+            'Aktion als Array'
+        );
     }
 }

@@ -8,12 +8,24 @@
                 </p>
             </div>
 
-            <a
-                class="button button-primary"
-                href="?page=new_article"
-            >
-                + Artikel anlegen
-            </a>
+            <div class="actions">
+
+                <?php /* Mit Kategorie-Filter: deren Artikel vorausgewählt. */ ?>
+                <a
+                    class="button"
+                    href="?page=labels<?= $selectedCategoryId !== null ? '&category=' . $selectedCategoryId : '' ?>"
+                >
+                    Etiketten drucken
+                </a>
+
+                <a
+                    class="button button-primary"
+                    href="?page=new_article"
+                >
+                    + Artikel anlegen
+                </a>
+
+            </div>
 
         </div>
 

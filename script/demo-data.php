@@ -66,7 +66,7 @@ foreach (['Rolle' => 'Rollen', 'Paar' => 'Paar', 'Flasche' => 'Flaschen', 'Packu
     $units->create($singular, $plural);
 }
 
-$mainId = (int) $locations->findByName('Hauptlager')['id'];
+$mainId = (int) $locations->defaultLocation()['id'];
 
 $bagIds = [];
 

@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 echo ""
 echo "================================"
-echo " DRK Lager-App"
+echo " SanLager"
 echo "================================"
 echo ""
 echo "PHP:     $(php -v | head -n 1)"

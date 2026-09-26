@@ -11,3 +11,7 @@
 /backups/
 # Datensicherungen (bin/backup.php) nie einchecken – egal in welchem Ordner
 sanlager-*.sqlite
+# Zugangsschutz des Servers (Basic Auth) – liegt nur auf dem Server und
+# darf nie per script/push.sh (git add -A) auf GitHub landen
+.htaccess
+.htpasswd

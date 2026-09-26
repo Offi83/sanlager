@@ -31,6 +31,12 @@ $requestValue = static fn (string $key): string =>
 
 $locationNamesById = array_column($allLocations, 'name', 'id');
 
+/*
+ * Von "Wareneingang" (receipt) = Einlagern: Nach muss dann ein Lagerort
+ * sein (Standard: erster Lagerort der Sortierung).
+ */
+$issueIsReceipt = $requestValue('source') === 'receipt';
+
 $issueSourceId = (int) $requestValue('source');
 
 if (!isset($locationNamesById[$issueSourceId])) {
@@ -39,7 +45,11 @@ if (!isset($locationNamesById[$issueSourceId])) {
 
 $issueTarget = $requestValue('target');
 
-if (
+if ($issueIsReceipt) {
+    if (!isset($locationNamesById[(int) $issueTarget])) {
+        $issueTarget = (string) array_key_first($locationNamesById);
+    }
+} elseif (
     $issueTarget !== 'issue'
     && (
         !isset($locationNamesById[(int) $issueTarget])
@@ -49,7 +59,22 @@ if (
     $issueTarget = 'issue';
 }
 
-$issueModeText = $issueTarget === 'issue'
-    ? 'Ausbuchen aus ' . ($locationNamesById[$issueSourceId] ?? '')
-    : 'Umbuchen: ' . ($locationNamesById[$issueSourceId] ?? '')
-        . ' → ' . $locationNamesById[(int) $issueTarget];
+/*
+ * MHD beim Einlagern: bleibt nach einer Buchung für den nächsten Scan
+ * stehen (Redirect aus StockActions, nach einem Fehler aus dem Formular).
+ */
+$issueExpiry = normalizeDate($requestValue('expiry') !== '' ? $requestValue('expiry') : $requestValue('expiry_date')) ?? '';
+$issueExpiryConfirmed = $issueExpiry !== '' && $requestValue('confirm_expiry') === '1';
+
+$issueModeText = match (true) {
+    $issueIsReceipt => 'Einlagern in ' . $locationNamesById[(int) $issueTarget],
+    $issueTarget === 'issue' => 'Ausbuchen aus ' . ($locationNamesById[$issueSourceId] ?? ''),
+    default => 'Umbuchen: ' . ($locationNamesById[$issueSourceId] ?? '')
+        . ' → ' . $locationNamesById[(int) $issueTarget],
+};
+
+$issueModeClass = match (true) {
+    $issueIsReceipt => 'issue-mode-receipt',
+    $issueTarget === 'issue' => 'issue-mode-issue',
+    default => 'issue-mode-transfer',
+};

@@ -30,16 +30,6 @@ class ArticleRepository
 
         $parameters = [];
 
-        if ($search !== '') {
-            $conditions[] = '(
-                a.name LIKE :search
-                OR a.article_number LIKE :search
-                OR a.description LIKE :search
-            )';
-
-            $parameters['search'] = '%' . $search . '%';
-        }
-
         if ($categoryId !== null) {
             $conditions[] = 'a.category_id = :category_id';
             $parameters['category_id'] = $categoryId;
@@ -66,7 +56,32 @@ class ArticleRepository
         $statement = $this->db->prepare($sql);
         $statement->execute($parameters);
 
-        return $statement->fetchAll();
+        $articles = $statement->fetchAll();
+
+        if (trim($search) === '') {
+            return $articles;
+        }
+
+        /*
+         * Suchbegriff in PHP statt per LIKE vergleichen: SQLite ignoriert
+         * Groß-/Kleinschreibung nur bei A–Z ("übung" fände "Übungsverband"
+         * nicht), und % oder _ im Suchbegriff wären Platzhalter. Bei der
+         * Artikelzahl eines Lagers kostet das nichts.
+         */
+        $needle = nameKey($search);
+
+        return array_values(array_filter(
+            $articles,
+            static function (array $article) use ($needle): bool {
+                foreach (['name', 'article_number', 'description'] as $field) {
+                    if (str_contains(nameKey((string) $article[$field]), $needle)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        ));
     }
 
     /**
@@ -114,7 +129,7 @@ class ArticleRepository
         ?string $articleNumber,
         string $name,
         string $description,
-        string $unit, // Einheit (Einzahl), siehe UnitRepository
+        int|string $unit, // Einheit: ID oder Einzahl, siehe unitId()
         ?int $categoryId,
         bool $hasExpiry = true
     ): int {
@@ -148,7 +163,7 @@ class ArticleRepository
         $statement->execute([
             'article_number' => $articleNumber ?: null,
             'name' => $name,
-            'description' => $description ?: null,
+            'description' => $description !== '' ? $description : null,
             'unit_id' => $unitId,
             'category_id' => $categoryId,
             'has_expiry' => $hasExpiry ? 1 : 0
@@ -168,7 +183,7 @@ class ArticleRepository
         ?string $articleNumber,
         string $name,
         string $description,
-        string $unit, // Einheit (Einzahl), siehe UnitRepository
+        int|string $unit, // Einheit: ID oder Einzahl, siehe unitId()
         ?int $categoryId,
         bool $hasExpiry = true
     ): void {
@@ -193,7 +208,7 @@ class ArticleRepository
             'id' => $id,
             'article_number' => $articleNumber ?: null,
             'name' => $name,
-            'description' => $description,
+            'description' => $description !== '' ? $description : null,
             'unit_id' => $unitId,
             'category_id' => $categoryId,
             'has_expiry' => $hasExpiry ? 1 : 0
@@ -252,18 +267,25 @@ class ArticleRepository
     }
 
     /**
-     * ID der Einheit (Einzahl, siehe UnitRepository), ohne Groß-/Klein-
-     * schreibung.
+     * ID der Einheit: aus der Auswahlliste im Formular direkt als ID, in
+     * Skripten und Tests bequemer als Einzahl ("Stück", ohne Groß-/Klein-
+     * schreibung), siehe UnitRepository.
      *
      * @throws RuntimeException wenn es die Einheit nicht gibt
      */
-    private function unitId(string $unit): int
+    private function unitId(int|string $unit): int
     {
-        $unitRow = (new UnitRepository($this->db))->findByName($unit);
+        $units = new UnitRepository($this->db);
+
+        $unitRow = is_int($unit)
+            ? $units->find($unit)
+            : $units->findByName($unit);
 
         if ($unitRow === null) {
             throw new RuntimeException(
-                'Unbekannte Einheit: ' . $unit . ' (siehe Verwaltung → Einheiten).'
+                is_int($unit)
+                    ? 'Bitte eine Einheit auswählen.'
+                    : 'Unbekannte Einheit: ' . $unit . ' (siehe Verwaltung → Einheiten).'
             );
         }
 

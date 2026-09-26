@@ -1,6 +1,6 @@
 {
-    "name": "drk/lager-app",
-    "description": "Sanitätslagerverwaltung",
+    "name": "offi83/sanlager",
+    "description": "SanLager – Lagerverwaltung für Sanitätsmaterial",
     "type": "project",
     "license": "GPL-3.0-only",
     "require": {

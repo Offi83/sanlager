@@ -7,10 +7,10 @@
                     <h1>Buchen</h1>
 
                     <p>
-                        Artikelnummer scannen oder eingeben, Von und
-                        Nach wählen. Es wird automatisch ein
-                        Stück mit dem ältesten MHD ausgebucht oder an
-                        den gewählten Lagerort umgebucht.
+                        Von und Nach wählen, bei Bedarf die Menge
+                        ändern, dann Artikelnummer scannen oder
+                        eingeben. Beim Aus- und Umbuchen wird
+                        automatisch das älteste MHD genommen.
                     </p>
 
                 </div>
@@ -33,7 +33,7 @@
                     <?php /* Richtung der Buchung, gut sichtbar direkt über dem Kamerabild – wird von booking.js aktualisiert. */ ?>
                     <div
                         id="issue-mode"
-                        class="issue-mode <?= $issueTarget === 'issue' ? 'issue-mode-issue' : 'issue-mode-transfer' ?>"
+                        class="issue-mode <?= $issueModeClass ?>"
                         aria-live="polite"
                     ><?= h($issueModeText) ?></div>
 
@@ -68,87 +68,167 @@
                         value="issue"
                     >
 
-                    <label class="issue-article-field">
+                    <?php /* Zeile 1: was gebucht wird. Zeile 2: wohin. */ ?>
+                    <div class="issue-row">
 
-                        <span>
-                            Artikelnummer
-                        </span>
+                        <?php /* Menge gilt nur für die nächste Buchung, danach wieder 1 (booking.js, Redirect ohne Menge). */ ?>
+                        <div class="issue-quantity-field">
 
-                        <input
-                            type="text"
-                            name="article_number"
-                            id="issue-article-number"
-                            autocomplete="off"
-                            spellcheck="false"
-                            autofocus
-                            required
-                        >
+                            <label for="issue-quantity">
+                                Menge
+                            </label>
 
-                    </label>
+                            <div class="quantity-stepper">
 
-                    <label class="issue-target-field">
+                                <button
+                                    type="button"
+                                    class="button button-secondary"
+                                    id="issue-quantity-minus"
+                                    aria-label="Menge verringern"
+                                >−</button>
 
-                        <span>
-                            Von
-                        </span>
-
-                        <select
-                            name="source"
-                            id="issue-source"
-                        >
-
-                            <?php foreach ($allLocations as $sourceLocation): ?>
-
-                                <option
-                                    value="<?= (int) $sourceLocation['id'] ?>"
-                                    <?= (int) $sourceLocation['id'] === $issueSourceId ? 'selected' : '' ?>
+                                <input
+                                    type="text"
+                                    name="quantity"
+                                    id="issue-quantity"
+                                    value="1"
+                                    inputmode="numeric"
+                                    pattern="[0-9]{1,3}"
+                                    maxlength="3"
+                                    autocomplete="off"
+                                    required
                                 >
-                                    <?= h($sourceLocation['name']) ?>
+
+                                <button
+                                    type="button"
+                                    class="button button-secondary"
+                                    id="issue-quantity-plus"
+                                    aria-label="Menge erhöhen"
+                                >+</button>
+
+                            </div>
+
+                        </div>
+
+                        <label class="issue-article-field">
+
+                            <span>
+                                Artikelnummer
+                            </span>
+
+                            <input
+                                type="text"
+                                name="article_number"
+                                id="issue-article-number"
+                                autocomplete="off"
+                                spellcheck="false"
+                                autofocus
+                                required
+                            >
+
+                        </label>
+
+                        <?php /* Nur beim Einlagern (booking.js blendet ein/aus). Gilt für alle folgenden Scans. */ ?>
+                        <label
+                            class="issue-expiry-field"
+                            id="issue-expiry-field"
+                            <?= $issueIsReceipt ? '' : 'hidden' ?>
+                        >
+
+                            <span>
+                                MHD
+                            </span>
+
+                            <input
+                                type="date"
+                                name="expiry_date"
+                                id="issue-expiry"
+                                value="<?= h($issueExpiry) ?>"
+                            >
+
+                        </label>
+
+                    </div>
+
+                    <div class="issue-row">
+
+                        <label class="issue-target-field">
+
+                            <span>
+                                Von
+                            </span>
+
+                            <select
+                                name="source"
+                                id="issue-source"
+                            >
+
+                                <option value="receipt" <?= $issueIsReceipt ? 'selected' : '' ?>>
+                                    Einlagern
                                 </option>
 
-                            <?php endforeach; ?>
+                                <?php foreach ($allLocations as $sourceLocation): ?>
 
-                        </select>
+                                    <option
+                                        value="<?= (int) $sourceLocation['id'] ?>"
+                                        <?= !$issueIsReceipt && (int) $sourceLocation['id'] === $issueSourceId ? 'selected' : '' ?>
+                                    >
+                                        <?= h($sourceLocation['name']) ?>
+                                    </option>
 
-                    </label>
+                                <?php endforeach; ?>
 
-                    <label class="issue-target-field">
+                            </select>
 
-                        <span>
-                            Nach
-                        </span>
+                        </label>
 
-                        <select
-                            name="target"
-                            id="issue-target"
-                        >
+                        <label class="issue-target-field">
 
-                            <option value="issue" <?= $issueTarget === 'issue' ? 'selected' : '' ?>>
-                                Ausbuchen
-                            </option>
+                            <span>
+                                Nach
+                            </span>
 
-                            <?php foreach ($allLocations as $targetLocation): ?>
+                            <select
+                                name="target"
+                                id="issue-target"
+                            >
 
-                                <option
-                                    value="<?= (int) $targetLocation['id'] ?>"
-                                    <?= (string) $targetLocation['id'] === $issueTarget ? 'selected' : '' ?>
-                                >
-                                    <?= h($targetLocation['name']) ?>
+                                <option value="issue" <?= $issueTarget === 'issue' ? 'selected' : '' ?>>
+                                    Ausbuchen
                                 </option>
 
-                            <?php endforeach; ?>
+                                <?php foreach ($allLocations as $targetLocation): ?>
 
-                        </select>
+                                    <option
+                                        value="<?= (int) $targetLocation['id'] ?>"
+                                        <?= (string) $targetLocation['id'] === $issueTarget ? 'selected' : '' ?>
+                                    >
+                                        <?= h($targetLocation['name']) ?>
+                                    </option>
 
-                    </label>
+                                <?php endforeach; ?>
 
-                    <button
-                        type="submit"
-                        class="button button-primary"
-                        id="issue-submit"
+                            </select>
+
+                        </label>
+
+                        <button
+                            type="submit"
+                            class="button button-primary"
+                            id="issue-submit"
+                        >
+                            <?= $issueIsReceipt ? 'Einlagern' : 'Ausbuchen' ?>
+                        </button>
+
+                    </div>
+
+                    <input
+                        type="hidden"
+                        name="confirm_expiry"
+                        id="issue-confirm-expiry"
+                        value="<?= $issueExpiryConfirmed ? '1' : '0' ?>"
                     >
-                        Ausbuchen
-                    </button>
+
 
                 </form>
 

@@ -127,6 +127,50 @@ class DatabaseTest extends TestCase
         );
     }
 
+    /**
+     * Zwei Geräte öffnen die Seite nach einem Update gleichzeitig: Das
+     * zweite muss nach dem Warten auf die Sperre erkennen, dass das erste
+     * die Migration inzwischen angewendet hat, statt sie noch einmal
+     * auszuführen (010 fügt eine Spalte hinzu – doppelt scheitert das).
+     */
+    public function testMigrationAppliedByOtherDeviceMeanwhileIsSkipped(): void
+    {
+        $db = (new Database($this->file))->connection();
+        $db->exec("DELETE FROM schema_migrations WHERE migration = '010_article_has_expiry.sql'");
+        $db->exec('PRAGMA user_version = 0');
+        unset($db);
+
+        // Gerät 1 migriert gerade (hält die Schreibsperre) ...
+        $first = new PDO('sqlite:' . $this->file);
+        $first->exec('BEGIN IMMEDIATE');
+
+        // ... Gerät 2 ruft die Seite auf und wartet auf die Sperre.
+        $process = proc_open(
+            [
+                PHP_BINARY,
+                '-r',
+                'require $argv[1]; new LagerApp\Database($argv[2]);',
+                __DIR__ . '/../vendor/autoload.php',
+                $this->file,
+            ],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes
+        );
+
+        usleep(700_000);
+
+        $first->exec(
+            "INSERT INTO schema_migrations (migration, applied_at)
+             VALUES ('010_article_has_expiry.sql', CURRENT_TIMESTAMP)"
+        );
+        $first->exec('COMMIT');
+
+        $output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+        $exitCode = proc_close($process);
+
+        $this->assertSame(0, $exitCode, $output);
+    }
+
     public function testBookingWaitsForOtherDeviceInsteadOfReadingStaleStock(): void
     {
         $first = (new Database($this->file))->connection();

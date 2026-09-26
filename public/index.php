@@ -21,7 +21,7 @@
 |   *Repository.php  – reiner Datenbankzugriff je Tabelle/Bereich
 |   *Actions.php     – Validierung + Verarbeitung der POST-Aktionen
 |   helpers.php      – globale Helper (h(), redirect(), formatDate(), ...)
-| Bausteine der Vorlagen (Entsorgen-/Rückgängig-Button) liegen in
+| Bausteine der Vorlagen (Entsorgen-/Rückgängig-Button, Etikettenbogen) liegen in
 | templates/helpers.php.
 |--------------------------------------------------------------------------
 */
@@ -63,7 +63,7 @@ set_exception_handler(static function (Throwable $exception): void {
 $db = require __DIR__ . '/../bootstrap.php';
 
 /*
- * Bausteine der Seitenvorlagen (Entsorgen-/Rückgängig-Buttons).
+ * Bausteine der Seitenvorlagen (Entsorgen-/Rückgängig-Buttons, Etikettenbogen).
  */
 require __DIR__ . '/../templates/helpers.php';
 
@@ -86,7 +86,7 @@ $reports = new StockReports($db);
  * in composer.json automatisch geladen werden.
  */
 
-$articleActions = new ArticleActions($articles, $categories, $stock, $locationRepository, $units);
+$articleActions = new ArticleActions($articles, $categories, $stock, $locationRepository);
 $categoryActions = new CategoryActions($categories);
 $unitActions = new UnitActions($units);
 $locationActions = new LocationActions($locationRepository, $stock);
@@ -94,8 +94,8 @@ $stockActions = new StockActions($articles, $locationRepository, $stock, $batche
 
 $categoryList = $categories->all();
 
-$page = $_GET['page'] ?? 'issue';
-$action = $_POST['action'] ?? null;
+$page = is_string($_GET['page'] ?? null) ? $_GET['page'] : 'issue';
+$action = is_string($_POST['action'] ?? null) ? $_POST['action'] : null;
 
 $error = null;
 $message = null;
@@ -173,7 +173,7 @@ if ($flash !== null) {
 | eine Datendatei (z. B. new_article).
 */
 $pageNames = [
-    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label',
+    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label', 'labels',
     'new_article', 'edit_article', 'categories', 'units', 'locations', 'location',
 ];
 

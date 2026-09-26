@@ -19,6 +19,7 @@
 <script src="/js/article-number-suggestion.js" defer></script>
 <script src="/js/navigation.js" defer></script>
 <script src="/js/table-cards.js" defer></script>
+<script src="/js/label-selection.js" defer></script>
 
 
 

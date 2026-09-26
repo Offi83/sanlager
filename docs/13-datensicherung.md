@@ -25,7 +25,7 @@ BACKUP_KEEP_DAYS=30
 | Einstellung        | Standard   | Bedeutung |
 |--------------------|------------|-----------|
 | `BACKUP_DIR`       | `backups/` | Zielordner, relativ zum Projektordner oder absolut. Wird bei Bedarf angelegt. |
-| `BACKUP_KEEP_DAYS` | `30`       | Aufbewahrung in Tagen. |
+| `BACKUP_KEEP_DAYS` | `30`       | Aufbewahrung in Tagen, mindestens 1. |
 
 **Wichtig:** Eine Sicherung auf demselben Datenträger schützt vor Bedienfehlern, aber **nicht vor einem Defekt** dieses Datenträgers. Besser ist ein USB-Stick, ein NAS oder zusätzlich eine regelmäßige Kopie des Sicherungsordners auf einen anderen Rechner.
 

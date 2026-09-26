@@ -169,41 +169,39 @@ class Database
          * Tabellenstruktur angelegt werden kann. Bereits angewendete
          * Migrationen werden anschließend über migrationAlreadyAppliedInSchema()
          * anhand des vorhandenen Datenbankschemas wiedererkannt.
+         *
+         * Wie die Migrationen selbst unter der Schreibsperre, siehe unten.
          */
-        if (
-            $this->hasTable('schema_migrations')
-            && !$this->hasColumn('schema_migrations', 'migration')
-        ) {
-            $this->connection->exec(
-                'ALTER TABLE schema_migrations RENAME TO schema_migrations_legacy'
-            );
-        }
+        $this->connection->beginTransaction();
 
-        $this->connection->exec('
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                migration TEXT PRIMARY KEY,
-                applied_at TEXT NOT NULL
-            )
-        ');
+        try {
+            if (
+                $this->hasTable('schema_migrations')
+                && !$this->hasColumn('schema_migrations', 'migration')
+            ) {
+                $this->connection->exec(
+                    'ALTER TABLE schema_migrations RENAME TO schema_migrations_legacy'
+                );
+            }
+
+            $this->connection->exec('
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    migration TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                )
+            ');
+
+            $this->connection->commit();
+        } catch (\Throwable $exception) {
+            if ($this->connection->inTransaction()) {
+                $this->connection->rollBack();
+            }
+
+            throw $exception;
+        }
 
         foreach ($migrationFiles as $migrationFile) {
             $migration = basename($migrationFile);
-
-            /*
-             * Bereits offiziell registrierte Migration überspringen.
-             */
-            if ($this->isMigrationRecorded($migration)) {
-                continue;
-            }
-
-            /*
-             * Prüfen, ob diese Migration bereits durch einen älteren
-             * Entwicklungsstand in der Datenbank umgesetzt wurde.
-             */
-            if ($this->migrationAlreadyAppliedInSchema($migration)) {
-                $this->recordMigration($migration);
-                continue;
-            }
 
             $sql = file_get_contents($migrationFile);
 
@@ -213,9 +211,32 @@ class Database
                 );
             }
 
+            /*
+             * Prüfen und Ausführen unter derselben Schreibsperre (IMMEDIATE,
+             * siehe Konstruktor): Öffnen nach einem Update zwei Geräte die
+             * Seite gleichzeitig, wartet das zweite hier und sieht danach,
+             * dass das erste die Migration schon angewendet hat – statt sie
+             * noch einmal auszuführen.
+             */
             $this->connection->beginTransaction();
 
             try {
+                /*
+                 * Bereits offiziell registrierte Migration überspringen,
+                 * ebenso eine, die ein älterer Entwicklungsstand schon
+                 * im Schema umgesetzt hat (dann nur eintragen).
+                 */
+                if ($this->isMigrationRecorded($migration)) {
+                    $this->connection->commit();
+                    continue;
+                }
+
+                if ($this->migrationAlreadyAppliedInSchema($migration)) {
+                    $this->recordMigration($migration);
+                    $this->connection->commit();
+                    continue;
+                }
+
                 $this->connection->exec($sql);
 
                 $this->recordMigration($migration);

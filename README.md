@@ -21,6 +21,8 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 **Buchen**
 * Scannen per Kamera, Hand-Scanner oder Tastatur
 * Ausbuchen oder Umbuchen in einen anderen Lagerort, dabei wird immer das älteste MHD zuerst genommen
+* Einlagern per Scan mit MHD, das für die folgenden Scans stehen bleibt
+* Menge vor dem Scan wählbar (z. B. 3 Packungen auf einmal), danach wieder 1
 
 **Heute**
 * Alle Buchungen des Tages, Fehlbuchungen können rückgängig gemacht werden
@@ -31,6 +33,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 **Verwaltung**
 * Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck
+* Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), auch auf angebrochenen Bögen
 * MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien, Einheiten und Lagerorte anlegen und sortieren – Einheiten mit Einzahl und Mehrzahl („1 Rolle“, „5 Rollen“)
 
@@ -43,7 +46,6 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 * Unterstützung Labelprinter
 * Test mit QR-Code-Scanner
-* Buchen mit Anzahl > 1 (Aus-, Um- und Einbuchen per Scan)
 * Inventurfunktion
 
 ---
@@ -113,11 +115,11 @@ Die technische Dokumentation ist in einzelne Bereiche aufgeteilt.
 
 ### 📖 Projekt
 
-* Vorstellung und Konzept des SanLagers
-* Aufbau und Funktionsweise
-* verwendete Technologien
+Vorstellung, Funktionen und Aufbau stehen in diesem README: [Funktionen](#funktionen), [Aufbau](#aufbau), [Technologie](#technologie), [Ziel](#ziel).
 
 ### 🛠️ Installation
+
+Voraussetzungen, Konfiguration, Webserver und Aktualisieren per `script/pull.sh`:
 
 ➡️ **[Installation](docs/05-installation.md)**
 

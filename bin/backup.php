@@ -40,7 +40,12 @@ try {
         $directory = $root . '/' . $directory;
     }
 
-    $keepDays = trim((string) ($_ENV['BACKUP_KEEP_DAYS'] ?? '')) ?: '30';
+    // Nicht per ?: – sonst würde aus "0" stillschweigend 30.
+    $keepDays = trim((string) ($_ENV['BACKUP_KEEP_DAYS'] ?? ''));
+
+    if ($keepDays === '') {
+        $keepDays = '30';
+    }
 
     if (!ctype_digit($keepDays)) {
         throw new RuntimeException('BACKUP_KEEP_DAYS muss eine ganze Zahl sein.');

@@ -10,6 +10,7 @@ Die wichtigsten Verzeichnisse des Projekts:
 sanlager/
 ├── bin/
 │   ├── backup.php
+│   ├── migrate.php
 │   └── weekly-report.php
 ├── database/
 │   ├── database.sqlite
@@ -56,7 +57,7 @@ sanlager/
 │   ├── UnitRepository.php
 │   └── WeeklyReport.php
 ├── templates/
-│   ├── helpers.php    (Bausteine: Entsorgen-/Rückgängig-Button)
+│   ├── helpers.php    (Bausteine: Entsorgen-/Rückgängig-Button, Etikettenbogen)
 │   ├── layout/        (header.php, footer.php)
 │   └── pages/         (<seite>.php, eine Vorlage pro Seite)
 ├── tests/
@@ -70,7 +71,7 @@ sanlager/
 
 ### `bin/`
 
-Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind: der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](12-wochenbericht.md)) und die Datensicherung (`backup.php`, siehe [Datensicherung](13-datensicherung.md)). Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
+Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind: der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](12-wochenbericht.md)), die Datensicherung (`backup.php`, siehe [Datensicherung](13-datensicherung.md)) und `migrate.php`, das `script/pull.sh` nach einem Update aufruft. Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
 
 ### `public/`
 
@@ -93,11 +94,16 @@ Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintrag
 Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale Helper-Funktionen. Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
 * **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
-* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Ausbuchen, Umbuchen, Entsorgen, Rückgängig) und ermittelt Bestände; `StockReports` enthält die reinen Auswertungen (Heute, MHD-Übersicht, Auffüllliste, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
+* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Ausbuchen, Umbuchen – auch mehrere Stück über mehrere Chargen, älteste zuerst –, Entsorgen, Rückgängig) und ermittelt Bestände; `StockReports` enthält die reinen Auswertungen (Heute, MHD-Übersicht, Auffüllliste, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
 * **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
 * **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.
-* **`helpers.php`** – kleine globale Funktionen (`h()`, `redirect()`, `formatDate()`, `expiryInfo()`, `normalizeDate()`), die sowohl im HTML-Template als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen.
+* **`helpers.php`** – kleine globale Funktionen, die sowohl in den Vorlagen als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen:
+  * Ausgabe: `h()` (HTML-Escaping), `icon()`, `formatDate()`, `formatExpiry()`
+  * Mengen: `quantityText()` („5 Rollen“), `unitText()`, `quantitiesByUnit()` („18 Stück · 12 Paar“)
+  * MHD und Datum: `expiryInfo()`, `expiryWarningDays()`, `normalizeDate()`
+  * Namen vergleichen: `nameKey()` (ohne Groß-/Kleinschreibung, auch bei Umlauten)
+  * Anfrage und Sicherheit: `redirect()`, `userMessage()`, `isSameOriginRequest()`, `startSession()`, `flash()`, `takeFlash()`
 
 ### `database/`
 
@@ -136,7 +142,9 @@ Anschließend müssen die Abhängigkeiten installiert werden:
 composer install
 ```
 
-Die lokale SQLite-Datenbank wird separat benötigt bzw. angelegt.
+Die lokale SQLite-Datenbank (`database/database.sqlite`) wird beim ersten Aufruf automatisch angelegt. Gestartet wird mit `./start.sh` (siehe [Installation](05-installation.md#startsh)).
+
+Zum Ausprobieren mit Beispieldaten eignet sich die Demo-Datenbank, siehe [Screenshots aktualisieren](#screenshots-aktualisieren).
 
 ## Änderungen testen
 
@@ -220,7 +228,12 @@ Auf dem Server wird der aktuelle Stand aus GitHub mit `script/pull.sh` übernomm
 ./script/pull.sh
 ```
 
-Das Skript aktualisiert ausschließlich den versionierten Anwendungscode.
+Nach einer Rückfrage führt das Skript nacheinander aus:
+
+1. **Datensicherung** mit `bin/backup.php` (siehe [Datensicherung](13-datensicherung.md)) – das Update kann Migrationen mitbringen, die die Datenbank umbauen. Scheitert die Sicherung, fragt das Skript, ob es ohne weitermachen soll.
+2. **Code holen:** `git fetch` und `git reset --hard origin/main`.
+3. **Abhängigkeiten installieren:** `composer install --no-dev --optimize-autoloader`, passend zur neuen `composer.lock`.
+4. **Datenbank aktualisieren:** `bin/migrate.php` führt fehlende Migrationen sofort aus, damit ein Fehler gleich im Terminal steht. Gibt es noch keine Datenbank, legt es keine an (sie gehörte sonst dem Benutzer im Terminal statt dem Webserver). Hat dieser Benutzer keine Schreibrechte auf die Datenbank, wird die Migration beim nächsten Seitenaufruf nachgeholt.
 
 Lokale Dateien wie
 

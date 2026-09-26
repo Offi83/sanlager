@@ -38,7 +38,7 @@ class WeeklyReportTest extends TestCase
         $locations = new LocationRepository($this->db);
         $articles = new ArticleRepository($this->db);
 
-        $this->mainId = (int) $locations->findByName('Hauptlager')['id'];
+        $this->mainId = (int) $locations->defaultLocation()['id'];
         $this->boxId = $locations->create('Kiste 1', '');
 
         $this->bandageId = $articles->create('A-001', 'Mullbinde', '', 'Stück', null);

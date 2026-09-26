@@ -73,28 +73,6 @@ class LocationRepository
     }
 
     /**
-     * Sucht einen aktiven Lagerort anhand seines Namens.
-     */
-    public function findByName(string $name): ?array
-    {
-        $statement = $this->db->prepare(
-            'SELECT *
-             FROM storage_locations
-             WHERE name = :name
-             AND active = 1
-             LIMIT 1'
-        );
-
-        $statement->execute([
-            'name' => $name
-        ]);
-
-        $location = $statement->fetch();
-
-        return $location ?: null;
-    }
-
-    /**
      * Legt einen neuen Lagerort an und hängt ihn ans Ende der Sortierung an.
      *
      * Heißt ein deaktivierter Lagerort so, wird stattdessen dieser wieder

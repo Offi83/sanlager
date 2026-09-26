@@ -36,7 +36,7 @@ $navSections = [
         'label' => 'Verwaltung',
         'href' => '?page=articles',
         'pages' => [
-            'articles', 'article', 'new_article', 'edit_article', 'label',
+            'articles', 'article', 'new_article', 'edit_article', 'label', 'labels',
             'categories', 'units', 'locations', 'location',
         ],
         'tabs' => [
@@ -82,7 +82,7 @@ $navBadge = static fn (int $count): string => $count > 0
 <a href="?page=issue" class="brand">
     <img
         src="/images/pflaster.svg"
-        alt="DRK Bereitschaften"
+        alt="SanLager"
     >
     <div class="brand-text">
         <strong>SanLager</strong>

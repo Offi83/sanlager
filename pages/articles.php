@@ -7,7 +7,7 @@
  * Variablen stehen der Vorlage templates/pages/ zur Verfügung.
  */
 
-$search = trim($_GET['search'] ?? '');
+$search = is_string($_GET['search'] ?? null) ? trim($_GET['search']) : '';
 
 $articleList = [];
 $selectedCategoryId = null;

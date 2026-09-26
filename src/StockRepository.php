@@ -477,60 +477,69 @@ class StockRepository
     }
 
     /**
-     * Bucht ein Stück der Charge mit dem ältesten MHD an einem Lagerort
-     * aus (FIFO-Prinzip). Wird von der Buchen-Seite (Scanner und manuelle
-     * Eingabe) für den Standardfall "Ausbuchen" verwendet.
+     * Bucht $quantity Stück an einem Lagerort aus, beginnend mit der
+     * Charge mit dem ältesten MHD (FIFO-Prinzip); reicht sie nicht, geht
+     * es mit der nächsten weiter. Wird von der Buchen-Seite (Scanner und
+     * manuelle Eingabe) für "Ausbuchen" verwendet.
      *
      * Bereits abgelaufene Chargen werden hier NICHT ausgeschlossen –
      * ist die älteste verfügbare Charge abgelaufen, wird genau diese
-     * gebucht. Der Aufrufer muss das zurückgelieferte `expiry_date`
-     * selbst gegen das heutige Datum prüfen, um eine Warnung anzuzeigen
-     * (siehe expiryInfo() in src/helpers.php).
+     * gebucht. Der Aufrufer muss die zurückgelieferten MHD selbst gegen
+     * das heutige Datum prüfen, um eine Warnung anzuzeigen (siehe
+     * expiryInfo() in src/helpers.php).
      *
-     * @throws RuntimeException wenn kein Bestand an diesem Lagerort vorhanden ist
+     * @return array{batch_id: ?int, expiry_date: ?string, batches: list<array{batch_id: ?int, expiry_date: ?string, quantity: int}>}
+     *         älteste gebuchte Charge und alle gebuchten Chargen mit Menge
+     * @throws RuntimeException wenn an diesem Lagerort nicht genug Bestand vorhanden ist
      */
     public function issueOldest(
         int $articleId,
         int $locationId,
-        ?string $note = null
+        ?string $note = null,
+        int $quantity = 1
     ): array {
         /*
-         * Charge suchen und buchen unter derselben Sperre: Scannen zwei
+         * Chargen suchen und buchen unter derselben Sperre: Scannen zwei
          * Geräte gleichzeitig, bekommt das zweite die nächste Charge statt
          * eines Fehlers.
          */
-        return $this->transactional(function () use ($articleId, $locationId, $note): array {
-            $batch = $this->findOldestBatchWithStock($articleId, $locationId);
+        return $this->transactional(function () use ($articleId, $locationId, $note, $quantity): array {
+            $batches = $this->takeOldestBatches($articleId, $locationId, $quantity);
 
-            $this->move(
-                $articleId,
-                $locationId,
-                1,
-                'issue',
-                $note,
-                $batch['batch_id']
-            );
+            foreach ($batches as $batch) {
+                $this->move(
+                    $articleId,
+                    $locationId,
+                    $batch['quantity'],
+                    'issue',
+                    $note,
+                    $batch['batch_id']
+                );
+            }
 
-            return $batch;
+            return $batches[0] + ['batches' => $batches];
         });
     }
 
     /**
-     * Bucht ein Stück der ältesten Charge von einem Lagerort auf einen
-     * anderen um, statt es auszubuchen. Beide Bewegungen teilen sich
-     * dieselbe Charge, damit das MHD beim Zielort erhalten bleibt.
+     * Bucht $quantity Stück von einem Lagerort auf einen anderen um,
+     * statt sie auszubuchen – wie issueOldest() beginnend mit der
+     * ältesten Charge. Abgang und Zugang teilen sich jeweils dieselbe
+     * Charge, damit das MHD beim Zielort erhalten bleibt.
      *
      * Wie issueOldest() werden auch hier bereits abgelaufene Chargen
      * nicht ausgeschlossen; der Aufrufer muss das ggf. selbst prüfen.
      *
+     * @return array{batch_id: ?int, expiry_date: ?string, batches: list<array{batch_id: ?int, expiry_date: ?string, quantity: int}>}
      * @throws RuntimeException wenn Quell- und Ziellagerort identisch sind
-     *                          oder kein Bestand am Quell-Lagerort vorhanden ist
+     *                          oder am Quell-Lagerort nicht genug Bestand vorhanden ist
      */
     public function transferOldest(
         int $articleId,
         int $fromLocationId,
         int $toLocationId,
-        ?string $note = null
+        ?string $note = null,
+        int $quantity = 1
     ): array {
         if ($fromLocationId === $toLocationId) {
             throw new RuntimeException(
@@ -538,19 +547,21 @@ class StockRepository
             );
         }
 
-        return $this->transactional(function () use ($articleId, $fromLocationId, $toLocationId, $note): array {
-            $batch = $this->findOldestBatchWithStock($articleId, $fromLocationId);
+        return $this->transactional(function () use ($articleId, $fromLocationId, $toLocationId, $note, $quantity): array {
+            $batches = $this->takeOldestBatches($articleId, $fromLocationId, $quantity);
 
-            $this->transferBatch(
-                $articleId,
-                $batch['batch_id'],
-                $fromLocationId,
-                $toLocationId,
-                1,
-                $note
-            );
+            foreach ($batches as $batch) {
+                $this->transferBatch(
+                    $articleId,
+                    $batch['batch_id'],
+                    $fromLocationId,
+                    $toLocationId,
+                    $batch['quantity'],
+                    $note
+                );
+            }
 
-            return $batch;
+            return $batches[0] + ['batches' => $batches];
         });
     }
 
@@ -650,15 +661,25 @@ class StockRepository
     }
 
     /**
-     * Ermittelt die Charge mit dem ältesten MHD, die an einem Lagerort
-     * noch positiven Bestand hat. Wird sowohl beim Ausbuchen als auch
-     * beim Umbuchen verwendet, damit stets zuerst das älteste MHD
-     * bewegt wird.
+     * Verteilt $quantity auf die Chargen eines Artikels an einem Lagerort
+     * mit positivem Bestand: älteste MHD zuerst, Bestand ohne MHD zuletzt.
+     * Wird sowohl beim Ausbuchen als auch beim Umbuchen verwendet, damit
+     * stets zuerst das älteste MHD bewegt wird.
+     *
+     * @return list<array{batch_id: ?int, expiry_date: ?string, quantity: int}>
+     * @throws RuntimeException bei Menge < 1 oder zu wenig Bestand
      */
-    private function findOldestBatchWithStock(
+    private function takeOldestBatches(
         int $articleId,
-        int $locationId
+        int $locationId,
+        int $quantity
     ): array {
+        if ($quantity < 1) {
+            throw new RuntimeException(
+                'Die Menge muss größer als 0 sein.'
+            );
+        }
+
         $statement = $this->db->prepare(
             'SELECT
                 sm.batch_id,
@@ -687,20 +708,43 @@ class StockRepository
             'location_id' => $locationId
         ]);
 
-        $batch = $statement->fetch();
+        $taken = [];
+        $available = 0;
+        $remaining = $quantity;
 
-        if (!$batch) {
+        foreach ($statement->fetchAll() as $batch) {
+            $available += (int) $batch['quantity'];
+
+            if ($remaining === 0) {
+                continue;
+            }
+
+            $take = min($remaining, (int) $batch['quantity']);
+            $remaining -= $take;
+
+            $taken[] = [
+                'batch_id' => $batch['batch_id'] !== null
+                    ? (int) $batch['batch_id']
+                    : null,
+                'expiry_date' => $batch['expiry_date'],
+                'quantity' => $take,
+            ];
+        }
+
+        if ($available === 0) {
             throw new RuntimeException(
                 'Kein Bestand an diesem Lagerort vorhanden.'
             );
         }
 
-        return [
-            'batch_id' => $batch['batch_id'] !== null
-                ? (int) $batch['batch_id']
-                : null,
-            'expiry_date' => $batch['expiry_date'],
-        ];
+        if ($remaining > 0) {
+            throw new RuntimeException(
+                'Nicht genügend Bestand an diesem Lagerort: ' . $quantity
+                    . ' gewünscht, nur ' . $available . ' vorhanden.'
+            );
+        }
+
+        return $taken;
     }
 
     /**

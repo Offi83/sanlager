@@ -8,7 +8,7 @@ Die durch `.htaccess` geschützte HTTP-Basic-Authentication wird automatisch üb
 
 ![Buchen-Seite auf dem Pi-Display](../images/buchen.png)
 
-Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite nimmt das Artikelnummer-Feld die volle Breite ein, darüber zeigt ein farbiger Balken die Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen). Die gewählte Richtung bleibt nach jeder Buchung erhalten, sodass mit einem **Hand-Barcodescanner** (tippt die Nummer ein und sendet Enter) mehrere Artikel nacheinander in dieselbe Richtung gebucht werden können. Der Button „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt – ohne Kamera bleibt er ausgeblendet.
+Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite stehen Menge, Artikelnummer und beim Einlagern das MHD in der ersten Zeile, Von, Nach und der Button in der zweiten; darüber zeigt ein farbiger Balken die Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen, grün = Einlagern). Die gewählte Richtung – beim Einlagern auch das MHD – bleibt nach jeder Buchung erhalten, sodass mit einem **Hand-Barcodescanner** (tippt die Nummer ein und sendet Enter) mehrere Artikel nacheinander in dieselbe Richtung gebucht werden können. Die Menge lässt sich ohne Tastatur mit − / + einstellen; der Cursor bleibt dabei im Feld Artikelnummer, und nach der Buchung steht die Menge wieder auf 1. Der Button „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt – ohne Kamera bleibt er ausgeblendet.
 
 ## Hardware
 

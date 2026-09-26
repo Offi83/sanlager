@@ -20,8 +20,7 @@ class ArticleActions
         private ArticleRepository $articles,
         private CategoryRepository $categories,
         private StockRepository $stock,
-        private LocationRepository $locations,
-        private UnitRepository $units
+        private LocationRepository $locations
     ) {
     }
 
@@ -149,25 +148,14 @@ class ArticleActions
 
     /**
      * Einheit aus der Auswahlliste (`unit_id`, siehe Verwaltung →
-     * Einheiten) als Einzahl-Name. Fehlt das Feld ganz, gilt "Stück".
-     *
-     * @throws RuntimeException bei einer unbekannten Einheit
+     * Einheiten) als ID; ob es sie gibt, prüft ArticleRepository. Fehlt
+     * das Feld ganz, gilt "Stück".
      */
-    private function unit(array $input): string
+    private function unit(array $input): int|string
     {
-        if (!isset($input['unit_id'])) {
-            return 'Stück';
-        }
-
-        $unit = $this->units->find($this->int($input, 'unit_id'));
-
-        if (!$unit) {
-            throw new RuntimeException(
-                'Bitte eine Einheit auswählen.'
-            );
-        }
-
-        return $unit['name'];
+        return isset($input['unit_id'])
+            ? $this->int($input, 'unit_id')
+            : 'Stück';
     }
 
     /**
@@ -215,8 +203,11 @@ class ArticleActions
     /**
      * Speichert die Mindestbestände eines Artikels je Lagerort. Nur die
      * Lagerorte, die im Formular einen Wert bekommen haben, werden
-     * überwacht; ein leeres Feld entfernt eine ggf. vorhandene Überwachung
-     * für diesen Lagerort wieder.
+     * überwacht; ein leeres Feld – oder 0, das nie unterschritten werden
+     * kann – entfernt eine ggf. vorhandene Überwachung für diesen Lagerort
+     * wieder.
+     *
+     * @throws RuntimeException bei einem Wert, der keine ganze Zahl ≥ 0 ist
      */
     private function setMinimums(array $input): ActionResult
     {
@@ -236,9 +227,16 @@ class ArticleActions
             $locationId = (int) $location['id'];
             $rawValue = $this->string($submittedMinimums, (string) $locationId);
 
-            $minimums[$locationId] = $rawValue === ''
-                ? null
-                : max(0, (int) $rawValue);
+            if ($rawValue !== '' && !ctype_digit($rawValue)) {
+                throw new RuntimeException(
+                    'Ungültiger Mindestbestand für ' . $location['name'] . ': ' . $rawValue
+                    . ' (bitte eine ganze Zahl eingeben oder das Feld leer lassen).'
+                );
+            }
+
+            $minimums[$locationId] = (int) $rawValue > 0
+                ? (int) $rawValue
+                : null;
         }
 
         $this->stock->saveMinimums($articleId, $minimums);

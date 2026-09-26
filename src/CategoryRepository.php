@@ -197,10 +197,9 @@ class CategoryRepository
     }
 
     /**
-     * @param int|null $excludeId eigene ID beim Bearbeiten ausschließen
-     */
-    /**
      * Vergleich ohne Groß-/Kleinschreibung, siehe nameKey().
+     *
+     * @param int|null $excludeId eigene ID beim Bearbeiten ausschließen
      */
     private function existsWithName(string $name, ?int $excludeId = null): bool
     {

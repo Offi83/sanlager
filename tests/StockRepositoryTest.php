@@ -37,7 +37,7 @@ class StockRepositoryTest extends TestCase
 
         $locations = new LocationRepository($this->db);
 
-        $this->mainId = (int) $locations->findByName('Hauptlager')['id'];
+        $this->mainId = (int) $locations->defaultLocation()['id'];
         $this->boxId = $locations->create('Kiste 1', '');
 
         $this->articleId = (new ArticleRepository($this->db))->create(
@@ -105,6 +105,52 @@ class StockRepositoryTest extends TestCase
 
         $this->assertSame($expired, $result['batch_id']);
         $this->assertSame('expiry-expired', expiryInfo($result['expiry_date'])['class']);
+    }
+
+    public function testIssueOldestWithQuantitySpansBatchesOldestFirst(): void
+    {
+        $this->receive(5, null);
+        $late = $this->receive(5, $this->day('+2 years'));
+        $early = $this->receive(2, $this->day('+1 year'));
+
+        $result = $this->stock->issueOldest($this->articleId, $this->mainId, null, 4);
+
+        $this->assertSame($early, $result['batch_id']);
+        $this->assertSame(
+            [[$early, 2], [$late, 2]],
+            array_map(fn (array $batch): array => [$batch['batch_id'], $batch['quantity']], $result['batches'])
+        );
+        $this->assertSame(0, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $early));
+        $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $late));
+        $this->assertSame(8, $this->stock->getStockSummary($this->articleId)['total']);
+    }
+
+    public function testIssueOldestWithTooLargeQuantityBooksNothing(): void
+    {
+        $this->receive(2, $this->day('+1 year'));
+        $this->receive(1, null);
+
+        try {
+            $this->stock->issueOldest($this->articleId, $this->mainId, null, 4);
+            $this->fail('Mehr ausgebucht als vorhanden.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('nur 3 vorhanden', $exception->getMessage());
+        }
+
+        $this->assertSame(3, $this->stock->getStockSummary($this->articleId)['total']);
+    }
+
+    public function testTransferOldestWithQuantityKeepsEachBatch(): void
+    {
+        $early = $this->receive(1, $this->day('+1 year'));
+        $late = $this->receive(4, $this->day('+2 years'));
+
+        $result = $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId, null, 3);
+
+        $this->assertCount(2, $result['batches']);
+        $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $early));
+        $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->boxId, $late));
+        $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $late));
     }
 
     public function testIssueWithoutStockFails(): void

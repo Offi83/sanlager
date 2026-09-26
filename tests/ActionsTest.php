@@ -47,7 +47,7 @@ class ActionsTest extends TestCase
         $this->locations = new LocationRepository($this->db);
         $this->categories = new CategoryRepository($this->db);
 
-        $this->mainId = (int) $this->locations->findByName('Hauptlager')['id'];
+        $this->mainId = (int) $this->locations->defaultLocation()['id'];
         $this->articleId = $this->articles->create('A-001', 'Mullbinde', '', 'Stück', null);
     }
 
@@ -58,7 +58,7 @@ class ActionsTest extends TestCase
 
     private function articleActions(): ArticleActions
     {
-        return new ArticleActions($this->articles, $this->categories, $this->stock, $this->locations, new UnitRepository($this->db));
+        return new ArticleActions($this->articles, $this->categories, $this->stock, $this->locations);
     }
 
     private function receive(int $quantity): void
@@ -132,6 +132,90 @@ class ActionsTest extends TestCase
         $issue = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
 
         $this->assertStringContainsString('&source=' . $this->mainId . '&target=issue', $issue->redirectUrl);
+    }
+
+    public function testIssueWithQuantity(): void
+    {
+        $early = date('Y-m-d', strtotime('+1 year'));
+        $late = date('Y-m-d', strtotime('+2 years'));
+        $this->stock->move($this->articleId, $this->mainId, 2, 'receipt', null, $this->batches->findOrCreate($this->articleId, $early));
+        $this->stock->move($this->articleId, $this->mainId, 5, 'receipt', null, $this->batches->findOrCreate($this->articleId, $late));
+
+        $result = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001', 'quantity' => '3']);
+
+        $this->assertSame(
+            'Mullbinde – 3 Stück ausgebucht (2 × ' . formatDate($early) . ', 1 × ' . formatDate($late) . ')',
+            $result->message
+        );
+        $this->assertStringNotContainsString('quantity', $result->redirectUrl, 'Menge gilt nur für eine Buchung');
+
+        $json = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001', 'quantity' => '2', 'ajax' => '1'])->json;
+
+        $this->assertSame(2, $json['quantity']);
+        $this->assertSame(2, $this->stock->getStockSummary($this->articleId)['total']);
+
+        foreach (['0', '-1', 'abc', '1000'] as $invalid) {
+            $error = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001', 'quantity' => $invalid, 'ajax' => '1']);
+            $this->assertSame(400, $error->status, $invalid);
+            $this->assertStringContainsString('Menge', $error->json['error']);
+        }
+
+        $tooMuch = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001', 'quantity' => '3', 'ajax' => '1']);
+        $this->assertStringContainsString('nur 2 vorhanden', $tooMuch->json['error']);
+        $this->assertSame(2, $this->stock->getStockSummary($this->articleId)['total']);
+    }
+
+    public function testReceiptByScan(): void
+    {
+        $expiry = date('Y-m-d', strtotime('+3 years'));
+
+        $result = $this->stockActions()->dispatch('issue', [
+            'article_number' => 'A-001',
+            'source' => 'receipt',
+            'target' => (string) $this->mainId,
+            'quantity' => '4',
+            'expiry_date' => formatDate($expiry),
+        ]);
+
+        $this->assertSame('Mullbinde – 4 Stück eingelagert in Hauptlager (' . formatDate($expiry) . ')', $result->message);
+        $this->assertSame('success', $result->messageType);
+        $this->assertSame(
+            '?page=issue&source=receipt&target=' . $this->mainId . '&expiry=' . $expiry,
+            $result->redirectUrl,
+            'MHD bleibt für den nächsten Scan stehen'
+        );
+        $batchId = $this->batches->findOrCreate($this->articleId, $expiry);
+        $this->assertSame(4, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batchId));
+
+        $json = $this->stockActions()->dispatch('issue', [
+            'article_number' => 'A-001', 'source' => 'receipt', 'target' => (string) $this->mainId,
+            'expiry_date' => $expiry, 'ajax' => '1',
+        ])->json;
+
+        $this->assertSame('eingelagert in Hauptlager', $json['action_label']);
+        $this->assertSame(5, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batchId));
+    }
+
+    public function testReceiptByScanValidatesTargetAndExpiry(): void
+    {
+        $receipt = fn (array $input): string => $this->stockActions()->dispatch('issue', $input + [
+            'article_number' => 'A-001', 'source' => 'receipt', 'target' => (string) $this->mainId, 'ajax' => '1',
+        ])->json['error'] ?? '';
+
+        $this->assertStringContainsString('Lagerort', $receipt(['target' => 'issue', 'expiry_date' => date('Y-m-d', strtotime('+1 year'))]));
+        $this->assertStringContainsString('Bitte ein MHD eingeben', $receipt([]));
+        $this->assertStringContainsString('Ungültiges MHD', $receipt(['expiry_date' => '31.02.2027']));
+
+        $expired = date('Y-m-d', strtotime('-1 month'));
+        $this->assertStringContainsString('bereits abgelaufen', $receipt(['expiry_date' => $expired]));
+        $this->assertSame('', $receipt(['expiry_date' => $expired, 'confirm_expiry' => '1']));
+        $this->assertSame(1, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $this->batches->findOrCreate($this->articleId, $expired)));
+
+        // Artikel ohne MHD: Das MHD-Feld wird nicht beachtet.
+        $this->articles->create('B-001', 'Dreieckstuch', '', 'Stück', null, hasExpiry: false);
+        $this->assertSame('', $receipt(['article_number' => 'B-001', 'expiry_date' => date('Y-m-d', strtotime('+1 year'))]));
+        $bandage = $this->articles->findByArticleNumber('B-001');
+        $this->assertSame(1, $this->stock->getStockAtLocation((int) $bandage['id'], $this->mainId, null));
     }
 
     public function testStockMoveNormalizesGermanExpiryDate(): void
@@ -462,6 +546,35 @@ class ActionsTest extends TestCase
         $this->assertFalse($this->stock->getStockSummary($this->articleId)['is_low']);
     }
 
+    public function testMinimumZeroRemovesMonitoringAndInvalidValuesAreRejected(): void
+    {
+        $minimumAtMain = fn (): ?int => $this->stock->getStockForArticle($this->articleId)[0]['minimum_stock'];
+        $save = fn (string $value) => $this->articleActions()->dispatch('set_article_minimums', [
+            'article_id' => (string) $this->articleId,
+            'minimum_stock' => [(string) $this->mainId => $value],
+        ]);
+
+        $save('5');
+        $this->assertSame(5, $minimumAtMain());
+
+        // 0 kann nie unterschritten werden – keine Überwachung statt einer stillen.
+        $save('0');
+        $this->assertNull($minimumAtMain());
+
+        $save('5');
+
+        foreach (['-3', '2,5', 'abc'] as $invalid) {
+            try {
+                $save($invalid);
+                $this->fail('Mindestbestand "' . $invalid . '" wurde angenommen.');
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString('Ungültiger Mindestbestand für Hauptlager', $exception->getMessage());
+            }
+
+            $this->assertSame(5, $minimumAtMain(), 'bisheriger Wert bleibt');
+        }
+    }
+
     public function testReorderRejectsNonArray(): void
     {
         $result = (new LocationActions($this->locations, $this->stock))
@@ -686,6 +799,22 @@ class ActionsTest extends TestCase
         $this->assertSame(0, (int) $this->articles->find($this->articleId)['active']);
     }
 
+    public function testSearchIgnoresCaseOfUmlautsAndTreatsWildcardsLiterally(): void
+    {
+        $this->articles->create('Ü-1', 'Übungsverband', '', 'Stück', null);
+        $this->articles->create('P_10', 'Pflaster 10%', 'Wundschnellverband', 'Stück', null);
+
+        $names = fn (string $search): array => array_column($this->articles->all($search), 'name');
+
+        $this->assertSame(['Übungsverband'], $names('übung'));
+        $this->assertSame(['Übungsverband'], $names('ü-1'));
+        $this->assertSame(['Pflaster 10%'], $names('10%'));
+        $this->assertSame(['Pflaster 10%'], $names('p_1'));
+        $this->assertSame([], $names('_x'));
+        $this->assertSame(['Pflaster 10%'], $names('  WUNDschnell '));
+        $this->assertCount(3, $this->articles->all(''));
+    }
+
     public function testDeletedArticleFreesNumberAndName(): void
     {
         $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
@@ -744,6 +873,28 @@ class ActionsTest extends TestCase
         }
 
         $this->assertSame('A-001', $this->articles->find($this->articleId)['article_number']);
+    }
+
+    public function testEmptyDescriptionIsStoredAsNullWhenEditing(): void
+    {
+        $category = (string) $this->categories->all()[0]['id'];
+        $update = fn (string $description) => $this->articleActions()->dispatch('update_article', [
+            'id' => (string) $this->articleId,
+            'article_number' => 'A-001',
+            'name' => 'Mullbinde',
+            'description' => $description,
+            'category_id' => $category,
+        ]);
+
+        $update('6 cm × 4 m');
+        $this->assertSame('6 cm × 4 m', $this->articles->find($this->articleId)['description']);
+
+        $update('  ');
+        $this->assertNull($this->articles->find($this->articleId)['description']);
+
+        // "0" ist eine Beschreibung, kein leeres Feld.
+        $update('0');
+        $this->assertSame('0', $this->articles->find($this->articleId)['description']);
     }
 
     public function testCreatingDeactivatedLocationReactivatesIt(): void

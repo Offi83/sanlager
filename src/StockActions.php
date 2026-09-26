@@ -44,11 +44,17 @@ class StockActions
     }
 
     /**
-     * Bucht ein Stück eines gescannten/eingegebenen Artikels ab einem
-     * wählbaren Quell-Lagerort (`source`, Standard: erster Lagerort der
-     * Sortierung, siehe LocationRepository::defaultLocation()): entweder
-     * klassisch aus (`target=issue`, Standard) oder an einen anderen
-     * Lagerort um (`target=<location_id>`).
+     * Bucht einen gescannten/eingegebenen Artikel auf der Buchen-Seite.
+     * Der Vorgang ergibt sich aus Von (`source`) und Nach (`target`):
+     *
+     *   source=<Lagerort>, target=issue      → Ausbuchen (Standard)
+     *   source=<Lagerort>, target=<anderer>  → Umbuchen
+     *   source=receipt,    target=<Lagerort> → Einlagern mit `expiry_date`
+     *
+     * `quantity` (Standard 1) Stück werden gebucht; beim Aus- und
+     * Umbuchen beginnend mit dem ältesten MHD, auch über mehrere Chargen.
+     * Ohne `source` gilt der erste Lagerort der Sortierung, siehe
+     * LocationRepository::defaultLocation().
      *
      * `ajax=1` liefert JSON zurück (Kamera-Scanner), sonst erfolgt ein
      * normaler Redirect mit Erfolgsmeldung (per Session, siehe flash()).
@@ -80,6 +86,25 @@ class StockActions
                 );
             }
 
+            $quantityInput = $this->string($input, 'quantity', '1');
+            $quantity = preg_match('/^\d{1,3}$/', $quantityInput) ? (int) $quantityInput : 0;
+
+            if ($quantity < 1) {
+                throw new RuntimeException(
+                    'Ungültige Menge: ' . $quantityInput . ' (erlaubt: 1 bis 999).'
+                );
+            }
+
+            $target = $this->string($input, 'target', 'issue');
+
+            if ($target === '') {
+                $target = 'issue';
+            }
+
+            if ($this->string($input, 'source') === 'receipt') {
+                return $this->receiptByScan($input, $article, $target, $quantity, $isAjax);
+            }
+
             $sourceLocationId = $this->int($input, 'source');
 
             $sourceLocation = $sourceLocationId > 0
@@ -94,13 +119,12 @@ class StockActions
 
             $sourceLocationId = (int) $sourceLocation['id'];
 
-            $target = $this->string($input, 'target', 'issue');
-
-            if ($target === '' || $target === 'issue') {
+            if ($target === 'issue') {
                 $result = $this->stock->issueOldest(
                     (int) $article['id'],
                     $sourceLocationId,
-                    'Scanner-Ausbuchung aus ' . $sourceLocation['name']
+                    'Scanner-Ausbuchung aus ' . $sourceLocation['name'],
+                    $quantity
                 );
 
                 $actionLabel = 'ausgebucht';
@@ -131,61 +155,37 @@ class StockActions
                     $sourceLocationId,
                     $targetLocationId,
                     'Scanner-Umbuchung von ' . $sourceLocation['name']
-                        . ' nach ' . $targetLocation['name']
+                        . ' nach ' . $targetLocation['name'],
+                    $quantity
                 );
 
                 $actionLabel = 'umgebucht nach ' . $targetLocation['name'];
             }
 
             /*
-             * Bei Artikeln ohne MHD (z. B. Mullbinden) wäre "ohne MHD" nur
-             * Rauschen – dann entfällt die Angabe ganz.
-             */
-            $expiryText = match (true) {
-                $result['expiry_date'] !== null => formatDate($result['expiry_date']),
-                (int) $article['has_expiry'] === 1 => 'ohne MHD',
-                default => '',
-            };
-
-            /*
-             * Es wird stets die Charge mit dem ältesten MHD gebucht.
-             * Ist diese Charge bereits abgelaufen, wird das hier
-             * zusätzlich angezeigt, damit niemand unbemerkt
+             * Es wird stets zuerst die Charge mit dem ältesten MHD gebucht.
+             * Ist eine gebuchte Charge bereits abgelaufen (oder läuft bald
+             * ab), wird das zusätzlich angezeigt, damit niemand unbemerkt
              * abgelaufenes Material ausgebucht oder umgebucht bekommt.
              */
-            $expiryWarning = expiryInfo($result['expiry_date'])['warning'];
+            $warnings = array_map(
+                static fn (array $batch): string => expiryInfo($batch['expiry_date'])['warning'],
+                $result['batches']
+            );
 
-            if ($expiryWarning !== '') {
-                $expiryText .= ' – ' . $expiryWarning;
-            }
+            $expiryWarning = in_array('ABGELAUFEN', $warnings, true)
+                ? 'ABGELAUFEN'
+                : (string) current(array_filter($warnings));
 
-            if ($isAjax) {
-                return ActionResult::json([
-                    'success' => true,
-                    'article_name' => $article['name'],
-                    'article_number' => $articleNumber,
-                    'unit' => $article['unit'],
-                    'unit_plural' => $article['unit_plural'],
-                    'expiry_date' => $expiryText,
-                    'action_label' => $actionLabel,
-                    'expired' => $expiryWarning !== ''
-                ]);
-            }
-
-            return ActionResult::redirect(
-                /*
-                 * Von/Nach mitgeben, damit die nächste Buchung (z. B. per
-                 * Hand-Barcodescanner mit Enter) wieder in dieselbe
-                 * Richtung geht, statt auf "Standard-Lagerort/Ausbuchen"
-                 * zurückzufallen – wie beim Kamera-Scan ohne Neuladen.
-                 */
-                '?page=issue'
-                    . '&source=' . $sourceLocationId
-                    . '&target=' . urlencode($target === '' ? 'issue' : $target),
-                $article['name'] . ' – ' . quantityText(1, $article) . ' '
-                    . $actionLabel . ($expiryText !== '' ? ' (' . $expiryText . ')' : ''),
-                // Abgelaufene Charge gebucht: rot statt grün hervorheben.
-                $expiryWarning !== '' ? 'error' : 'success'
+            return $this->bookingResult(
+                $isAjax,
+                $article,
+                $articleNumber,
+                $quantity,
+                $actionLabel,
+                $this->batchesText($result['batches'], $article),
+                $expiryWarning,
+                '?page=issue&source=' . $sourceLocationId . '&target=' . urlencode($target)
             );
         } catch (Throwable $exception) {
             if ($isAjax) {
@@ -197,6 +197,153 @@ class StockActions
 
             throw $exception;
         }
+    }
+
+    /**
+     * Einlagern per Scan (Buchen-Seite, Von "Wareneingang"): $quantity Stück
+     * mit dem MHD aus `expiry_date` an den Lagerort $target. Artikel ohne
+     * MHD werden ohne MHD eingelagert, das Feld wird dann nicht beachtet.
+     */
+    private function receiptByScan(
+        array $input,
+        array $article,
+        string $target,
+        int $quantity,
+        bool $isAjax
+    ): ActionResult {
+        $targetLocation = $target !== 'issue'
+            ? $this->locations->find((int) $target)
+            : null;
+
+        if (!$targetLocation) {
+            throw new RuntimeException(
+                'Bitte bei Nach einen Lagerort zum Einlagern auswählen.'
+            );
+        }
+
+        $batchId = null;
+        $expiryDate = null;
+
+        if ((int) $article['has_expiry'] === 1) {
+            $expiryInput = $this->string($input, 'expiry_date');
+
+            if ($expiryInput === '') {
+                throw new RuntimeException(
+                    'Bitte ein MHD eingeben – ' . $article['name'] . ' hat ein MHD.'
+                );
+            }
+
+            $expiryDate = normalizeDate($expiryInput);
+
+            if ($expiryDate === null) {
+                throw new RuntimeException(
+                    'Ungültiges MHD: ' . $expiryInput . ' (erwartet z. B. 31.12.2027).'
+                );
+            }
+
+            $this->assertPlausibleExpiry($expiryDate, $this->string($input, 'confirm_expiry') === '1');
+
+            $batchId = $this->batches->findOrCreate((int) $article['id'], $expiryDate);
+        }
+
+        $this->stock->move(
+            (int) $article['id'],
+            (int) $targetLocation['id'],
+            $quantity,
+            'receipt',
+            'Scanner-Einlagerung in ' . $targetLocation['name'],
+            $batchId
+        );
+
+        /*
+         * Das MHD bleibt für die nächsten Scans stehen (meist kommen mehrere
+         * Packungen derselben Lieferung), die Bestätigung eines
+         * ungewöhnlichen MHD ebenso.
+         */
+        $expiryInput = $this->string($input, 'expiry_date');
+        $keepExpiry = normalizeDate($expiryInput);
+
+        return $this->bookingResult(
+            $isAjax,
+            $article,
+            $article['article_number'],
+            $quantity,
+            'eingelagert in ' . $targetLocation['name'],
+            $expiryDate !== null ? formatDate($expiryDate) : '',
+            '',
+            '?page=issue&source=receipt&target=' . (int) $targetLocation['id']
+                . ($keepExpiry !== null ? '&expiry=' . $keepExpiry : '')
+                . ($this->string($input, 'confirm_expiry') === '1' ? '&confirm_expiry=1' : '')
+        );
+    }
+
+    /**
+     * MHD-Angabe der gebuchten Chargen: "31.12.2027", bei mehreren Chargen
+     * "2 × 31.12.2027, 1 × 30.06.2028". Bei Artikeln ohne MHD (z. B.
+     * Mullbinden) wäre "ohne MHD" nur Rauschen – dann entfällt die Angabe.
+     *
+     * @param list<array{expiry_date: ?string, quantity: int}> $batches
+     */
+    private function batchesText(array $batches, array $article): string
+    {
+        $label = static fn (array $batch): string => match (true) {
+            $batch['expiry_date'] !== null => formatDate($batch['expiry_date']),
+            (int) $article['has_expiry'] === 1 => 'ohne MHD',
+            default => '',
+        };
+
+        if (count($batches) === 1) {
+            return $label($batches[0]);
+        }
+
+        return implode(', ', array_map(
+            static fn (array $batch): string => trim($batch['quantity'] . ' × ' . $label($batch)),
+            $batches
+        ));
+    }
+
+    /**
+     * Antwort einer Buchung auf der Buchen-Seite: JSON für den
+     * Kamera-Scanner, sonst Redirect mit Meldung. $redirectUrl behält
+     * Von/Nach (und beim Einlagern das MHD) für die nächste Buchung, z. B.
+     * per Hand-Barcodescanner mit Enter – wie beim Kamera-Scan ohne
+     * Neuladen. Die Menge gilt nur für diese eine Buchung.
+     */
+    private function bookingResult(
+        bool $isAjax,
+        array $article,
+        string $articleNumber,
+        int $quantity,
+        string $actionLabel,
+        string $expiryText,
+        string $expiryWarning,
+        string $redirectUrl
+    ): ActionResult {
+        if ($expiryWarning !== '') {
+            $expiryText .= ' – ' . $expiryWarning;
+        }
+
+        if ($isAjax) {
+            return ActionResult::json([
+                'success' => true,
+                'article_name' => $article['name'],
+                'article_number' => $articleNumber,
+                'quantity' => $quantity,
+                'unit' => $article['unit'],
+                'unit_plural' => $article['unit_plural'],
+                'expiry_date' => $expiryText,
+                'action_label' => $actionLabel,
+                'expired' => $expiryWarning !== ''
+            ]);
+        }
+
+        return ActionResult::redirect(
+            $redirectUrl,
+            $article['name'] . ' – ' . quantityText($quantity, $article) . ' '
+                . $actionLabel . ($expiryText !== '' ? ' (' . $expiryText . ')' : ''),
+            // Abgelaufene Charge gebucht: rot statt grün hervorheben.
+            $expiryWarning !== '' ? 'error' : 'success'
+        );
     }
 
     /**
