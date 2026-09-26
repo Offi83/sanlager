@@ -7,8 +7,8 @@
                     <h1>Heute</h1>
 
                     <p>
-                        Übersicht aller heutigen Ausbuchungen, Umbuchungen und Entsorgungen –
-                        mit Rückgängig.
+                        Buchungen von heute – Fehlbuchungen lassen sich
+                        rückgängig machen.
                     </p>
 
                 </div>
@@ -26,49 +26,156 @@
 
             </div>
 
-            <div class="card">
+            <div class="today-counts">
 
-                <div class="today-summary">
+                <?php foreach ($todayCounts as $tile): ?>
 
-                    <?php if ($todayIssuedSummary === ''): ?>
-
-                        <span>
-                            Heute noch nichts ausgebucht
-                        </span>
-
+                    <?php if ($tile['count'] > 0): ?>
+                        <a href="#<?= h($tile['id']) ?>" class="card today-count">
                     <?php else: ?>
+                        <div class="card today-count today-count-zero">
+                    <?php endif; ?>
 
                         <strong>
-                            <?= h($todayIssuedSummary) ?>
+                            <?= $tile['count'] ?>
                         </strong>
 
                         <span>
-                            ausgebucht
+                            <?= h($tile['count'] === 1 ? $tile['one'] : $tile['many']) ?>
                         </span>
 
-                    <?php endif; ?>
+                    <?= $tile['count'] > 0 ? '</a>' : '</div>' ?>
 
-                    <?php if ($todayDisposedSummary !== ''): ?>
-
-                        <span class="today-disposed">
-                            + <?= h($todayDisposedSummary) ?> entsorgt
-                        </span>
-
-                    <?php endif; ?>
-
-                </div>
+                <?php endforeach; ?>
 
             </div>
 
-            <div class="card">
+            <?php if (!$todayIssues && !$todayDisposals && !$todayTransfers && !$todayReceipts): ?>
 
-                <?php if (!$todayIssues): ?>
+                <div class="card">
 
                     <p class="empty-state compact">
-                        Heute wurden noch keine Artikel ausgebucht oder entsorgt.
+                        Heute wurde noch nichts gebucht.
                     </p>
 
-                <?php else: ?>
+                </div>
+
+            <?php endif; ?>
+
+            <?php foreach (['heute-ausgebucht', 'heute-entsorgt', 'heute-umgebucht', 'heute-eingelagert'] as $sectionId): ?>
+
+                <?php if ($sectionId === 'heute-umgebucht'): ?>
+
+                    <?php if (!$todayTransfers) {
+                        continue;
+                    } ?>
+
+                    <h2 class="today-section-title" id="heute-umgebucht">
+                        Heute umgebucht
+                    </h2>
+
+                    <div class="card">
+
+                        <div class="table-wrapper">
+
+                            <table class="table-with-article-number table-cards">
+
+                                <thead>
+
+                                    <tr>
+                                        <th>Artikel</th>
+                                        <th>Artikelnummer</th>
+                                        <th>Menge</th>
+                                        <th>MHD</th>
+                                        <th>Rückgängig</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody>
+
+                                    <?php foreach ($todayTransferGroups as $direction => $transfers): ?>
+
+                                        <tr class="table-group-row">
+                                            <th colspan="5">
+                                                <?= h($direction) ?>
+                                            </th>
+                                        </tr>
+
+                                        <?php foreach ($transfers as $transfer): ?>
+
+                                            <tr>
+
+                                                <td>
+                                                    <strong>
+                                                        <?= h($transfer['article_name']) ?>
+                                                    </strong>
+                                                </td>
+
+                                                <td>
+                                                    <?= h($transfer['article_number'] ?? '') ?>
+                                                </td>
+
+                                                <td>
+                                                    <strong>
+                                                        <?= h(quantityText((int) $transfer['quantity'], $transfer)) ?>
+                                                    </strong>
+                                                </td>
+
+                                                <td>
+                                                    <?= h(formatExpiry(
+                                                        $transfer['expiry_date'],
+                                                        (int) $transfer['has_expiry'] === 1
+                                                    )) ?>
+                                                </td>
+
+                                                <td class="undo-cell">
+                                                    <?= renderUndoForm(
+                                                        'undo_transfer',
+                                                        [
+                                                            'article_id' => (int) $transfer['article_id'],
+                                                            'batch_id' => (int) $transfer['batch_id'],
+                                                            'location_id' => (int) $transfer['from_location_id'],
+                                                            'to_location_id' => (int) $transfer['to_location_id'],
+                                                        ],
+                                                        (int) $transfer['quantity'],
+                                                        quantityText((int) $transfer['quantity'], $transfer) . ' '
+                                                            . $transfer['article_name'] . ' von ' . $transfer['to_location_name']
+                                                            . ' zurück nach ' . $transfer['from_location_name'] . ' buchen?'
+                                                    ) ?>
+                                                </td>
+
+                                            </tr>
+
+                                        <?php endforeach; ?>
+
+                                    <?php endforeach; ?>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+                    </div>
+
+                    <?php continue; ?>
+
+                <?php endif; ?>
+
+                <?php
+                $section = $todaySections[$sectionId];
+
+                if (!$section['rows']) {
+                    continue;
+                }
+                ?>
+
+                <h2 class="today-section-title" id="<?= h($sectionId) ?>">
+                    <?= h($section['title']) ?>
+                </h2>
+
+                <div class="card">
 
                     <div class="table-wrapper">
 
@@ -77,26 +184,21 @@
                             <thead>
 
                                 <tr>
-
-
                                     <th>Artikel</th>
                                     <th>Artikelnummer</th>
                                     <th>Menge</th>
                                     <th>MHD</th>
                                     <th>Lagerort</th>
                                     <th>Rückgängig</th>
-
                                 </tr>
 
                             </thead>
 
                             <tbody>
 
-                                <?php foreach ($todayIssues as $movement): ?>
+                                <?php foreach ($section['rows'] as $movement): ?>
 
                                     <tr>
-
-
 
                                         <td>
                                             <strong>
@@ -105,24 +207,13 @@
                                         </td>
 
                                         <td>
-                                            <?= h(
-                                                $movement['article_number']
-                                                    ?? ''
-                                            ) ?>
+                                            <?= h($movement['article_number'] ?? '') ?>
                                         </td>
 
                                         <td>
                                             <strong>
                                                 <?= h(quantityText((int) $movement['quantity'], $movement)) ?>
                                             </strong>
-
-                                            <?php if ($movement['kind'] === 'disposal'): ?>
-
-                                                <span class="disposed-badge">
-                                                    entsorgt
-                                                </span>
-
-                                            <?php endif; ?>
                                         </td>
 
                                         <td>
@@ -138,102 +229,14 @@
 
                                         <td class="undo-cell">
                                             <?= renderUndoForm(
-                                                $movement['kind'] === 'disposal' ? 'undo_disposal' : 'undo_issue',
+                                                $section['undo'],
                                                 [
                                                     'article_id' => (int) $movement['article_id'],
                                                     'batch_id' => (int) $movement['batch_id'],
                                                     'location_id' => (int) $movement['location_id'],
                                                 ],
                                                 (int) $movement['quantity'],
-                                                quantityText((int) $movement['quantity'], $movement) . ' '
-                                                    . $movement['article_name'] . ' wieder in '
-                                                    . $movement['location_name'] . ' einbuchen'
-                                                    . ($movement['kind'] === 'disposal' ? ' (Entsorgung rückgängig)?' : '?')
-                                            ) ?>
-                                        </td>
-
-                                    </tr>
-
-                                <?php endforeach; ?>
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
-                <?php endif; ?>
-
-            </div>
-
-            <?php if ($todayTransfers): ?>
-
-                <h2 class="today-section-title">
-                    Heute umgebucht
-                </h2>
-
-                <div class="card">
-
-                    <div class="table-wrapper">
-
-                        <table class="table-cards">
-
-                            <thead>
-
-                                <tr>
-                                    <th>Artikel</th>
-                                    <th>Menge</th>
-                                    <th>MHD</th>
-                                    <th>Von → Nach</th>
-                                    <th>Rückgängig</th>
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                <?php foreach ($todayTransfers as $transfer): ?>
-
-                                    <tr>
-
-                                        <td>
-                                            <strong>
-                                                <?= h($transfer['article_name']) ?>
-                                            </strong>
-                                        </td>
-
-                                        <td>
-                                            <strong>
-                                                <?= h(quantityText((int) $transfer['quantity'], $transfer)) ?>
-                                            </strong>
-                                        </td>
-
-                                        <td>
-                                            <?= h(formatExpiry(
-                                                $transfer['expiry_date'],
-                                                (int) $transfer['has_expiry'] === 1
-                                            )) ?>
-                                        </td>
-
-                                        <td>
-                                            <?= h($transfer['from_location_name']) ?>
-                                            →
-                                            <?= h($transfer['to_location_name']) ?>
-                                        </td>
-
-                                        <td class="undo-cell">
-                                            <?= renderUndoForm(
-                                                'undo_transfer',
-                                                [
-                                                    'article_id' => (int) $transfer['article_id'],
-                                                    'batch_id' => (int) $transfer['batch_id'],
-                                                    'location_id' => (int) $transfer['from_location_id'],
-                                                    'to_location_id' => (int) $transfer['to_location_id'],
-                                                ],
-                                                (int) $transfer['quantity'],
-                                                quantityText((int) $transfer['quantity'], $transfer) . ' '
-                                                    . $transfer['article_name'] . ' von ' . $transfer['to_location_name']
-                                                    . ' zurück nach ' . $transfer['from_location_name'] . ' buchen?'
+                                                $section['question']($movement)
                                             ) ?>
                                         </td>
 
@@ -249,7 +252,6 @@
 
                 </div>
 
-            <?php endif; ?>
-
+            <?php endforeach; ?>
 
         </div>

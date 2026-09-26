@@ -75,6 +75,18 @@
 
                         <?php endif; ?>
 
+                        <?php if ($group['is_default']): ?>
+
+                            <?php /* Nachbestelltes kommt an: Buchen mit Von = Einlagern, Nach = dieser Lagerort. */ ?>
+                            <a
+                                href="?page=issue&source=receipt&target=<?= (int) $group['location_id'] ?>"
+                                class="button button-secondary"
+                            >
+                                Einlagern
+                            </a>
+
+                        <?php endif; ?>
+
                     </div>
 
                     <div class="table-wrapper">
@@ -118,7 +130,7 @@
 
                                         <tr
                                             class="article-category-row"
-                                            style="background-color: <?= h($row['category_color'] ?? '#64748b') ?>;"
+                                            style="<?= h(categoryStyle($row['category_color'] ?? null)) ?>"
                                         >
                                             <th colspan="<?= $group['is_default'] ? 4 : 5 ?>">
                                                 <span class="article-category-name">

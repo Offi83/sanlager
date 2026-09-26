@@ -79,7 +79,7 @@
 
                                     <tr
                                         class="article-category-row"
-                                        style="background-color: <?= h($row['category_color'] ?? '#64748b') ?>;"
+                                        style="<?= h(categoryStyle($row['category_color'] ?? null)) ?>"
                                     >
                                         <th colspan="5">
                                             <span class="article-category-name">

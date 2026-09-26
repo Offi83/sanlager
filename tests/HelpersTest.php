@@ -86,4 +86,32 @@ class HelpersTest extends TestCase
         $this->assertSame('expiry-warning', expiryInfo(date('Y-m-d', strtotime('+90 days')))['class']);
         $this->assertSame('', expiryInfo(date('Y-m-d', strtotime('+91 days')))['class']);
     }
+
+    public static function categoryColors(): array
+    {
+        return [
+            'Gelb' => ['#fffb00', '#202124'],
+            'Grün' => ['#00f900', '#202124'],
+            'Orange' => ['#f97316', '#202124'],
+            'Blau' => ['#0433ff', '#fff'],
+            'Lila' => ['#7c3aed', '#fff'],
+            'Grau (Standard)' => ['#64748b', '#fff'],
+            'Großbuchstaben' => ['#FFFB00', '#202124'],
+        ];
+    }
+
+    #[DataProvider('categoryColors')]
+    public function testCategoryStylePicksReadableTextColor(string $background, string $text): void
+    {
+        $this->assertSame(
+            'background-color: ' . strtolower($background) . '; color: ' . $text . ';',
+            categoryStyle($background)
+        );
+    }
+
+    public function testCategoryStyleFallsBackForMissingOrInvalidColor(): void
+    {
+        $this->assertSame('background-color: #64748b; color: #fff;', categoryStyle(null));
+        $this->assertSame('background-color: #64748b; color: #fff;', categoryStyle('red; position: fixed'));
+    }
 }

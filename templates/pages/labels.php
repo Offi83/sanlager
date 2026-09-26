@@ -147,7 +147,7 @@
 
                                     <tr
                                         class="article-category-row"
-                                        style="background-color: <?= h($labelArticle['category_color'] ?? '#64748b') ?>;"
+                                        style="<?= h(categoryStyle($labelArticle['category_color'] ?? null)) ?>"
                                     >
                                         <th colspan="3">
                                             <span class="article-category-name">

@@ -27,14 +27,15 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 * Ton und Vibration (Android) als Rückmeldung beim Scannen, Ton je Gerät abschaltbar
 
 **Heute**
-* Alle Buchungen des Tages, Fehlbuchungen können rückgängig gemacht werden
+* Ausbuchungen, Entsorgungen, Umbuchungen (nach Richtung gruppiert) und Einlagerungen des Tages in eigenen Abschnitten, oben jeweils die Anzahl
+* Fehlbuchungen können rückgängig gemacht werden – auch eine Einlagerung mit falschem MHD
 
 **Kontrolle**
-* Abgelaufenes und bald Ablaufendes, mit „Entsorgen“-Funktion
-* Auffüllliste: was je Lagerort unter dem Mindestbestand liegt
+* Abgelaufenes und bald Ablaufendes je Lagerort und Kategorie, mit „Entsorgen“-Funktion
+* Auffüllliste: was je Lagerort unter dem Mindestbestand liegt – mit „Aus Hauptlager umbuchen“ bzw. beim Hauptlager „Einlagern“
 
 **Verwaltung**
-* Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck
+* Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck; die Artikelliste zeigt je Artikel, ob er ein MHD hat
 * Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), mit „alle 1×“ je Kategorie oder für alle Artikel
 * MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien, Einheiten und Lagerorte anlegen und sortieren – Einheiten mit Einzahl und Mehrzahl („1 Rolle“, „5 Rollen“)
@@ -59,7 +60,7 @@ Die Screenshots zeigen Beispieldaten im Format des Raspberry-Pi-Displays (800×4
 *Buchen – hier eine Umbuchung vom Hauptlager in einen Rucksack. Auf Geräten mit Kamera erscheint zusätzlich „Scanner starten“.*
 ![Buchen](images/buchen.png)
 
-*Heute – alle Aus- und Umbuchungen und Entsorgungen des Tages*
+*Heute – Ausbuchungen, Entsorgungen, Umbuchungen und Einlagerungen des Tages*
 ![Heute](images/ausgebucht.png)
 
 *MHD-Übersicht – abgelaufenes und bald ablaufendes Material je Lagerort*

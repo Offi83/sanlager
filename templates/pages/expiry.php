@@ -8,8 +8,7 @@
 
                     <p>
                         Bereits abgelaufenes und in den nächsten
-                        <?= $expiryDays ?> Tagen ablaufendes Material, über alle
-                        Lagerorte hinweg.
+                        <?= $expiryDays ?> Tagen ablaufendes Material, je Lagerort.
                     </p>
 
                 </div>
@@ -63,15 +62,42 @@
 
             </div>
 
-            <div class="card">
+            <?php if (!$expiryGroups): ?>
 
-                <?php if (!$expiringBatches): ?>
+                <div class="card">
 
                     <p class="empty-state compact">
                         Kein Material läuft in den nächsten <?= $expiryDays ?> Tagen ab.
                     </p>
 
-                <?php else: ?>
+                </div>
+
+            <?php endif; ?>
+
+            <?php foreach ($expiryGroups as $group): ?>
+
+                <div class="card" id="location-<?= (int) $group['location_id'] ?>">
+
+                    <div class="card-header restock-header">
+
+                        <div>
+
+                            <h2>
+                                <a href="?page=location&id=<?= (int) $group['location_id'] ?>">
+                                    <?= h($group['location_name']) ?>
+                                </a>
+                            </h2>
+
+                            <p>
+                                <?= h(implode(' · ', array_filter([
+                                    $group['expired'] > 0 ? $group['expired'] . ' abgelaufen' : '',
+                                    $group['soon'] > 0 ? $group['soon'] . ' ' . ($group['soon'] === 1 ? 'läuft' : 'laufen') . ' bald ab' : '',
+                                ]))) ?>
+                            </p>
+
+                        </div>
+
+                    </div>
 
                     <div class="table-wrapper">
 
@@ -80,27 +106,39 @@
                             <thead>
 
                                 <tr>
-
                                     <th>Artikel</th>
                                     <th>Artikelnummer</th>
-                                    <th>Lagerort</th>
                                     <th>MHD</th>
                                     <th>Menge</th>
                                     <th></th>
-
                                 </tr>
 
                             </thead>
 
                             <tbody>
 
-                                <?php foreach ($expiringBatches as $row): ?>
+                                <?php $currentCategory = null; ?>
 
-                                    <?php
-                                    $rowExpiry = expiryInfo(
-                                        $row['expiry_date']
-                                    );
-                                    ?>
+                                <?php foreach ($group['items'] as $row): ?>
+
+                                    <?php $rowCategory = $row['category_name'] ?? ''; ?>
+
+                                    <?php if ($currentCategory !== $rowCategory): ?>
+
+                                        <?php $currentCategory = $rowCategory; ?>
+
+                                        <tr
+                                            class="article-category-row"
+                                            style="<?= h(categoryStyle($row['category_color'] ?? null)) ?>"
+                                        >
+                                            <th colspan="5">
+                                                <span class="article-category-name">
+                                                    <?= h($row['category_name'] ?? 'Ohne Kategorie') ?>
+                                                </span>
+                                            </th>
+                                        </tr>
+
+                                    <?php endif; ?>
 
                                     <tr>
 
@@ -120,25 +158,17 @@
                                         </td>
 
                                         <td>
-                                            <a href="?page=location&id=<?= (int) $row['location_id'] ?>">
-                                                <?= h($row['location_name']) ?>
-                                            </a>
-                                        </td>
-
-                                        <td>
-
-                                            <strong class="<?= $rowExpiry['class'] ?>">
+                                            <strong class="<?= $row['expiry']['class'] ?>">
                                                 <?= h(formatDate($row['expiry_date'])) ?>
                                             </strong>
 
-                                            <?php if ($rowExpiry['warning']): ?>
+                                            <?php if ($row['expiry']['warning']): ?>
 
                                                 <span class="warning">
-                                                    <?= h($rowExpiry['warning']) ?>
+                                                    <?= h($row['expiry']['warning']) ?>
                                                 </span>
 
                                             <?php endif; ?>
-
                                         </td>
 
                                         <td>
@@ -148,9 +178,7 @@
                                         </td>
 
                                         <td>
-
-                                            <?php if ($rowExpiry['class'] === 'expiry-expired'): ?>
-
+                                            <?php if ($row['expiry']['class'] === 'expiry-expired'): ?>
                                                 <?= renderDisposeForm(
                                                     (int) $row['article_id'],
                                                     (int) $row['batch_id'],
@@ -160,9 +188,7 @@
                                                         . $row['location_name'] . ' entsorgen?',
                                                     'expiry'
                                                 ) ?>
-
                                             <?php endif; ?>
-
                                         </td>
 
                                     </tr>
@@ -175,8 +201,8 @@
 
                     </div>
 
-                <?php endif; ?>
+                </div>
 
-            </div>
+            <?php endforeach; ?>
 
         </div>

@@ -945,7 +945,7 @@ class StockRepository
         $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
             $this->assertReversible(
                 $quantity,
-                $this->todayNetOutflow(['issue', 'issue_reversal'], $articleId, $batchId, $locationId),
+                -$this->todayNetQuantity(['issue', 'issue_reversal'], $articleId, $batchId, $locationId),
                 'ausgebucht'
             );
 
@@ -975,7 +975,7 @@ class StockRepository
         $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
             $this->assertReversible(
                 $quantity,
-                $this->todayNetOutflow(['disposal', 'disposal_reversal'], $articleId, $batchId, $locationId),
+                -$this->todayNetQuantity(['disposal', 'disposal_reversal'], $articleId, $batchId, $locationId),
                 'entsorgt'
             );
 
@@ -985,6 +985,38 @@ class StockRepository
                 $quantity,
                 'disposal_reversal',
                 'Entsorgung rückgängig gemacht',
+                $batchId
+            );
+        });
+    }
+
+    /**
+     * Nimmt eine heutige Einlagerung ganz oder teilweise zurück, z. B. nach
+     * einem Scan mit falschem MHD (Gegenbuchung `receipt_reversal`, ein
+     * Abgang). Scheitert, wenn davon am Lagerort nicht mehr genug liegt
+     * (schon ausgebucht oder umgebucht).
+     *
+     * @throws RuntimeException bei ungültiger Menge oder fehlendem Bestand
+     */
+    public function reverseTodayReceipt(
+        int $articleId,
+        ?int $batchId,
+        int $locationId,
+        int $quantity
+    ): void {
+        $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
+            $this->assertReversible(
+                $quantity,
+                $this->todayNetQuantity(['receipt', 'receipt_reversal'], $articleId, $batchId, $locationId),
+                'eingelagert'
+            );
+
+            $this->move(
+                $articleId,
+                $locationId,
+                $quantity,
+                'receipt_reversal',
+                'Einlagerung rückgängig gemacht',
                 $batchId
             );
         });
@@ -1027,12 +1059,13 @@ class StockRepository
     }
 
     /**
-     * Heutige Netto-Abgangsmenge eines Artikels (Charge + Lagerort) über
-     * die angegebenen Bewegungstypen, z. B. Ausbuchung minus Rücknahme.
+     * Heutige Nettomenge eines Artikels (Charge + Lagerort) über die
+     * angegebenen Bewegungstypen, z. B. Ausbuchung plus Rücknahme –
+     * mit Vorzeichen wie gespeichert (Abgänge negativ).
      *
      * @param string[] $types
      */
-    private function todayNetOutflow(
+    private function todayNetQuantity(
         array $types,
         int $articleId,
         ?int $batchId,
@@ -1042,7 +1075,7 @@ class StockRepository
         [$dayStart, $dayEnd] = array_values($this->todayUtcRange());
 
         $statement = $this->db->prepare(
-            'SELECT COALESCE(-SUM(quantity), 0)
+            'SELECT COALESCE(SUM(quantity), 0)
              FROM stock_movements
              WHERE movement_type IN (' . $placeholders . ')
              AND article_id = ?
@@ -1199,7 +1232,7 @@ class StockRepository
      * Erzeugt eine einzelne Lagerbewegung (einen Zugang oder Abgang).
      *
      * `$quantity` wird immer positiv übergeben; bei den Abgangstypen
-     * `issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
+     * `receipt_reversal`/`issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
      * hier intern negiert, nachdem geprüft wurde, dass genug Bestand der
      * betroffenen Charge an diesem Lagerort vorhanden ist. Nur `correction`
      * (Inventur, siehe applyInventory()) wird mit Vorzeichen übergeben. Für eine vollständige Umbuchung (Abgang an
@@ -1208,7 +1241,7 @@ class StockRepository
      *
      * @param int|null $transferId verbindet die beiden Hälften einer
      *                             Umbuchung, siehe transferPair()
-     * @param string $type receipt|issue|issue_reversal|disposal|disposal_reversal|correction|
+     * @param string $type receipt|receipt_reversal|issue|issue_reversal|disposal|disposal_reversal|correction|
      *                     transfer_out|transfer_in|transfer_reversal_out|transfer_reversal_in
      * @throws RuntimeException bei Menge 0, ungültigem Typ oder nicht
      *                          ausreichendem Bestand bei einem Abgang
@@ -1232,6 +1265,7 @@ class StockRepository
             $type,
             [
                 'receipt',
+                'receipt_reversal',
                 'issue',
                 'issue_reversal',
                 'disposal',
@@ -1255,7 +1289,7 @@ class StockRepository
          * Schreibsperre, sonst Teil der laufenden (Umbuchung, Komplettumzug).
          */
         $this->transactional(function () use ($articleId, $locationId, $quantity, $type, $note, $batchId, $transferId): void {
-            if (in_array($type, ['issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
+            if (in_array($type, ['receipt_reversal', 'issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
                 $current = $this->getStockAtLocation(
                     $articleId,
                     $locationId,

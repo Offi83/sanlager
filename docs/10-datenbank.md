@@ -54,7 +54,7 @@ Enthält die Kategorien für die Artikel.
 | `id`         | Eindeutige ID der Kategorie  |
 | `name`       | Name der Kategorie (eindeutig) |
 | `short_name` | Kürzel der Kategorie         |
-| `color`      | Farbe der Kategorie          |
+| `color`      | Farbe der Kategorie (Hex, z. B. `#fffb00`) – die Schrift darauf wird automatisch hell oder dunkel gesetzt, siehe `categoryStyle()` |
 | `sort_order` | Reihenfolge in der Anwendung, per Drag & Drop änderbar |
 | `active`     | Status der Kategorie         |
 
@@ -120,6 +120,7 @@ Mögliche Werte für `movement_type`:
 | Wert           | Bedeutung                                                   |
 | -------------- | ------------------------------------------------------------ |
 | `receipt`      | Einlagerung (Zugang)                                         |
+| `receipt_reversal` | Rücknahme einer Einlagerung (Abgang) – über „Rückgängig“ auf „Heute“, z. B. nach einem Scan mit falschem MHD |
 | `issue`        | Ausbuchung/Entnahme (Abgang) – zählt in den Ausbuchungen auf „Heute“   |
 | `issue_reversal` | Rücknahme einer Ausbuchung (Zugang) – über „Rückgängig“ auf „Heute“, wird dort und im Wochenbericht abgezogen |
 | `disposal`     | Entsorgung einer abgelaufenen Charge (Abgang) – zählt **nicht** als Ausbuchung/Verbrauch |
@@ -131,7 +132,7 @@ Mögliche Werte für `movement_type`:
 
 Eine Umbuchung („Nach“ ist ein Lagerort – auf der Buchen- oder der Artikelseite) erzeugt immer **zwei** zusammengehörige Bewegungen (`transfer_out` am Quell- und `transfer_in` am Ziel-Lagerort, mit derselben `batch_id`), damit das MHD beim Zielort erhalten bleibt. Umbuchungen zählen bewusst nicht als Ausbuchung, da kein Material verbraucht wird.
 
-Buchungen werden nie gelöscht. Versehentliche Ausbuchungen, Umbuchungen und Entsorgungen werden über „Rückgängig“ auf der Seite „Heute“ durch eine **Gegenbuchung** (`issue_reversal`, `transfer_reversal_out`/`_in`, `disposal_reversal`, jeweils gleiche Charge) ausgeglichen; das ist nur für Buchungen des aktuellen Tages und höchstens bis zur heute gebuchten Menge möglich. Eine Umbuchung lässt sich nur zurücknehmen, solange das Material noch am Ziel liegt.
+Buchungen werden nie gelöscht. Versehentliche Ausbuchungen, Umbuchungen, Entsorgungen und Einlagerungen werden über „Rückgängig“ auf der Seite „Heute“ durch eine **Gegenbuchung** (`issue_reversal`, `transfer_reversal_out`/`_in`, `disposal_reversal`, `receipt_reversal`, jeweils gleiche Charge) ausgeglichen; das ist nur für Buchungen des aktuellen Tages und höchstens bis zur heute gebuchten Menge möglich. Eine Umbuchung lässt sich nur zurücknehmen, solange das Material noch am Ziel liegt, eine Einlagerung nur, solange es noch am Lagerort liegt.
 
 Die beiden Hälften einer Umbuchung (`transfer_out` + `transfer_in` bzw. die Rücknahme-Varianten) tragen dieselbe `transfer_id` und werden gemeinsam in einer Transaktion gespeichert (`StockRepository::transferPair()`); darüber ordnet `getTodayTransfers()` sie einander zu. Umbuchungen aus der Zeit vor Migration 009 hat die Migration anhand der damaligen Regel (Zugang = ID des Abgangs + 1) nachträglich verknüpft. Abgelaufene Chargen lassen sich in MHD-Übersicht, Artikel- und Lagerort-Detailseite mit „Entsorgen“ vollständig entnehmen (`disposal`).
 

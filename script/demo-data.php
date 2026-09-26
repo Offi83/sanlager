@@ -8,7 +8,8 @@
 | Legt eine NEUE SQLite-Datenbank mit Beispieldaten an: Lagerorte
 | (Hauptlager + Sanitätsrucksäcke), Artikel in allen gängigen Kategorien,
 | Chargen mit abgelaufenen/bald ablaufenden MHDs, Mindestbeständen sowie
-| Um- und Ausbuchungen von heute.
+| Einlagerungen, Um- und Ausbuchungen von heute (Erstausstattung zwei
+| Wochen zurück).
 |
 | Aufruf:
 |   php script/demo-data.php database/demo.sqlite
@@ -55,14 +56,45 @@ $categories = new CategoryRepository($db);
 $locations = new LocationRepository($db);
 $stock = new StockRepository($db);
 
+/*
+ * Kategorien wie in der eingesetzten Datenbank: Kürzel, Farben (auch
+ * helle wie Gelb und Grün – daran sieht man, ob die Schrift lesbar bleibt)
+ * und Reihenfolge. Die Standardkategorien Medikamente und Infusion &
+ * Injektion werden dort nicht genutzt.
+ */
+$demoCategories = [
+    // Name => [Kürzel, Farbe, Sortierung]
+    'Verbandmaterial' => ['VM', '#ff2600', 10],
+    'Immobilisation' => ['IMM', '#ff2600', 20],
+    'Diagnostik' => ['DIAG', '#00f900', 30],
+    'Beatmung' => ['BEATMUNG', '#0433ff', 40],
+    'Hygiene & Desinfektion' => ['HYGI', '#fffb00', 60],
+    'Sonstiges' => ['SON', '#64748b', 90],
+    'Schutzausrüstung' => ['PSA', '#f97316', 100],
+    'Instrumente' => ['INSTR', '#7c3aed', 110],
+];
+
+$db->exec("DELETE FROM article_categories WHERE name IN ('Medikamente', 'Infusion & Injektion')");
+
 $categoryIds = array_column($categories->all(), 'id', 'name');
+
+foreach ($demoCategories as $name => [$shortName, $color, $sortOrder]) {
+    if (isset($categoryIds[$name])) {
+        $categories->update((int) $categoryIds[$name], $name, $shortName, $color);
+    } else {
+        $categoryIds[$name] = $categories->create($name, $shortName, $color);
+    }
+
+    $db->prepare('UPDATE article_categories SET sort_order = ? WHERE id = ?')
+        ->execute([$sortOrder, $categoryIds[$name]]);
+}
 
 /*
  * Einheiten mit Mehrzahl ("Stück" legt die Migration schon an).
  */
 $units = new UnitRepository($db);
 
-foreach (['Rolle' => 'Rollen', 'Paar' => 'Paar', 'Flasche' => 'Flaschen', 'Packung' => 'Packungen'] as $singular => $plural) {
+foreach (['Rolle' => 'Rollen', 'Paket' => 'Pakete', 'Dose' => 'Dosen', 'Flasche' => 'Flaschen', 'Paar' => 'Paar', 'Set' => 'Sets', 'Packung' => 'Packungen'] as $singular => $plural) {
     $units->create($singular, $plural);
 }
 
@@ -91,11 +123,13 @@ $demoArticles = [
     ['diag-thermo-huelle', 'Thermometer-Schutzhüllen', 'Stück', 'Diagnostik', ['' => 200], 100, 20],
     ['beat-maske-4', 'Beatmungsmaske Gr. 4', 'Stück', 'Beatmung', ['' => 3], 4, 1],
     ['beat-guedel-3', 'Guedeltubus Gr. 3', 'Stück', 'Beatmung', [$day('+2 years') => 6], 4, 1],
-    ['inf-vvk-18g', 'Venenverweilkanüle 18G', 'Stück', 'Infusion & Injektion', [$day('-5 days') => 4, $day('+2 years') => 20], 10, 0],
     ['imm-sam-splint', 'SAM Splint', 'Stück', 'Immobilisation', ['' => 5], 3, 1],
     ['hyg-haendedesinf', 'Händedesinfektion 100 ml', 'Flasche', 'Hygiene & Desinfektion', [$day('+30 days') => 8, $day('+2 years') => 20], 10, 1],
-    ['hyg-handschuhe-m', 'Einmalhandschuhe M', 'Paar', 'Hygiene & Desinfektion', [$day('+3 years') => 300], 100, 20],
+    ['hyg-wundantiseptikum', 'Wundantiseptikum 50 ml', 'Flasche', 'Hygiene & Desinfektion', [$day('-5 days') => 4, $day('+2 years') => 20], 10, 0],
+    ['son-kaeltekompresse', 'Kälte-Sofortkompresse', 'Stück', 'Sonstiges', [$day('+3 years') => 20], 10, 2],
+    ['hyg-handschuhe-m', 'Einmalhandschuhe M', 'Paar', 'Schutzausrüstung', [$day('+3 years') => 300], 100, 20],
     ['schutz-ffp2', 'FFP2-Maske', 'Stück', 'Schutzausrüstung', [$day('+2 years') => 60], 40, 5],
+    ['instr-kleiderschere', 'Kleiderschere 19 cm', 'Stück', 'Instrumente', ['' => 6], 3, 1],
 ];
 
 $ids = [];
@@ -141,6 +175,31 @@ foreach ($demoArticles as [$number, , , , , , $bagMinimum]) {
         }
     }
 }
+
+/*
+ * Erstausstattung und Bestückung liegen zwei Wochen zurück – sonst stünden
+ * sie alle unter „Heute“. created_at ist UTC (CURRENT_TIMESTAMP).
+ */
+$db->exec(
+    "UPDATE stock_movements SET created_at = datetime(created_at, '-14 days')"
+);
+
+/*
+ * Lieferung von heute (Einlagern) und Nachfüllen einzelner Rucksäcke.
+ */
+$stock->move($ids['verb-mullbinde-8'], $mainId, 10, 'receipt', 'Lieferung');
+$stock->move(
+    $ids['hyg-haendedesinf'],
+    $mainId,
+    6,
+    'receipt',
+    'Lieferung',
+    $batches->findOrCreate($ids['hyg-haendedesinf'], $day('+2 years'))
+);
+
+$stock->transferOldest($ids['verb-kompresse-10'], $mainId, $bagIds[0], 'Rucksack nachgefüllt', 4);
+$stock->transferOldest($ids['hyg-handschuhe-m'], $mainId, $bagIds[1], 'Rucksack nachgefüllt', 2);
+$stock->transferOldest($ids['verb-mullbinde-8'], $mainId, $bagIds[1], 'Rucksack nachgefüllt', 2);
 
 /*
  * Entnahmen von heute (Sanitätsdienst).

@@ -285,6 +285,44 @@ class PagesTest extends TestCase
 
         // Kategorie-Überschriften: Heftpflaster (Verbandmaterial) fehlt im Hauptlager.
         $this->assertMatchesRegularExpression('#article-category-row.*?<th colspan="4">\s*<span class="article-category-name">\s*Verbandmaterial#s', $response['body']);
+
+        // Hauptlager: Einlagern direkt anbieten (Buchen mit Von = Einlagern).
+        $this->assertMatchesRegularExpression('#href="\?page=issue&source=receipt&target=' . $main . '"[^>]*>\s*Einlagern\s*</a>#', $response['body']);
+    }
+
+    public function testCategoryRowsUseReadableTextColor(): void
+    {
+        // Demo-Kategorien wie in der echten Datenbank: Hygiene gelb, Diagnostik grün.
+        $articles = self::request('?page=articles')['body'];
+
+        $this->assertMatchesRegularExpression('#class="article-category-row"\s+style="background-color: \#fffb00; color: \#202124;"\s*>\s*<th colspan="4">\s*<span class="article-category-name">\s*Hygiene#', $articles);
+        $this->assertMatchesRegularExpression('#style="background-color: \#0433ff; color: \#fff;"\s*>\s*<th colspan="4">\s*<span class="article-category-name">\s*Beatmung#', $articles);
+        $this->assertStringContainsString('Instrumente', $articles);
+
+        foreach (['?page=restock', '?page=expiry', '?page=labels', self::resolve('?page=location&id={location}'), self::resolve('?page=inventory&id={location}')] as $page) {
+            $body = self::request($page)['body'];
+            $this->assertDoesNotMatchRegularExpression('#class="article-category-row"\s+style="background-color: [^;"]+;"#', $body, $page);
+        }
+    }
+
+    public function testExpiryOverviewGroupsByLocationLikeRestock(): void
+    {
+        $main = self::id("SELECT id FROM storage_locations WHERE name = 'Hauptlager'");
+        $bag = self::id("SELECT id FROM storage_locations WHERE name = 'Rucksack 1'");
+
+        $body = self::request('?page=expiry')['body'];
+
+        // Je Lagerort eine Karte, in der Reihenfolge der Lagerorte.
+        $mainPos = strpos($body, 'id="location-' . $main . '"');
+        $bagPos = strpos($body, 'id="location-' . $bag . '"');
+        $this->assertNotFalse($mainPos);
+        $this->assertNotFalse($bagPos);
+        $this->assertLessThan($bagPos, $mainPos);
+        $this->assertMatchesRegularExpression('#<h2>\s*<a href="\?page=location&id=' . $bag . '">\s*Rucksack 1\s*</a>\s*</h2>\s*<p>\s*1 abgelaufen#', $body);
+
+        // Lagerort steht in der Überschrift, nicht mehr als Spalte; Kategorien wie beim Auffüllen.
+        $this->assertStringNotContainsString('<th>Lagerort</th>', $body);
+        $this->assertMatchesRegularExpression('#article-category-row.*?<span class="article-category-name">\s*Diagnostik#s', substr($body, $bagPos));
     }
 
     public function testDeletedArticleCannotBeOpenedByAddress(): void
@@ -340,9 +378,30 @@ class PagesTest extends TestCase
 
     public function testTodayAndListsShowUnitsAndNoMhdDash(): void
     {
-        // Summe je Einheit statt "25 Ausbuchungen" über Stück, Paar und Rolle.
+        // Oben nur die Anzahl je Art (Zeilen der Abschnitte darunter), jeder Abschnitt mit Überschrift.
         $today = self::request('?page=today_issues')['body'];
-        $this->assertMatchesRegularExpression('#<strong>\s*\d+\x{00A0}Stück · \d+\x{00A0}Paar · \d+\x{00A0}Rolle\s*</strong>\s*<span>\s*ausgebucht#u', $today);
+        $issues = substr_count($today, 'value="undo_issue"');
+        $transfers = substr_count($today, 'value="undo_transfer"');
+        $this->assertGreaterThan(1, $issues);
+        $this->assertGreaterThan(1, $transfers);
+        $this->assertMatchesRegularExpression('#href="\#heute-ausgebucht"[^>]*>\s*<strong>\s*' . $issues . '\s*</strong>\s*<span>\s*Ausbuchungen#', $today);
+        $this->assertMatchesRegularExpression('#<strong>\s*0\s*</strong>\s*<span>\s*Entsorgungen#', $today);
+        $this->assertMatchesRegularExpression('#href="\#heute-umgebucht"[^>]*>\s*<strong>\s*' . $transfers . '\s*</strong>\s*<span>\s*Umbuchungen#', $today);
+        $this->assertMatchesRegularExpression('#<h2[^>]*id="heute-ausgebucht"[^>]*>\s*Heute ausgebucht#', $today);
+        $this->assertStringNotContainsString('Heute entsorgt', $today);
+
+        // Einlagerungen von heute (Lieferung), nicht die Erstausstattung der Demo.
+        $receipts = substr_count($today, 'value="undo_receipt"');
+        $this->assertGreaterThan(1, $receipts);
+        $this->assertLessThan(5, $receipts);
+        $this->assertMatchesRegularExpression('#href="\#heute-eingelagert"[^>]*>\s*<strong>\s*' . $receipts . '\s*</strong>\s*<span>\s*Einlagerungen#', $today);
+        $this->assertMatchesRegularExpression('#<h2[^>]*id="heute-eingelagert"[^>]*>\s*Heute eingelagert#', $today);
+
+        // Umbuchungen nach Richtung gruppiert, mit Artikelnummer wie die übrigen Listen.
+        $transferSection = substr($today, strpos($today, 'id="heute-umgebucht"'));
+        $this->assertMatchesRegularExpression('#class="table-group-row"[^>]*>\s*<th[^>]*>\s*Hauptlager → Rucksack 1\s*</th>#u', $transferSection);
+        $this->assertStringContainsString('table-with-article-number', $transferSection);
+        $this->assertStringContainsString('verb-kompresse-10', $transferSection);
 
         // Mullbinde hat kein MHD: "–" statt "ohne MHD".
         $this->assertMatchesRegularExpression('#Mullbinde 8 cm.*?<td>\s*–\s*</td>#s', $today);
@@ -599,9 +658,18 @@ class PagesTest extends TestCase
         $this->assertStringContainsString('nicht gefunden', json_decode($error['body'], true)['error'] ?? '');
     }
 
+    public function testArticleListShowsWhetherArticleHasExpiry(): void
+    {
+        $list = self::request('?page=articles')['body'];
+
+        $this->assertMatchesRegularExpression('#<th>\s*MHD\s*</th>#', $list);
+        $this->assertMatchesRegularExpression('#Mullbinde 8 cm.*?<td class="article-expiry-cell">\s*nein\s*</td>#s', $list);
+        $this->assertMatchesRegularExpression('#Blutzuckermessstreifen.*?<td class="article-expiry-cell">\s*ja\s*</td>#s', $list);
+    }
+
     public function testDisposeUndoAndArticleBooking(): void
     {
-        $articleId = self::id("SELECT id FROM articles WHERE article_number = 'inf-vvk-18g'");
+        $articleId = self::id("SELECT id FROM articles WHERE article_number = 'hyg-wundantiseptikum'");
         $batchId = self::id("SELECT id FROM batches WHERE article_id = $articleId AND expiry_date < date('now')");
         $mainId = self::id("SELECT id FROM storage_locations WHERE name = 'Hauptlager'");
 
@@ -617,7 +685,10 @@ class PagesTest extends TestCase
 
         $today = self::request('?page=today_issues');
         $this->assertCleanPage($today, 'Heute nach Entsorgen');
-        $this->assertStringContainsString('entsorgt', $today['body']);
+        $disposals = substr_count($today['body'], 'value="undo_disposal"');
+        $this->assertGreaterThan(0, $disposals);
+        $this->assertMatchesRegularExpression('#href="\#heute-entsorgt"[^>]*>\s*<strong>\s*' . $disposals . '\s*</strong>\s*<span>\s*' . ($disposals === 1 ? 'Entsorgung' : 'Entsorgungen') . '\s*</span>#', $today['body']);
+        $this->assertMatchesRegularExpression('#<h2[^>]*id="heute-entsorgt"[^>]*>\s*Heute entsorgt#', $today['body']);
 
         $undo = self::request('?page=today_issues', [
             'action' => 'undo_disposal',
@@ -645,7 +716,7 @@ class PagesTest extends TestCase
 
         $article = self::request((string) $move['location']);
         $this->assertCleanPage($article, 'Artikel nach Einlagern');
-        $this->assertStringContainsString('2 Stück eingelagert in Hauptlager', $article['body']);
+        $this->assertStringContainsString('2 Flaschen eingelagert in Hauptlager', $article['body']);
         $this->assertStringContainsString('MHD: ' . date('d.m.Y', strtotime('+2 years')), $article['body']);
     }
 

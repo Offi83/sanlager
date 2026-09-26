@@ -635,6 +635,22 @@ class ActionsTest extends TestCase
         $this->assertSame(3, $this->stock->getStockSummary($this->articleId)['total']);
     }
 
+    public function testUndoReceiptAction(): void
+    {
+        $this->receive(5);
+
+        $result = $this->stockActions()->dispatch('undo_receipt', [
+            'article_id' => (string) $this->articleId,
+            'batch_id' => '0',
+            'location_id' => (string) $this->mainId,
+            'quantity' => '5',
+        ]);
+
+        $this->assertSame('?page=today_issues', $result->redirectUrl);
+        $this->assertSame('Mullbinde – 5 Stück Einlagerung rückgängig, aus Hauptlager entfernt', $result->message);
+        $this->assertSame(0, $this->stock->getStockSummary($this->articleId)['total']);
+    }
+
     public function testDisposeActionRedirectsBackToOrigin(): void
     {
         $expired = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('-3 days')));

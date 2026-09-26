@@ -111,6 +111,37 @@ function quantitiesByUnit(array $rows): string
 }
 
 /**
+ * Inline-Stil für eine Fläche in Kategoriefarbe (Kategorie-Überschriften in
+ * Listen): Hintergrund plus die Schriftfarbe – Weiß oder Fast-Schwarz –,
+ * die darauf den höheren Kontrast hat (WCAG). So bleibt der Text auch bei
+ * Gelb oder Hellgrün lesbar. Ungültige Farben ergeben das Standard-Grau.
+ */
+function categoryStyle(?string $color): string
+{
+    $color = strtolower(trim((string) $color));
+
+    if (!preg_match('/^#[0-9a-f]{6}$/', $color)) {
+        $color = '#64748b';
+    }
+
+    $channel = static function (string $hex): float {
+        $value = hexdec($hex) / 255;
+
+        return $value <= 0.03928 ? $value / 12.92 : (($value + 0.055) / 1.055) ** 2.4;
+    };
+
+    $luminance = 0.2126 * $channel(substr($color, 1, 2))
+        + 0.7152 * $channel(substr($color, 3, 2))
+        + 0.0722 * $channel(substr($color, 5, 2));
+
+    // Kontrast zu Weiß (Leuchtdichte 1) gegen Kontrast zu #202124 (≈ 0,015).
+    $onWhite = 1.05 / ($luminance + 0.05);
+    $onDark = ($luminance + 0.05) / (0.015 + 0.05);
+
+    return 'background-color: ' . $color . '; color: ' . ($onWhite >= $onDark ? '#fff' : '#202124') . ';';
+}
+
+/**
  * Vorlaufzeit in Tagen, ab der ein MHD als "bald erreicht" gilt – aus
  * REPORT_EXPIRY_DAYS in der .env (1–365, sonst 90). Derselbe Wert wie im
  * Wochenbericht (siehe ReportConfig), damit Mail und MHD-Übersicht

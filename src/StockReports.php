@@ -7,7 +7,7 @@ use PDO;
 /**
  * Auswertungen über die Lagerbewegungen – nur lesend:
  *
- * - "Heute": Ausbuchungen, Entsorgungen, Umbuchungen des Tages
+ * - "Heute": Ausbuchungen, Entsorgungen, Umbuchungen, Einlagerungen des Tages
  * - MHD-Übersicht: abgelaufene und bald ablaufende Chargen
  * - Wochenbericht: Entnahmen eines Zeitraums, Unterschreitung der
  *   Mindestbestände
@@ -34,6 +34,38 @@ class StockReports
      */
     public function getTodayIssues(): array
     {
+        return $this->todayBookings(['issue', 'issue_reversal'], -1);
+    }
+
+    /**
+     * Heutige Entsorgungen (`disposal`) je Artikel/Charge/Lagerort,
+     * abzüglich Rücknahmen (`disposal_reversal`).
+     */
+    public function getTodayDisposals(): array
+    {
+        return $this->todayBookings(['disposal', 'disposal_reversal'], -1);
+    }
+
+    /**
+     * Heutige Einlagerungen (`receipt`) je Artikel/Charge/Lagerort,
+     * abzüglich Rücknahmen (`receipt_reversal`).
+     */
+    public function getTodayReceipts(): array
+    {
+        return $this->todayBookings(['receipt', 'receipt_reversal'], 1);
+    }
+
+    /**
+     * Heutige Buchungen der angegebenen Typen, netto je Artikel/Charge/
+     * Lagerort. $sign = -1 für Abgänge (Menge wird positiv geliefert),
+     * 1 für Zugänge; Zeilen mit netto nichts entfallen.
+     *
+     * @param string[] $types Buchung und ihre Rücknahme
+     */
+    private function todayBookings(array $types, int $sign): array
+    {
+        $placeholders = implode(', ', array_fill(0, count($types), '?'));
+
         $statement = $this->db->prepare(
             'SELECT
                 a.id AS article_id,
@@ -46,7 +78,7 @@ class StockReports
                 a.has_expiry,
                 b.expiry_date,
                 sl.name AS location_name,
-                ABS(SUM(sm.quantity)) AS quantity
+                ? * SUM(sm.quantity) AS quantity
              FROM stock_movements sm
              INNER JOIN articles a
                 ON a.id = sm.article_id
@@ -56,14 +88,14 @@ class StockReports
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl
                 ON sl.id = sm.location_id
-             WHERE sm.movement_type IN (\'issue\', \'issue_reversal\')
-             AND sm.created_at >= :day_start
-             AND sm.created_at < :day_end
+             WHERE sm.movement_type IN (' . $placeholders . ')
+             AND sm.created_at >= ?
+             AND sm.created_at < ?
              GROUP BY
                 sm.article_id,
                 sm.batch_id,
                 sm.location_id
-             HAVING SUM(sm.quantity) < 0
+             HAVING ? * SUM(sm.quantity) > 0
              ORDER BY
                 a.name COLLATE NOCASE,
                 CASE
@@ -73,60 +105,17 @@ class StockReports
                 b.expiry_date'
         );
 
-        $statement->execute($this->todayUtcRange());
+        [$dayStart, $dayEnd] = array_values($this->todayUtcRange());
 
-        return $statement->fetchAll();
-    }
-
-    /**
-     * Heutige Entsorgungen (`disposal`) je Artikel/Charge/Lagerort,
-     * abzüglich Rücknahmen (`disposal_reversal`).
-     */
-    public function getTodayDisposals(): array
-    {
-        $statement = $this->db->prepare(
-            'SELECT
-                a.id AS article_id,
-                sm.batch_id,
-                sl.id AS location_id,
-                a.name AS article_name,
-                a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
-                a.has_expiry,
-                b.expiry_date,
-                sl.name AS location_name,
-                -SUM(sm.quantity) AS quantity
-             FROM stock_movements sm
-             INNER JOIN articles a
-                ON a.id = sm.article_id
-             LEFT JOIN units u
-                ON u.id = a.unit_id
-             LEFT JOIN batches b
-                ON b.id = sm.batch_id
-             INNER JOIN storage_locations sl
-                ON sl.id = sm.location_id
-             WHERE sm.movement_type IN (\'disposal\', \'disposal_reversal\')
-             AND sm.created_at >= :day_start
-             AND sm.created_at < :day_end
-             GROUP BY
-                sm.article_id,
-                sm.batch_id,
-                sm.location_id
-             HAVING SUM(sm.quantity) < 0
-             ORDER BY
-                a.name COLLATE NOCASE,
-                b.expiry_date'
-        );
-
-        $statement->execute($this->todayUtcRange());
+        $statement->execute([$sign, ...$types, $dayStart, $dayEnd, $sign]);
 
         return $statement->fetchAll();
     }
 
     /**
      * Heutige Umbuchungen je Artikel/Charge und Richtung (von → nach),
-     * abzüglich Rücknahmen.
+     * abzüglich Rücknahmen – nach Richtung sortiert (Lagerort-Reihenfolge),
+     * damit "Heute" sie je Richtung gruppieren kann.
      *
      * Eine Umbuchung besteht aus zwei Bewegungen (Abgang und Zugang) mit
      * derselben transfer_id, siehe transferPair(). Eine
@@ -145,6 +134,7 @@ class StockReports
                 t.from_location_id,
                 t.to_location_id,
                 a.name AS article_name,
+                a.article_number,
                 COALESCE(u.name, \'Stück\') AS unit,
                 COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 a.has_expiry,
@@ -190,6 +180,10 @@ class StockReports
                 t.to_location_id
              HAVING SUM(t.quantity) > 0
              ORDER BY
+                src.sort_order,
+                src.name COLLATE NOCASE,
+                dst.sort_order,
+                dst.name COLLATE NOCASE,
                 a.name COLLATE NOCASE,
                 b.expiry_date'
         );
@@ -387,7 +381,9 @@ class StockReports
      * deren MHD bereits abgelaufen ist oder innerhalb der nächsten
      * `$withinDays` Tage abläuft – für die globale MHD-Übersicht.
      *
-     * Älteste MHD zuerst, damit die dringendsten Fälle oben stehen.
+     * Älteste MHD zuerst, damit die dringendsten Fälle oben stehen
+     * (Wochenbericht); die MHD-Übersicht sortiert selbst nach Lagerort und
+     * Kategorie um.
      */
     public function getExpiringBatches(int $withinDays = 90): array
     {
@@ -400,6 +396,10 @@ class StockReports
                 COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
                 sl.id AS location_id,
                 sl.name AS location_name,
+                sl.sort_order AS location_sort_order,
+                c.name AS category_name,
+                c.color AS category_color,
+                c.sort_order AS category_sort_order,
                 b.id AS batch_id,
                 b.expiry_date,
                 SUM(sm.quantity) AS quantity
@@ -412,6 +412,8 @@ class StockReports
                 ON b.id = sm.batch_id
              INNER JOIN storage_locations sl
                 ON sl.id = sm.location_id
+             LEFT JOIN article_categories c
+                ON c.id = a.category_id
              WHERE a.active = 1
              AND sl.active = 1
              AND b.expiry_date <= :until

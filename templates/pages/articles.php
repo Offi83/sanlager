@@ -127,6 +127,7 @@
                     <tr>
                         <th>Artikel</th>
                         <th>Artikelnummer</th>
+                        <th>MHD</th>
                         <th>Bestand</th>
                     </tr>
 
@@ -151,9 +152,9 @@
 
                             <tr
                                 class="article-category-row"
-                                style="background-color: <?= h($item['category_color'] ?? '#64748b') ?>;"
+                                style="<?= h(categoryStyle($item['category_color'] ?? null)) ?>"
                             >
-                                <th colspan="3">
+                                <th colspan="4">
                                     <span class="article-category-name">
                                         <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
                                     </span>
@@ -196,6 +197,10 @@
 
                             <td>
                                 <?= h($item['article_number']) ?>
+                            </td>
+
+                            <td class="article-expiry-cell">
+                                <?= (int) $item['has_expiry'] === 1 ? 'ja' : 'nein' ?>
                             </td>
 
                             <td class="article-stock-cell">

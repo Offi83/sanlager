@@ -38,6 +38,7 @@ class StockActions
             'undo_issue' => $this->undoToday('issue', $input),
             'undo_transfer' => $this->undoToday('transfer', $input),
             'undo_disposal' => $this->undoToday('disposal', $input),
+            'undo_receipt' => $this->undoToday('receipt', $input),
             'dispose_batch' => $this->disposeBatch($input),
             'inventory' => $this->inventory($input),
             'sort_out_expired' => $this->sortOutExpired($input),
@@ -678,7 +679,7 @@ class StockActions
      * `batch_id` leer/0 bedeutet "ohne MHD". Bei Umbuchungen bezeichnet
      * `location_id` die ursprüngliche Quelle, `to_location_id` das Ziel.
      *
-     * @param string $kind issue|transfer|disposal
+     * @param string $kind issue|transfer|disposal|receipt
      */
     private function undoToday(string $kind, array $input): ActionResult
     {
@@ -720,6 +721,10 @@ class StockActions
             $this->stock->reverseTodayDisposal($articleId, $batchId, $locationId, $quantity);
 
             $done = 'Entsorgung rückgängig, wieder in ' . $location['name'];
+        } elseif ($kind === 'receipt') {
+            $this->stock->reverseTodayReceipt($articleId, $batchId, $locationId, $quantity);
+
+            $done = 'Einlagerung rückgängig, aus ' . $location['name'] . ' entfernt';
         } else {
             $this->stock->reverseTodayIssue($articleId, $batchId, $locationId, $quantity);
 

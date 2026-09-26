@@ -506,6 +506,47 @@ class StockRepositoryTest extends TestCase
         $this->stock->reverseTodayDisposal($this->articleId, $expired, $this->mainId, 1);
     }
 
+    public function testReverseTodayReceipt(): void
+    {
+        $batch = $this->receive(5, $this->day('+2 years'));
+
+        $receipts = $this->reports->getTodayReceipts();
+        $this->assertCount(1, $receipts);
+        $this->assertSame(5, (int) $receipts[0]['quantity']);
+        $this->assertSame($this->mainId, (int) $receipts[0]['location_id']);
+
+        // Einlagerungen von gestern erscheinen nicht.
+        $this->db->exec("UPDATE stock_movements SET created_at = datetime('now', '-2 days')");
+        $this->assertSame([], $this->reports->getTodayReceipts());
+        $batch = $this->receive(5, $this->day('+2 years'));
+
+        $this->stock->reverseTodayReceipt($this->articleId, $batch, $this->mainId, 2);
+
+        $this->assertSame(8, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
+        $this->assertSame(3, (int) $this->reports->getTodayReceipts()[0]['quantity']);
+
+        // Nicht mehr zurücknehmen, als heute eingelagert wurde.
+        try {
+            $this->stock->reverseTodayReceipt($this->articleId, $batch, $this->mainId, 4);
+            $this->fail('Mehr zurückgenommen als heute eingelagert.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('heute wurden davon nur 3 eingelagert', $exception->getMessage());
+        }
+
+        $this->stock->reverseTodayReceipt($this->articleId, $batch, $this->mainId, 3);
+        $this->assertSame([], $this->reports->getTodayReceipts());
+    }
+
+    public function testReverseTodayReceiptNeedsStockStillThere(): void
+    {
+        $this->receive(2, null);
+        $this->stock->transferOldest($this->articleId, $this->mainId, $this->boxId, null, 2);
+
+        $this->expectException(RuntimeException::class);
+
+        $this->stock->reverseTodayReceipt($this->articleId, null, $this->mainId, 1);
+    }
+
     public function testMinimumAtDeactivatedLocationIsIgnored(): void
     {
         $this->receive(5, null);
