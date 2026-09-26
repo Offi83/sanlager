@@ -57,6 +57,8 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 Die Screenshots zeigen Beispieldaten im Format des Raspberry-Pi-Displays (800×480). Sie werden mit `./script/screenshots.sh` erzeugt (siehe [Entwicklung](docs/11-entwicklung.md#screenshots-aktualisieren)).
 
+Dieselben Beispieldaten liegen als fertige Datenbank unter [`beispieldaten/beispieldaten.sqlite`](beispieldaten/beispieldaten.sqlite) – zum Ausprobieren, ohne eigene Daten anzulegen (siehe [Beispieldatenbank](docs/11-entwicklung.md#beispieldatenbank)).
+
 *Buchen – hier eine Umbuchung vom Hauptlager in einen Rucksack. Auf Geräten mit Kamera erscheint zusätzlich „Scanner starten“.*
 ![Buchen](images/buchen.png)
 

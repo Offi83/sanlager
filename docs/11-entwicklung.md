@@ -8,6 +8,8 @@ Die wichtigsten Verzeichnisse des Projekts:
 
 ```text
 sanlager/
+├── beispieldaten/
+│   └── beispieldaten.sqlite   (Beispieldatenbank, von push.sh erzeugt)
 ├── bin/
 │   ├── backup.php
 │   ├── migrate.php
@@ -189,7 +191,7 @@ Die Screenshots im README (`images/*.png`) werden automatisch erzeugt:
 
 Das Skript
 
-1. legt mit `script/demo-data.php` eine **Demo-Datenbank mit Beispieldaten** an (Hauptlager, drei Rucksäcke, 15 Artikel, abgelaufene und bald ablaufende Chargen, Mindestbestände, Entnahmen von heute),
+1. legt mit `script/demo-data.php` eine **Demo-Datenbank mit Beispieldaten** an (Hauptlager, drei Rucksäcke, 17 Artikel in den Kategorien des Einsatzes, abgelaufene und bald ablaufende Chargen, Mindestbestände, Entnahmen, Umbuchungen und eine Lieferung von heute),
 2. startet dafür einen eigenen PHP-Entwicklungsserver,
 3. nimmt die Seiten mit Chrome/Chromium im Headless-Modus auf, im Format des Pi-Displays (800×480, doppelte Auflösung). Seiten mit zwei Spalten werden breiter aufgenommen, damit beide Spalten zu sehen sind,
 4. räumt Demo-Datenbank und Server anschließend wieder auf.
@@ -213,12 +215,28 @@ Aufruf:
 ./script/push.sh "Beschreibung der Änderung"
 ```
 
-Das Skript führt dabei die notwendigen Git-Schritte aus:
+Das Skript führt dabei die notwendigen Schritte aus:
 
-1. Status prüfen
-2. Änderungen hinzufügen
-3. Commit erstellen
-4. Änderungen nach GitHub übertragen
+1. Status prüfen (ohne Änderungen bricht es hier ab)
+2. **Beispieldatenbank** `beispieldaten/beispieldaten.sqlite` neu erzeugen, siehe [Beispieldatenbank](#beispieldatenbank)
+3. Änderungen hinzufügen
+4. Commit erstellen
+5. Änderungen nach GitHub übertragen
+
+## Beispieldatenbank
+
+Im Repository liegt unter `beispieldaten/beispieldaten.sqlite` eine fertige Datenbank mit Beispieldaten – dieselben wie in den Screenshots (`script/demo-data.php`). `script/push.sh` erzeugt sie bei jedem Push neu, damit sie immer zum aktuellen Stand von Code und Migrationen passt.
+
+Die MHDs und die Buchungen „von heute“ beziehen sich auf den Tag, an dem sie erzeugt wurde. Wer sie später öffnet, sieht die Buchungen deshalb nicht mehr unter „Heute“, und es ist inzwischen mehr abgelaufen. Für einen tagesaktuellen Stand einfach selbst neu anlegen (siehe [Screenshots aktualisieren](#screenshots-aktualisieren)).
+
+Ausprobieren, ohne die eigene Datenbank anzufassen – eine Kopie verwenden, da die App beim Buchen hineinschreibt:
+
+```bash
+cp beispieldaten/beispieldaten.sqlite /tmp/sanlager-test.sqlite
+DB_DATABASE=/tmp/sanlager-test.sqlite php -d variables_order=EGPCS -S localhost:8080 -t public
+```
+
+Dann <http://localhost:8080> öffnen. Die produktive `database/database.sqlite` bleibt unberührt.
 
 ## Änderungen auf dem Server bereitstellen
 
