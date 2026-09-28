@@ -32,7 +32,7 @@ Nur für die Entwicklung (nicht auf dem Produktivserver): phpunit/phpunit (BSD-3
 
 ## Separat installiert (optional)
 
-Nicht Teil von SanLager und nicht per Composer bezogen, sondern bei Bedarf selbst zu installieren (siehe [Installation → Etikettendrucker](docs/05-installation.md#etikettendrucker-optional)):
+Nicht Teil von SanLager und nicht per Composer bezogen, sondern bei Bedarf selbst zu installieren (siehe [Etikettendrucker](docs/09-etikettendrucker.md)):
 
 | Programm | Zweck | Lizenz |
 |---|---|---|

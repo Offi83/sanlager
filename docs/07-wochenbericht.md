@@ -52,11 +52,7 @@ MAILER_DSN=smtps://lager%40example.org:geheim@smtp.example.org:465
 
 Das Zertifikat des Mailservers wird immer geprüft. Nur für einen internen Mailserver mit selbstsigniertem Zertifikat kann die Prüfung mit `&verify_peer=false` (bzw. `?verify_peer=false`) abgeschaltet werden – für Mailserver im Internet nicht empfehlenswert.
 
-Die `.env` sollte nur für den Server-Benutzer lesbar sein:
-
-```bash
-chmod 600 .env
-```
+Die `.env` enthält damit das SMTP-Passwort. Sie darf nur für den eigenen Benutzer und den Webserver lesbar sein (`640`, Gruppe `www-data`), siehe [Installation → Konfiguration](05-installation.md#2-konfiguration-env) – nicht `600`, sonst liest die Weboberfläche sie nicht mehr.
 
 ---
 
@@ -90,7 +86,7 @@ crontab -e
 0 7 * * 1  cd /var/www/sanlager && php bin/weekly-report.php >> database/weekly-report.log 2>&1
 ```
 
-Den Pfad `/var/www/sanlager` durch das tatsächliche Projektverzeichnis ersetzen. Der Cron-Job muss unter einem Benutzer laufen, der die Datenbank und die `.env` lesen darf, typischerweise derselbe wie der Webserver.
+Den Pfad `/var/www/sanlager` durch das tatsächliche Projektverzeichnis ersetzen. Wie bei der [Datensicherung](06-datensicherung.md#automatisch-cron) läuft der Job unter dem eigenen Benutzer (Mitglied der Gruppe `www-data`); der darf Datenbank und `.env` lesen und nach `database/` loggen.
 
 Die Entnahmen umfassen immer die sieben vollen Tage vor dem Lauf; bei einem Lauf am Montag also Montag bis Sonntag der Vorwoche.
 

@@ -1,6 +1,8 @@
 # Raspberry Pi Terminal
 
-Einrichtung eines Raspberry Pi 4B mit offiziellem 7" Touch Display als festes Buchungsterminal im Lager. Nach dem Einschalten startet die grafische Oberfläche, dreht das Display um 180° und öffnet SanLager in Chromium im Kiosk-Modus. Die Anmeldung per HTTP Basic Auth (`.htaccess`) übernimmt ein kleines Skript über das Chrome DevTools Protocol.
+Einrichtung eines Raspberry Pi 4B mit offiziellem 7" Touch Display als festes Buchungsterminal im Lager. Nach dem Einschalten startet die grafische Oberfläche, dreht das Display um 180° und öffnet SanLager in Chromium im Kiosk-Modus. Ist SanLager mit HTTP Basic Auth (`.htaccess`) geschützt, übernimmt die Anmeldung ein kleines Skript über das Chrome DevTools Protocol.
+
+Der Pi ist hier nur Anzeige: SanLager selbst läuft auf einem Server, eingerichtet nach [Installation](05-installation.md). Das kann ein anderer Rechner sein oder – mit Apache und PHP nach derselben Anleitung – auch der Pi selbst.
 
 ![Buchen-Seite auf dem Pi-Display](../images/buchen.png)
 
@@ -17,7 +19,7 @@ Die Oberfläche ist auf 800×480 abgestimmt. Für den Betrieb am Pi wichtig:
 * Gehäuse für Pi und Display
 * microSD-Karte
 * optional: kleiner Lautsprecher für die Töne beim Buchen, z. B. USB-Lautsprecher oder Aktivlautsprecher an der 3,5-mm-Klinkenbuchse des Pi. Tonausgabe ggf. unter `sudo raspi-config` → *System Options* → *Audio* auf diesen Ausgang stellen.
-* optional: Etikettendrucker Brother QL-810Wc (oder ein anderes QL-Modell) per WLAN oder USB – Einrichtung unter [Installation → Etikettendrucker](05-installation.md#etikettendrucker-optional) (noch nicht mit echtem Gerät getestet)
+* optional: Etikettendrucker Brother QL-810Wc (oder ein anderes QL-Modell), siehe [Etikettendrucker](09-etikettendrucker.md) (noch nicht mit echtem Gerät getestet). Gedruckt wird vom SanLager-Server aus: Ist der Pi nur Anzeige für einen anderen Server, den Drucker per WLAN anbinden – USB am Pi geht nur, wenn SanLager selbst auf dem Pi läuft.
 
 ## Software
 
@@ -82,7 +84,7 @@ chmod 700 ~/.config/sanlager
 
 ### Zugangsdaten
 
-Die SanLager-Webseite verwendet HTTP Basic Authentication.
+Ist die SanLager-Webseite mit HTTP Basic Auth geschützt (siehe [Installation → Zugriffsschutz](05-installation.md#zugriffsschutz-optional)), meldet der Helper aus Schritt 5 den Pi damit an.
 
 Die Zugangsdaten werden **nicht** in die URL und **nicht** in das Python-Programm geschrieben.
 
@@ -99,7 +101,7 @@ BENUTZERNAME=<BENUTZERNAME>
 PASSWORT=<PASSWORT>
 ```
 
-Die echten Zugangsdaten entsprechend einsetzen.
+Die echten Zugangsdaten entsprechend einsetzen. **Ohne Zugriffsschutz** die Datei trotzdem anlegen, dann mit beliebigen Platzhaltern (z. B. `BENUTZERNAME=-`): Der Helper liest sie beim Start, fragt sie aber nie ab.
 
 Datei schützen:
 
@@ -369,6 +371,30 @@ python3 -m py_compile ~/.config/sanlager/start-chromium.py
 ```
 
 Bei erfolgreicher Prüfung gibt es keine Ausgabe.
+
+### Adresse anpassen
+
+`URL` im Skript auf die eigene SanLager-Adresse setzen:
+
+* **SanLager läuft auf einem anderen Server:** dessen Adresse, z. B. `https://lager.example.org`. Hat der Server ein Zertifikat einer öffentlichen Stelle (z. B. Let's Encrypt), ist sonst nichts zu tun. Bei einem **eigenen Zertifikat** im lokalen Netz siehe unten.
+* **SanLager läuft auf dem Pi selbst:** `URL = "http://localhost"`. Über `localhost` erlaubt Chromium die Kamera auch ohne HTTPS, ein Zertifikat ist nicht nötig, und Basic Auth braucht es für den Pi selbst auch nicht (die `auth`-Datei dann mit Platzhaltern, siehe Schritt 4). Sollen auch Handys im Netz buchen, braucht der Pi für sie trotzdem HTTPS, siehe [Installation → HTTPS](05-installation.md#https).
+
+### Eigenes Zertifikat
+
+Ein selbst ausgestelltes Zertifikat kennt Chromium nicht. Statt SanLager zeigt der Kiosk dann nur die Warnung „Die Verbindung ist nicht privat“ – und der Helper kommt nicht daran vorbei. Das Zertifikat deshalb einmal auf dem Pi als vertrauenswürdig eintragen (Chromium unter Linux liest dafür die Zertifikatsdatenbank `~/.pki/nssdb` des Benutzers, auch mit eigenem Profil):
+
+```bash
+sudo apt install -y libnss3-tools
+mkdir -p ~/.pki/nssdb
+certutil -d sql:$HOME/.pki/nssdb -N --empty-password   # nur, wenn es die Datenbank noch nicht gibt
+certutil -d sql:$HOME/.pki/nssdb -A -t "P,," -n sanlager -i sanlager.crt
+```
+
+`sanlager.crt` ist das Zertifikat des Servers (nicht der private Schlüssel). Stammt es von einer eigenen Zertifizierungsstelle, stattdessen deren Zertifikat mit `-t "C,,"` eintragen. Das Zertifikat muss den Namen bzw. die IP-Adresse aus `URL` als „Subject Alternative Name“ enthalten, sonst lehnt Chromium es trotzdem ab.
+
+Prüfen: Chromium auf dem Pi normal starten und die Adresse öffnen – es darf keine Warnung erscheinen. Läuft ein Zertifikat ab oder wird erneuert, muss das neue ebenso eingetragen werden.
+
+> **Noch nicht auf dem Pi getestet.** Die Befehle folgen der Chromium-Anleitung für Linux (Zertifikatsverwaltung über NSS).
 
 ---
 

@@ -116,7 +116,7 @@ Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
 * **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
 * **`SortOrder.php` / `SortOrderAction.php`** – Reihenfolge per Drag & Drop (Spalte `sort_order`), gemeinsam für Kategorien, Lagerorte und Einheiten: `SortOrder` im Repository (`reorder()`, neue Einträge ans Ende), `SortOrderAction` für die zugehörige POST-Aktion (antwortet immer mit JSON).
-* **`Label*.php`** – Etikettendrucker (`LABEL_OUTPUT=printer`): `LabelConfig` liest und prüft die Einstellungen aus der `.env`, `LabelImage` zeichnet ein Etikett als PNG (GD, nur Schwarz/Rot/Weiß), `LabelPrinter` ruft `brother_ql` auf und übersetzt dessen Fehlermeldungen, `LabelActions` ist die POST-Aktion `print_labels`. Die Vorschau liefert `?page=label_image` (nur das Bild, kein HTML) – dasselbe Bild zeigen auch die A4-Bögen. `LabelSheetPdf` setzt die A4-Bögen als PDF zusammen (`?page=labels_pdf`, ohne PDF-Bibliothek: die PNG-Bilddaten werden unverändert eingebettet), weil der Browserdruck über den Systemdialog die Ränder des Druckertreibers übernimmt und der Bogen dann verrutscht. In den Tests ersetzt eine Testfunktion bzw. `tests/fixtures/fake-brother-ql` den Drucker – mit einem echten Gerät ist das noch nicht getestet, siehe [Installation → Etikettendrucker](05-installation.md#etikettendrucker-optional).
+* **`Label*.php`** – Etikettendrucker (`LABEL_OUTPUT=printer`): `LabelConfig` liest und prüft die Einstellungen aus der `.env`, `LabelImage` zeichnet ein Etikett als PNG (GD, nur Schwarz/Rot/Weiß), `LabelPrinter` ruft `brother_ql` auf und übersetzt dessen Fehlermeldungen, `LabelActions` ist die POST-Aktion `print_labels`. Die Vorschau liefert `?page=label_image` (nur das Bild, kein HTML) – dasselbe Bild zeigen auch die A4-Bögen. `LabelSheetPdf` setzt die A4-Bögen als PDF zusammen (`?page=labels_pdf`, ohne PDF-Bibliothek: die PNG-Bilddaten werden unverändert eingebettet), weil der Browserdruck über den Systemdialog die Ränder des Druckertreibers übernimmt und der Bogen dann verrutscht. In den Tests ersetzt eine Testfunktion bzw. `tests/fixtures/fake-brother-ql` den Drucker – mit einem echten Gerät ist das noch nicht getestet, siehe [Etikettendrucker](09-etikettendrucker.md).
 * **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.
 * **`helpers.php`** – kleine globale Funktionen, die sowohl in den Vorlagen als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen:
   * Ausgabe: `h()` (HTML-Escaping), `icon()`, `formatDate()`, `formatExpiry()`, `categoryStyle()` (Kategoriefarbe mit lesbarer Schriftfarbe)
@@ -146,24 +146,30 @@ Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`) s
 
 ### `docs/`
 
-Enthält die technische Dokumentation des Projekts.
+Enthält die Dokumentation zu Einrichtung, Betrieb und Technik (Übersicht im README).
 
 ## Entwicklung lokal
 
-Das Projekt kann lokal über GitHub ausgecheckt werden:
+Zum Entwickeln und Ausprobieren auf dem eigenen Rechner (Linux oder macOS) reicht PHP mit den Erweiterungen aus [Installation → Voraussetzungen](05-installation.md#voraussetzungen); Apache ist nicht nötig. Das Projekt kann lokal über GitHub ausgecheckt werden:
 
 ```bash
 git clone https://github.com/Offi83/sanlager.git
 cd sanlager
 ```
 
-Anschließend müssen die Abhängigkeiten installiert werden:
+Anschließend die Abhängigkeiten installieren – anders als auf dem Server mit den Entwicklungswerkzeugen (PHPUnit):
 
 ```bash
 composer install
 ```
 
-Die lokale SQLite-Datenbank (`database/database.sqlite`) wird beim ersten Aufruf automatisch angelegt. Gestartet wird mit `./start.sh` (siehe [Installation](05-installation.md#startsh)).
+Gestartet wird mit
+
+```bash
+./start.sh
+```
+
+Das Skript zeigt die PHP- und SQLite-Version und startet den PHP-Entwicklungsserver unter <http://localhost:8080> (beenden mit Strg+C). Die lokale SQLite-Datenbank (`database/database.sqlite`) wird beim ersten Aufruf automatisch angelegt. Ohne `.env` gelten die Standardwerte; wer Fehlerdetails im Browser sehen will, kopiert `.env.example` nach `.env` und setzt dort `APP_DEBUG=true`. Der PHP-Entwicklungsserver ist nur für Entwicklung und Tests gedacht, nicht für den Betrieb.
 
 Zum Ausprobieren mit Beispieldaten eignet sich die [Beispieldatenbank](#beispieldatenbank).
 
@@ -191,19 +197,13 @@ Dann <http://localhost:8080> öffnen. Die produktive `database/database.sqlite` 
 
 ## Änderungen testen
 
-Vor dem Commit sollten Änderungen lokal getestet werden.
-
-Für PHP kann beispielsweise die Syntax geprüft werden:
-
-```bash
-php -l public/index.php
-```
-
-Die automatisierten Tests (PHPUnit) laufen gegen eine frische In-Memory-Datenbank, auf die alle Migrationen angewendet werden. Die lokale `database.sqlite` wird dabei nicht verändert:
+Vor dem Commit alle Tests laufen lassen:
 
 ```bash
 composer test
 ```
+
+Die automatisierten Tests (PHPUnit) laufen gegen eine frische In-Memory-Datenbank, auf die alle Migrationen angewendet werden. Die lokale `database.sqlite` wird dabei nicht verändert.
 
 Die Tests liegen unter `tests/`:
 

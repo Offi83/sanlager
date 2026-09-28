@@ -6,7 +6,7 @@ use RuntimeException;
 
 /**
  * Einstellungen für den Etikettendruck, ausschließlich aus der .env-Datei
- * (siehe .env.example und docs/05-installation.md#etikettendrucker).
+ * (siehe .env.example und docs/09-etikettendrucker.md).
  *
  * LABEL_OUTPUT=a4 (Standard) druckt A4-Bögen als PDF (LabelSheetPdf).
  * LABEL_OUTPUT=printer schickt die Etiketten

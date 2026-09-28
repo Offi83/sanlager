@@ -61,7 +61,7 @@ crontab -e
 0 2 * * *  cd /var/www/sanlager && php bin/backup.php >> database/backup.log 2>&1
 ```
 
-Den Pfad durch das tatsächliche Projektverzeichnis ersetzen. Das Log liegt bewusst unter `database/` (wie beim [Wochenbericht](07-wochenbericht.md#automatischer-versand-cron)) und nicht im Sicherungsordner: Gibt es den Ordner hinter `>>` nicht – etwa `backups/`, wenn `BACKUP_DIR` auf einen USB-Stick zeigt –, startet die Shell das Skript gar nicht, und es wird unbemerkt nie gesichert. Der Cron-Job muss unter einem Benutzer laufen, der die Datenbank lesen und in den Sicherungsordner schreiben darf. Ab und zu einen Blick ins Log werfen – eine Sicherung, die unbemerkt nicht läuft, hilft im Ernstfall nicht.
+Den Pfad durch das tatsächliche Projektverzeichnis ersetzen. Das Log liegt bewusst unter `database/` (wie beim [Wochenbericht](07-wochenbericht.md#automatischer-versand-cron)) und nicht im Sicherungsordner: Gibt es den Ordner hinter `>>` nicht – etwa `backups/`, wenn `BACKUP_DIR` auf einen USB-Stick zeigt –, startet die Shell das Skript gar nicht, und es wird unbemerkt nie gesichert. `crontab -e` richtet den Job für den eigenen Benutzer ein; der muss wie unter [Installation](05-installation.md#1-code-holen) beschrieben in der Gruppe `www-data` sein, damit er die Datenbank lesen und nach `database/` loggen darf, und in den Sicherungsordner schreiben können. Ab und zu einen Blick ins Log werfen – eine Sicherung, die unbemerkt nicht läuft, hilft im Ernstfall nicht.
 
 ---
 
@@ -78,8 +78,8 @@ Den Pfad durch das tatsächliche Projektverzeichnis ersetzen. Das Log liegt bewu
 
    ```bash
    cp /media/usb/sanlager-backups/sanlager-2026-09-23_020000.sqlite database/database.sqlite
-   chown www-data:www-data database/database.sqlite
-   chmod 664 database/database.sqlite
+   sudo chown www-data:www-data database/database.sqlite
+   sudo chmod 664 database/database.sqlite
    ```
 
    Benutzer und Gruppe (`www-data`) an den eigenen Webserver anpassen.

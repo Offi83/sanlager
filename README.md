@@ -38,7 +38,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 **Verwaltung**
 * Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck; die Artikelliste zeigt je Artikel, ob er ein MHD hat
 * Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), mit „alle 1×“ je Kategorie oder für alle Artikel; die Etiketten sehen aus wie die vom Etikettendrucker (roter Kategorie-Balken, Name, Artikelnummer, QR-Code); gedruckt wird ein PDF, damit nichts verrutscht
-* Etikettendrucker (optional): Brother QL-Serie per WLAN oder USB, auch rot/schwarz, Rollenbreite und Etikettenlänge einstellbar – noch nicht mit echtem Gerät getestet (siehe [Installation](docs/05-installation.md#etikettendrucker-optional))
+* Etikettendrucker (optional): Brother QL-Serie per WLAN oder USB, auch rot/schwarz, Rollenbreite und Etikettenlänge einstellbar – noch nicht mit echtem Gerät getestet (siehe [Etikettendrucker](docs/09-etikettendrucker.md))
 * MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien, Einheiten und Lagerorte anlegen und sortieren – Einheiten mit Einzahl und Mehrzahl („1 Rolle“, „5 Rollen“)
 * Je Lagerort eine Packliste zum Ausdrucken (Soll, Ist je MHD, Kästchen zum Abhaken) und eine Inventur: gezählte Mengen eintragen, Abweichungen werden als Korrektur gebucht
@@ -138,7 +138,7 @@ Vorstellung, Funktionen und Aufbau stehen in diesem README: [Funktionen](#funkti
 
 ### 🛠️ Installation
 
-Voraussetzungen, Konfiguration, Webserver und Aktualisieren per `script/pull.sh`:
+Schritt für Schritt: Pakete, Code und `.env`, Rechte, Apache, erster Aufruf und Aktualisieren per `script/pull.sh`:
 
 ➡️ **[Installation](docs/05-installation.md)**
 
@@ -156,17 +156,15 @@ Einrichtung des wöchentlichen Berichts per E-Mail (SMTP-Zugang, Empfänger, Cro
 
 ### 🖥️ Raspberry Pi
 
-Einrichtung des Raspberry Pi als festes SanLager-Terminal:
-
-* Raspberry Pi OS
-* Touchscreen
-* Display-Drehung
-* Chromium im Kiosk-Modus
-* automatische Anmeldung
-* Autostart
-* Log zur Fehlersuche
+Raspberry Pi mit 7"-Touchdisplay als festes Buchungsterminal: Chromium im Kiosk-Modus mit automatischer Anmeldung und Autostart:
 
 ➡️ **[Raspberry-Pi-Terminal einrichten](docs/08-raspberry-pi.md)**
+
+### 🏷️ Etikettendrucker
+
+Optional: Brother QL per WLAN oder USB, auch rot/schwarz – Installation von `brother_ql`, Anschluss, Rollen und Einstellungen:
+
+➡️ **[Etikettendrucker einrichten](docs/09-etikettendrucker.md)**
 
 ### 🗄️ Datenbank
 
