@@ -14,6 +14,7 @@
 
 <script src="/js/vendor/html5-qrcode.min.js" defer></script>
 <script src="/js/sortable-list.js" defer></script>
+<script src="/js/expiry-check.js" defer></script>
 <script src="/js/booking.js" defer></script>
 <script src="/js/stock-form.js" defer></script>
 <script src="/js/article-number-suggestion.js" defer></script>

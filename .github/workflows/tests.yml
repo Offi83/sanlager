@@ -19,7 +19,7 @@ jobs:
         with:
           # Wie composer.json ("php": "^8.5") und der Produktivserver.
           php-version: '8.5'
-          extensions: pdo_sqlite, mbstring, intl
+          extensions: pdo_sqlite, mbstring, intl, gd
           coverage: none
           tools: composer
 

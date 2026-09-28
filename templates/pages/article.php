@@ -27,10 +27,11 @@
 
             <div class="actions">
 
+                <?php /* A4-Bögen im neuen Tab (Druckdialog), der Etikettendrucker braucht keinen. */ ?>
                 <a
                     href="?page=label&id=<?= (int) $article['id'] ?>"
                     class="button"
-                    target="_blank"
+                    <?= $labelConfig->usesPrinter() ? '' : 'target="_blank"' ?>
                 >
                     Etikett drucken
                 </a>

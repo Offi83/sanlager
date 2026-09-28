@@ -18,6 +18,9 @@ cd "$(dirname "$0")/.."
 
 PORT=8097
 BASE="http://localhost:${PORT}"
+# Zweiter Server mit Etikettendrucker (nur Vorschau, gedruckt wird nicht).
+PRINTER_PORT=8098
+PRINTER_BASE="http://localhost:${PRINTER_PORT}"
 OUT="images"
 DB="database/screenshots-demo.sqlite"
 TMP="$(mktemp -d)"
@@ -42,10 +45,12 @@ if [ -z "${CHROME:-}" ]; then
 fi
 
 cleanup() {
-    if [ -n "${SERVER_PID:-}" ]; then
-        kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
-    fi
+    for pid in "${SERVER_PID:-}" "${PRINTER_SERVER_PID:-}"; do
+        if [ -n "$pid" ]; then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
 
     rm -rf "$TMP" "$DB"
 }
@@ -57,6 +62,10 @@ php script/demo-data.php "$DB"
 
 DB_DATABASE="$DB" php -d variables_order=EGPCS -S "localhost:${PORT}" -t public >/dev/null 2>&1 &
 SERVER_PID=$!
+
+DB_DATABASE="$DB" LABEL_OUTPUT=printer LABEL_PRINTER=tcp://192.0.2.10:9100 LABEL_RED=true \
+    php -d variables_order=EGPCS -S "localhost:${PRINTER_PORT}" -t public >/dev/null 2>&1 &
+PRINTER_SERVER_PID=$!
 sleep 1
 
 # Nimmt eine URL auf: shot <datei> <url> [breite] [höhe]
@@ -108,7 +117,9 @@ id_of() {
 
 MAIN_ID=$(id_of storage_locations "name = 'Hauptlager'")
 BAG_ID=$(id_of storage_locations "name = 'Rucksack 3'")
+KIT_ID=$(id_of storage_locations "name = 'Rucksack 1'")
 ARTICLE_ID=$(id_of articles "article_number = 'verb-vp-m'")
+CATEGORY_ID=$(sqlite3 "$DB" "SELECT category_id FROM articles WHERE article_number = 'verb-vp-m'")
 
 echo "Screenshots:"
 
@@ -132,6 +143,18 @@ shot auffuellen.png "${BASE}/?page=restock"
 shot artikel.png "${BASE}/?page=articles"
 
 shot artikel-detail.png "${BASE}/?page=article&id=${ARTICLE_ID}"
+
+# Lagerort-Werkzeuge: Inventur am Pi-Display, Packliste höher
+# (A4-Seite zum Ausdrucken, zeigt so mehr als nur den Kopf).
+shot inventur.png "${BASE}/?page=inventory&id=${KIT_ID}"
+shot packliste.png "${BASE}/?page=packlist&id=${KIT_ID}" 800 1130
+
+# Sammeletiketten: Druckansicht einer Kategorie (je Artikel 1×), breiter,
+# damit der ganze A4-Bogen (210 mm) ins Bild passt.
+shot etiketten.png "${BASE}/?page=labels&category=${CATEGORY_ID}&print=1" 1024 1200
+
+# Einzeletikett mit Etikettendrucker (rot/schwarz, 62 × 120 mm): Vorschau.
+shot etikettendrucker.png "${PRINTER_BASE}/?page=label&id=${ARTICLE_ID}"
 
 # Breiter aufgenommen, damit die Cards nebeneinander stehen
 # (bei 800 px brechen sie untereinander um).

@@ -26,7 +26,7 @@ final class ActionResult
     /**
      * @param string|null $message Meldung für die Zielseite (per Session,
      *                             nicht in der Adresse, siehe flash())
-     * @param string $messageType success|error
+     * @param string $messageType success|error|caution (orange, z. B. MHD bald erreicht)
      */
     public static function redirect(
         string $url,

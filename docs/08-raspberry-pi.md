@@ -1,14 +1,14 @@
 # Raspberry Pi Terminal
 
-Einrichtung eines Raspberry Pi 4B mit offiziellem 7" Raspberry Touch Screen als Darstellung & Buchungsterminal direkt im Lager.
-
-Der Raspberry Pi startet nach dem Einschalten automatisch die grafische Oberfläche, dreht das angeschlossene Raspberry Pi 7" Touch Display um 180° und öffnet die SanLager-Webanwendung in Chromium im Kiosk-Modus.
-
-Die durch `.htaccess` geschützte HTTP-Basic-Authentication wird automatisch über das Chrome DevTools Protocol (CDP) durchgeführt.
+Einrichtung eines Raspberry Pi 4B mit offiziellem 7" Touch Display als festes Buchungsterminal im Lager. Nach dem Einschalten startet die grafische Oberfläche, dreht das Display um 180° und öffnet SanLager in Chromium im Kiosk-Modus. Die Anmeldung per HTTP Basic Auth (`.htaccess`) übernimmt ein kleines Skript über das Chrome DevTools Protocol.
 
 ![Buchen-Seite auf dem Pi-Display](../images/buchen.png)
 
-Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite stehen Menge, Artikelnummer und beim Einlagern das MHD in der ersten Zeile, Von, Nach und der Button in der zweiten; darüber zeigt ein farbiger Balken die Buchungsrichtung (rot = Ausbuchen, blau = Umbuchen, grün = Einlagern). Die gewählte Richtung – beim Einlagern auch das MHD – bleibt nach jeder Buchung erhalten, sodass mit einem **Hand-Barcodescanner** (tippt die Nummer ein und sendet Enter) mehrere Artikel nacheinander in dieselbe Richtung gebucht werden können. Die Menge lässt sich ohne Tastatur mit − / + einstellen; der Cursor bleibt dabei im Feld Artikelnummer, und nach der Buchung steht die Menge wieder auf 1. Der Button „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt – ohne Kamera bleibt er ausgeblendet. Jede Buchung wird ohne Neuladen der Seite bestätigt, mit kurzem Ton (Lautsprecher-Knopf neben dem Balken schaltet ihn ab). Weder der Pi 4 noch das 7"-Display haben einen eingebauten Lautsprecher – für die Töne ist ein kleiner Lautsprecher nötig (siehe Hardware), ohne ihn bleibt es beim Hinweis auf dem Display. Wurde abgelaufene Ware gebucht, erscheint ein roter Alarm, der angetippt werden muss – ein Enter vom Hand-Scanner löst darin nichts aus.
+Die Oberfläche ist auf 800×480 abgestimmt. Für den Betrieb am Pi wichtig:
+
+* **Hand-Barcodescanner:** Richtung (und beim Einlagern das MHD) bleiben nach jeder Buchung stehen – so lassen sich viele Artikel nacheinander scannen. Ein Enter vom Scanner löst im Alarm bei abgelaufener Ware nichts aus; der muss angetippt werden.
+* **Kamera:** „Scanner starten“ erscheint nur, wenn Chromium eine Kamera erkennt.
+* **Ton:** Pi 4 und Display haben keinen Lautsprecher – ohne einen (siehe Hardware) gibt es nur die Anzeige auf dem Display.
 
 ## Hardware
 
@@ -17,6 +17,7 @@ Die Oberfläche ist auf das 800×480-Display abgestimmt: Auf der Buchen-Seite st
 * Gehäuse für Pi und Display
 * microSD-Karte
 * optional: kleiner Lautsprecher für die Töne beim Buchen, z. B. USB-Lautsprecher oder Aktivlautsprecher an der 3,5-mm-Klinkenbuchse des Pi. Tonausgabe ggf. unter `sudo raspi-config` → *System Options* → *Audio* auf diesen Ausgang stellen.
+* optional: Etikettendrucker Brother QL-810Wc (oder ein anderes QL-Modell) per WLAN oder USB – Einrichtung unter [Installation → Etikettendrucker](05-installation.md#etikettendrucker-optional) (noch nicht mit echtem Gerät getestet)
 
 ## Software
 
@@ -457,8 +458,7 @@ Die relevante Konfiguration:
 ├── chromium-sanlager/
 │   └── ...
 ├── labwc/
-│   ├── autostart
-│   └── rc.xml
+│   └── autostart
 └── sanlager/
     ├── auth
     ├── start-chromium.py
@@ -471,5 +471,4 @@ Die relevante Konfiguration:
 | `start-chromium.py`  | Chromium-Kiosk und automatische Authentifizierung |
 | `start-chromium.log` | Start- und Fehlerprotokoll                        |
 | `labwc/autostart`    | Display-Rotation und Chromium-Start               |
-| `labwc/rc.xml`       | Touchscreen-Konfiguration                         |
 | `chromium-sanlager/` | separates Chromium-Profil                         |

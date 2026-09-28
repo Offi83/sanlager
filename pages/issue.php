@@ -32,7 +32,7 @@ $requestValue = static fn (string $key): string =>
 $locationNamesById = array_column($allLocations, 'name', 'id');
 
 /*
- * Von "Wareneingang" (receipt) = Einlagern: Nach muss dann ein Lagerort
+ * Von „Einlagern“ (receipt): Nach muss dann ein Lagerort
  * sein (Standard: erster Lagerort der Sortierung).
  */
 $issueIsReceipt = $requestValue('source') === 'receipt';

@@ -77,16 +77,7 @@
 
                                     <?php $currentCategory = $row['category_name'] ?? ''; ?>
 
-                                    <tr
-                                        class="article-category-row"
-                                        style="<?= h(categoryStyle($row['category_color'] ?? null)) ?>"
-                                    >
-                                        <th colspan="5">
-                                            <span class="article-category-name">
-                                                <?= h($row['category_name'] ?? 'Ohne Kategorie') ?>
-                                            </span>
-                                        </th>
-                                    </tr>
+                                    <?= renderCategoryRow($row, 5) ?>
 
                                 <?php endif; ?>
 

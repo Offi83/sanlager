@@ -34,11 +34,7 @@ try {
     Dotenv::createImmutable($root)->safeLoad();
 
     // Wie in bootstrap.php.
-    $dbFile = $_ENV['DB_DATABASE'] ?? 'database/database.sqlite';
-
-    if (!str_starts_with($dbFile, '/')) {
-        $dbFile = $root . '/' . $dbFile;
-    }
+    $dbFile = projectPath($_ENV['DB_DATABASE'] ?? 'database/database.sqlite');
 
     if (!is_file($dbFile)) {
         echo "Noch keine Datenbank ($dbFile) – sie wird beim ersten Seitenaufruf angelegt.\n";

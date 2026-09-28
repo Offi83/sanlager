@@ -195,6 +195,8 @@ class WeeklyReportTest extends TestCase
                 'APP_URL' => 'lager.example.org',
             ]);
             $this->fail('Ungültige Konfiguration wurde akzeptiert.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $message = $exception->getMessage();
 

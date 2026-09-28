@@ -3,7 +3,6 @@
 namespace LagerApp;
 
 use RuntimeException;
-use Throwable;
 
 /**
  * Verarbeitet die POST-Aktionen rund um Einheiten
@@ -12,6 +11,7 @@ use Throwable;
 class UnitActions
 {
     use ReadsInput;
+    use SortOrderAction;
 
     public function __construct(
         private UnitRepository $units
@@ -28,7 +28,7 @@ class UnitActions
             'create_unit' => $this->save(null, $input),
             'update_unit' => $this->save($this->int($input, 'id'), $input),
             'delete_unit' => $this->delete($input),
-            'reorder_units' => $this->reorder($input),
+            'reorder_units' => $this->reorderResult($input, $this->units->reorder(...), 'Ungültige Reihenfolge der Einheiten.'),
             default => null,
         };
     }
@@ -67,33 +67,5 @@ class UnitActions
         $this->units->delete($this->int($input, 'id'));
 
         return ActionResult::redirect('?page=units', 'Einheit gelöscht');
-    }
-
-    /**
-     * Liefert wie bei Kategorien immer JSON (Drag & Drop per fetch()).
-     */
-    private function reorder(array $input): ActionResult
-    {
-        $ids = $input['ids'] ?? null;
-
-        if (!is_array($ids)) {
-            return ActionResult::json([
-                'success' => false,
-                'error' => 'Ungültige Reihenfolge der Einheiten.'
-            ], 400);
-        }
-
-        try {
-            $this->units->reorder($ids);
-        } catch (Throwable $exception) {
-            return ActionResult::json([
-                'success' => false,
-                'error' => userMessage($exception)
-            ], 400);
-        }
-
-        return ActionResult::json([
-            'success' => true
-        ]);
     }
 }

@@ -8,6 +8,8 @@ Die wichtigsten Verzeichnisse des Projekts:
 
 ```text
 sanlager/
+├── .github/workflows/
+│   └── tests.yml      (Tests bei jedem Push, siehe unten)
 ├── beispieldaten/
 │   └── beispieldaten.sqlite   (Beispieldatenbank, von push.sh erzeugt)
 ├── bin/
@@ -22,6 +24,7 @@ sanlager/
 │   └── ...
 ├── images/
 │   └── *.png          (Screenshots für das README)
+├── licenses/          (Lizenztexte der Fremdbestandteile)
 ├── pages/
 │   └── <seite>.php    (Daten je Seite)
 ├── public/
@@ -46,12 +49,18 @@ sanlager/
 │   ├── CategoryRepository.php
 │   ├── Database.php
 │   ├── helpers.php
+│   ├── LabelActions.php
+│   ├── LabelConfig.php
+│   ├── LabelImage.php
+│   ├── LabelPrinter.php
 │   ├── LocalDay.php
 │   ├── LocationActions.php
 │   ├── LocationRepository.php
 │   ├── QrCodeGenerator.php
 │   ├── ReadsInput.php
 │   ├── ReportConfig.php
+│   ├── SortOrder.php
+│   ├── SortOrderAction.php
 │   ├── StockActions.php
 │   ├── StockReports.php
 │   ├── StockRepository.php
@@ -59,21 +68,27 @@ sanlager/
 │   ├── UnitRepository.php
 │   └── WeeklyReport.php
 ├── templates/
-│   ├── helpers.php    (Bausteine: Entsorgen-/Rückgängig-Button, Etikettenbogen)
+│   ├── helpers.php    (Bausteine: Kategoriezeile, Entsorgen-/Rückgängig-Button, Etikettenbogen)
 │   ├── layout/        (header.php, footer.php)
 │   └── pages/         (<seite>.php, eine Vorlage pro Seite)
 ├── tests/
+│   └── fixtures/      (z. B. fake-brother-ql als Ersatz für den Etikettendrucker)
 ├── vendor/
+├── .env.example       (Vorlage für die .env)
 ├── .gitignore
 ├── bootstrap.php
 ├── composer.json
 ├── composer.lock
-└── start.sh
+├── LICENSE
+├── phpunit.xml
+├── README.md
+├── start.sh
+└── THIRD-PARTY-NOTICES.md
 ```
 
 ### `bin/`
 
-Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind: der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](12-wochenbericht.md)), die Datensicherung (`backup.php`, siehe [Datensicherung](13-datensicherung.md)) und `migrate.php`, das `script/pull.sh` nach einem Update aufruft. Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
+Kommandozeilen-Skripte, die nicht über den Webserver erreichbar sind: der Wochenbericht per E-Mail (`weekly-report.php`, siehe [Wochenbericht](07-wochenbericht.md)), die Datensicherung (`backup.php`, siehe [Datensicherung](06-datensicherung.md)) und `migrate.php`, das `script/pull.sh` nach einem Update aufruft. Sie nutzen wie `public/index.php` die gemeinsame `bootstrap.php` (`.env`, Zeitzone, Datenbank).
 
 ### `public/`
 
@@ -96,14 +111,17 @@ Eine **neue Seite** anlegen: Namen in `$pageNames` in `public/index.php` eintrag
 Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale Helper-Funktionen. Die Datenbankzugriffe sind dabei von der eigentlichen Darstellung getrennt.
 
 * **`*Repository.php`** – reiner Datenbankzugriff (Lesen/Schreiben) für je eine Tabelle bzw. einen fachlichen Bereich (Artikel, Kategorien, Lagerorte, Chargen, Bestand).
-* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Ausbuchen, Umbuchen – auch mehrere Stück über mehrere Chargen, älteste zuerst –, Entsorgen, Rückgängig) und ermittelt Bestände; `StockReports` enthält die reinen Auswertungen (Heute, MHD-Übersicht, Auffüllliste, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
+* **`StockRepository.php` / `StockReports.php`** – `StockRepository` bucht (Einlagern, Ausbuchen, Umbuchen – auch mehrere Stück über mehrere Chargen, älteste zuerst –, Entsorgen, Aussortieren, Inventur, Rückgängig) und ermittelt Bestände, auch Soll/Ist eines Lagerorts für Packliste und Inventur; `StockReports` enthält die reinen Auswertungen (Heute, MHD-Übersicht, Auffüllliste, Wochenbericht). Die Berechnung von „heute“ in der Zeitzone der Anwendung teilen sich beide über den Trait `LocalDay`.
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
 * **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
+* **`SortOrder.php` / `SortOrderAction.php`** – Reihenfolge per Drag & Drop (Spalte `sort_order`), gemeinsam für Kategorien, Lagerorte und Einheiten: `SortOrder` im Repository (`reorder()`, neue Einträge ans Ende), `SortOrderAction` für die zugehörige POST-Aktion (antwortet immer mit JSON).
+* **`Label*.php`** – Etikettendrucker (`LABEL_OUTPUT=printer`): `LabelConfig` liest und prüft die Einstellungen aus der `.env`, `LabelImage` zeichnet ein Etikett als PNG (GD, nur Schwarz/Rot/Weiß), `LabelPrinter` ruft `brother_ql` auf und übersetzt dessen Fehlermeldungen, `LabelActions` ist die POST-Aktion `print_labels`. Die Vorschau liefert `?page=label_image` (nur das Bild, kein HTML). In den Tests ersetzt eine Testfunktion bzw. `tests/fixtures/fake-brother-ql` den Drucker – mit einem echten Gerät ist das noch nicht getestet, siehe [Installation → Etikettendrucker](05-installation.md#etikettendrucker-optional).
 * **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.
 * **`helpers.php`** – kleine globale Funktionen, die sowohl in den Vorlagen als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen:
-  * Ausgabe: `h()` (HTML-Escaping), `icon()`, `formatDate()`, `formatExpiry()`
+  * Ausgabe: `h()` (HTML-Escaping), `icon()`, `formatDate()`, `formatExpiry()`, `categoryStyle()` (Kategoriefarbe mit lesbarer Schriftfarbe)
   * Mengen: `quantityText()` („5 Rollen“), `unitText()`, `quantitiesByUnit()` („18 Stück · 12 Paar“)
-  * MHD und Datum: `expiryInfo()`, `expiryWarningDays()`, `normalizeDate()`
+  * MHD und Datum: `expiryInfo()`, `expiryWarningDays()`, `parseExpiryDays()`, `normalizeDate()`
+  * Pfade aus der `.env`: `projectPath()` (relativ zum Projektordner oder absolut)
   * Namen vergleichen: `nameKey()` (ohne Groß-/Kleinschreibung, auch bei Umlauten)
   * Anfrage und Sicherheit: `redirect()`, `userMessage()`, `isSameOriginRequest()`, `startSession()`, `flash()`, `takeFlash()`
 
@@ -123,7 +141,7 @@ wird **nicht über GitHub verteilt**.
 
 ### `script/`
 
-Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`) sowie für die Doku (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
+Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`) sowie für Screenshots und Beispieldaten (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
 
 ### `docs/`
 
@@ -146,7 +164,29 @@ composer install
 
 Die lokale SQLite-Datenbank (`database/database.sqlite`) wird beim ersten Aufruf automatisch angelegt. Gestartet wird mit `./start.sh` (siehe [Installation](05-installation.md#startsh)).
 
-Zum Ausprobieren mit Beispieldaten eignet sich die Demo-Datenbank, siehe [Screenshots aktualisieren](#screenshots-aktualisieren).
+Zum Ausprobieren mit Beispieldaten eignet sich die [Beispieldatenbank](#beispieldatenbank).
+
+## Beispieldatenbank
+
+`script/demo-data.php` legt eine Datenbank mit Beispieldaten an: Hauptlager, drei Rucksäcke, 17 Artikel in den Kategorien des Einsatzes, abgelaufene und bald ablaufende Chargen, Mindestbestände, Entnahmen, Umbuchungen und eine Lieferung von heute. Dieselben Daten zeigen die Screenshots.
+
+Eine fertige Kopie liegt im Repository unter `beispieldaten/beispieldaten.sqlite`; `script/push.sh` erzeugt sie bei jedem Push neu, damit sie immer zum aktuellen Stand von Code und Migrationen passt. Die MHDs und die Buchungen „von heute“ beziehen sich auf den Tag, an dem sie erzeugt wurde – wer sie später öffnet, sieht die Buchungen nicht mehr unter „Heute“, und es ist inzwischen mehr abgelaufen.
+
+Ausprobieren, ohne die eigene Datenbank anzufassen – eine Kopie verwenden, da die App beim Buchen hineinschreibt:
+
+```bash
+cp beispieldaten/beispieldaten.sqlite /tmp/sanlager-test.sqlite
+DB_DATABASE=/tmp/sanlager-test.sqlite php -d variables_order=EGPCS -S localhost:8080 -t public
+```
+
+Für einen tagesaktuellen Stand die Datenbank stattdessen selbst neu anlegen:
+
+```bash
+php script/demo-data.php database/demo.sqlite
+DB_DATABASE=database/demo.sqlite php -d variables_order=EGPCS -S localhost:8080 -t public
+```
+
+Dann <http://localhost:8080> öffnen. Die produktive `database/database.sqlite` bleibt unberührt.
 
 ## Änderungen testen
 
@@ -166,7 +206,7 @@ composer test
 
 Die Tests liegen unter `tests/`:
 
-* **Logik:** Bestandslogik in `StockRepository` (FIFO, Umbuchen, abgelaufene Chargen, Mindestbestand, Rückgängig, gleichzeitige Buchungen), POST-Aktionen (`ActionsTest`), Migrationen (`DatabaseTest`), Wochenbericht, Datensicherung, Sicherheitsfunktionen und Datums-Helper.
+* **Logik:** Bestandslogik in `StockRepository` (FIFO, Einlagern, Umbuchen, abgelaufene Chargen, Aussortieren, Mindestbestand, Inventur, Rückgängig, gleichzeitige Buchungen), POST-Aktionen (`ActionsTest`), Migrationen (`DatabaseTest`), Wochenbericht, Datensicherung, Sicherheitsfunktionen und Datums-Helper.
 * **Seiten (`PagesTest`):** startet einen eigenen PHP-Entwicklungsserver mit frischer Demo-Datenbank, ruft jede Seite auf und spielt die wichtigsten Abläufe über echtes HTTP durch (Buchen, Scanner, Entsorgen, Rückgängig, abgelehnte fremde Anfragen). Jede PHP-Warnung oder -Meldung in einer Seite lässt den Test scheitern.
 
 ### Automatisch bei jedem Push (GitHub Actions)
@@ -191,19 +231,12 @@ Die Screenshots im README (`images/*.png`) werden automatisch erzeugt:
 
 Das Skript
 
-1. legt mit `script/demo-data.php` eine **Demo-Datenbank mit Beispieldaten** an (Hauptlager, drei Rucksäcke, 17 Artikel in den Kategorien des Einsatzes, abgelaufene und bald ablaufende Chargen, Mindestbestände, Entnahmen, Umbuchungen und eine Lieferung von heute),
+1. legt mit `script/demo-data.php` eine frische Datenbank mit den [Beispieldaten](#beispieldatenbank) an,
 2. startet dafür einen eigenen PHP-Entwicklungsserver,
-3. nimmt die Seiten mit Chrome/Chromium im Headless-Modus auf, im Format des Pi-Displays (800×480, doppelte Auflösung). Seiten mit zwei Spalten werden breiter aufgenommen, damit beide Spalten zu sehen sind,
+3. nimmt die Seiten mit Chrome/Chromium im Headless-Modus auf, im Format des Pi-Displays (800×480, doppelte Auflösung). Seiten mit zwei Spalten und der A4-Etikettenbogen werden breiter aufgenommen, Packliste und Wochenbericht höher; die Etikettendrucker-Seite kommt von einem zweiten Server mit `LABEL_OUTPUT=printer`,
 4. räumt Demo-Datenbank und Server anschließend wieder auf.
 
 Die produktive `database.sqlite` wird dabei **nicht** verwendet. Gefunden wird Chrome unter macOS und Linux automatisch, sonst den Pfad über `CHROME=/pfad/zu/chrome ./script/screenshots.sh` angeben. Außerdem wird `sqlite3` benötigt.
-
-Die Demo-Datenbank lässt sich auch einzeln anlegen, z. B. zum Ausprobieren:
-
-```bash
-php script/demo-data.php database/demo.sqlite
-DB_DATABASE=database/demo.sqlite php -d variables_order=EGPCS -S localhost:8080 -t public
-```
 
 ## Änderungen zu GitHub übertragen
 
@@ -223,21 +256,6 @@ Das Skript führt dabei die notwendigen Schritte aus:
 4. Commit erstellen
 5. Änderungen nach GitHub übertragen
 
-## Beispieldatenbank
-
-Im Repository liegt unter `beispieldaten/beispieldaten.sqlite` eine fertige Datenbank mit Beispieldaten – dieselben wie in den Screenshots (`script/demo-data.php`). `script/push.sh` erzeugt sie bei jedem Push neu, damit sie immer zum aktuellen Stand von Code und Migrationen passt.
-
-Die MHDs und die Buchungen „von heute“ beziehen sich auf den Tag, an dem sie erzeugt wurde. Wer sie später öffnet, sieht die Buchungen deshalb nicht mehr unter „Heute“, und es ist inzwischen mehr abgelaufen. Für einen tagesaktuellen Stand einfach selbst neu anlegen (siehe [Screenshots aktualisieren](#screenshots-aktualisieren)).
-
-Ausprobieren, ohne die eigene Datenbank anzufassen – eine Kopie verwenden, da die App beim Buchen hineinschreibt:
-
-```bash
-cp beispieldaten/beispieldaten.sqlite /tmp/sanlager-test.sqlite
-DB_DATABASE=/tmp/sanlager-test.sqlite php -d variables_order=EGPCS -S localhost:8080 -t public
-```
-
-Dann <http://localhost:8080> öffnen. Die produktive `database/database.sqlite` bleibt unberührt.
-
 ## Änderungen auf dem Server bereitstellen
 
 Auf dem Server wird der aktuelle Stand aus GitHub mit `script/pull.sh` übernommen:
@@ -248,20 +266,12 @@ Auf dem Server wird der aktuelle Stand aus GitHub mit `script/pull.sh` übernomm
 
 Nach einer Rückfrage führt das Skript nacheinander aus:
 
-1. **Datensicherung** mit `bin/backup.php` (siehe [Datensicherung](13-datensicherung.md)) – das Update kann Migrationen mitbringen, die die Datenbank umbauen. Scheitert die Sicherung, fragt das Skript, ob es ohne weitermachen soll.
+1. **Datensicherung** mit `bin/backup.php` (siehe [Datensicherung](06-datensicherung.md)) – das Update kann Migrationen mitbringen, die die Datenbank umbauen. Scheitert die Sicherung, fragt das Skript, ob es ohne weitermachen soll.
 2. **Code holen:** `git fetch` und `git reset --hard origin/main`.
 3. **Abhängigkeiten installieren:** `composer install --no-dev --optimize-autoloader`, passend zur neuen `composer.lock`.
 4. **Datenbank aktualisieren:** `bin/migrate.php` führt fehlende Migrationen sofort aus, damit ein Fehler gleich im Terminal steht. Gibt es noch keine Datenbank, legt es keine an (sie gehörte sonst dem Benutzer im Terminal statt dem Webserver). Hat dieser Benutzer keine Schreibrechte auf die Datenbank, wird die Migration beim nächsten Seitenaufruf nachgeholt.
 
-Lokale Dateien wie
-
-```text
-database/database.sqlite
-.htaccess
-.htpasswd
-```
-
-bleiben erhalten.
+Nicht von Git verwaltete Dateien – `.env`, `database/database.sqlite`, Sicherungen, `public/.htaccess` und `.htpasswd` – bleiben dabei erhalten.
 
 ## Git
 
@@ -277,18 +287,4 @@ Der zentrale Branch ist:
 main
 ```
 
-Die SQLite-Datenbank gehört ausdrücklich **nicht** zum Git-Repository.
-
-## Grundprinzip
-
-Die Anwendung ist bewusst schlank gehalten:
-
-* PHP als Programmiersprache
-* SQLite als Datenbank
-* HTML/CSS/JavaScript für die Oberfläche
-* Composer für PHP-Abhängigkeiten
-* GitHub für die Versionsverwaltung
-* Raspberry Pi als mögliche lokale Betriebsplattform
-
-Ziel ist eine einfache und robuste Lagerverwaltung ohne unnötige Komplexität.
-
+Die produktive SQLite-Datenbank gehört ausdrücklich **nicht** zum Git-Repository (nur die [Beispieldatenbank](#beispieldatenbank)).

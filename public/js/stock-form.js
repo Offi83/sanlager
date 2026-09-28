@@ -233,12 +233,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const confirmExpiry =
         document.getElementById('confirm_expiry');
 
-    function isoDate(date) {
-        return date.getFullYear()
-            + '-' + String(date.getMonth() + 1).padStart(2, '0')
-            + '-' + String(date.getDate()).padStart(2, '0');
-    }
-
     /*
      * Eingabe als Y-m-d (Datumsfeld) oder d.m.Y (Handeingabe).
      */
@@ -261,25 +255,10 @@ document.addEventListener('DOMContentLoaded', function () {
         form.addEventListener('submit', function (event) {
             confirmExpiry.value = '0';
 
-            const expiry = selectedExpiry();
-
-            if (fromSelect.value !== 'receipt' || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
-                return;
-            }
-
-            const today = new Date();
-            const inTwentyYears = new Date();
-            inTwentyYears.setFullYear(today.getFullYear() + 20);
-
-            const shown = expiry.split('-').reverse().join('.');
-
-            let question = null;
-
-            if (expiry < isoDate(today)) {
-                question = 'Das MHD ' + shown + ' ist bereits abgelaufen. Trotzdem einlagern?';
-            } else if (expiry > isoDate(inTwentyYears)) {
-                question = 'Das MHD ' + shown + ' liegt über 20 Jahre in der Zukunft. Stimmt das Jahr?';
-            }
+            // Rückfrage nur beim Einlagern, siehe expiry-check.js.
+            const question = fromSelect.value === 'receipt'
+                ? expiryQuestion(selectedExpiry())
+                : null;
 
             if (question === null) {
                 return;

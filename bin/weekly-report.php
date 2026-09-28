@@ -21,7 +21,7 @@
 |                                          REPORT_RECIPIENTS senden (Test)
 |
 | Konfiguration ausschließlich über .env (siehe .env.example und
-| docs/12-wochenbericht.md). Liegt außerhalb von public/ und ist daher
+| docs/07-wochenbericht.md). Liegt außerhalb von public/ und ist daher
 | nicht über den Webserver aufrufbar.
 |--------------------------------------------------------------------------
 */

@@ -6,9 +6,13 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Verarbeitet die POST-Aktionen rund um Lagerbewegungen: das Buchen
- * (Ausbuchen/Umbuchen per Scanner oder manueller Eingabe) sowie das
- * artikelbezogene Bestand-buchen-Formular (Einlagern/Ausbuchen/Umbuchen).
+ * Verarbeitet die POST-Aktionen rund um Lagerbewegungen:
+ *
+ * - Buchen-Seite: Ausbuchen, Umbuchen, Einlagern per Scanner oder
+ *   Eingabe, „Aussortieren“ nach dem Alarm bei abgelaufener Ware
+ * - Artikelseite: „Bestand buchen“ (Einlagern/Ausbuchen/Umbuchen)
+ * - Entsorgen abgelaufener Chargen, Rückgängig auf „Heute“
+ * - Lagerorte: Komplettumzug und Inventur
  */
 class StockActions
 {
@@ -234,7 +238,7 @@ class StockActions
     }
 
     /**
-     * Einlagern per Scan (Buchen-Seite, Von "Wareneingang"): $quantity Stück
+     * Einlagern per Scan (Buchen-Seite, Von „Einlagern“ = `receipt`): $quantity Stück
      * mit dem MHD aus `expiry_date` an den Lagerort $target. Artikel ohne
      * MHD werden ohne MHD eingelagert, das Feld wird dann nicht beachtet.
      */
@@ -259,23 +263,11 @@ class StockActions
         $expiryDate = null;
 
         if ((int) $article['has_expiry'] === 1) {
-            $expiryInput = $this->string($input, 'expiry_date');
-
-            if ($expiryInput === '') {
-                throw new RuntimeException(
-                    'Bitte ein MHD eingeben – ' . $article['name'] . ' hat ein MHD.'
-                );
-            }
-
-            $expiryDate = normalizeDate($expiryInput);
-
-            if ($expiryDate === null) {
-                throw new RuntimeException(
-                    'Ungültiges MHD: ' . $expiryInput . ' (erwartet z. B. 31.12.2027).'
-                );
-            }
-
-            $this->assertPlausibleExpiry($expiryDate, $this->string($input, 'confirm_expiry') === '1');
+            $expiryDate = $this->readExpiry(
+                $this->string($input, 'expiry_date'),
+                $this->string($input, 'confirm_expiry') === '1',
+                'Bitte ein MHD eingeben – ' . $article['name'] . ' hat ein MHD.'
+            );
 
             $batchId = $this->batches->findOrCreate((int) $article['id'], $expiryDate);
         }
@@ -292,10 +284,9 @@ class StockActions
         /*
          * Das MHD bleibt für die nächsten Scans stehen (meist kommen mehrere
          * Packungen derselben Lieferung), die Bestätigung eines
-         * ungewöhnlichen MHD ebenso.
+         * ungewöhnlichen MHD ebenso – auch nach einem Artikel ohne MHD.
          */
-        $expiryInput = $this->string($input, 'expiry_date');
-        $keepExpiry = normalizeDate($expiryInput);
+        $keepExpiry = normalizeDate($this->string($input, 'expiry_date'));
 
         return $this->bookingResult(
             $isAjax,
@@ -369,7 +360,13 @@ class StockActions
                 'unit_plural' => $article['unit_plural'],
                 'expiry_date' => $expiryText,
                 'action_label' => $actionLabel,
-                'expired' => $expiryWarning !== ''
+                // Gebuchte Charge abgelaufen ('expired', rot) oder bald
+                // ablaufend ('soon', orange); '' = keine Warnung.
+                'warning' => match ($expiryWarning) {
+                    '' => '',
+                    'ABGELAUFEN' => 'expired',
+                    default => 'soon',
+                },
             ] + $json);
         }
 
@@ -377,8 +374,12 @@ class StockActions
             $redirectUrl,
             $article['name'] . ' – ' . quantityText($quantity, $article) . ' '
                 . $actionLabel . ($expiryText !== '' ? ' (' . $expiryText . ')' : ''),
-            // Abgelaufene Charge gebucht: rot statt grün hervorheben.
-            $expiryWarning !== '' ? 'error' : 'success'
+            // Charge abgelaufen: rot, bald ablaufend: orange statt grün.
+            match ($expiryWarning) {
+                '' => 'success',
+                'ABGELAUFEN' => 'error',
+                default => 'caution',
+            }
         );
     }
 
@@ -397,7 +398,7 @@ class StockActions
         $from = $this->string($input, 'from');
         $to = $this->string($input, 'to');
 
-        $article = $this->articles->find($articleId);
+        $article = $this->articles->findActive($articleId);
 
         if (!$article) {
             throw new RuntimeException(
@@ -484,30 +485,9 @@ class StockActions
                 );
             }
 
-            $expiryDate = $this->string($input, 'expiry_date');
-
-            if ($expiryDate === '') {
-                throw new RuntimeException(
-                    'Bitte ein MHD eingeben.'
-                );
-            }
-
-            $normalizedExpiryDate = normalizeDate($expiryDate);
-
-            if ($normalizedExpiryDate === null) {
-                throw new RuntimeException(
-                    'Ungültiges MHD: ' . $expiryDate
-                    . ' (erwartet z. B. 31.12.2027).'
-                );
-            }
-
-            $expiryDate = $normalizedExpiryDate;
-
-            $this->assertPlausibleExpiry($expiryDate, $expiryConfirmed);
-
             $batchId = $this->batches->findOrCreate(
                 $articleId,
-                $expiryDate
+                $this->readExpiry($this->string($input, 'expiry_date'), $expiryConfirmed, 'Bitte ein MHD eingeben.')
             );
         }
 
@@ -584,6 +564,37 @@ class StockActions
             . '&to=' . urlencode($to),
             $message
         );
+    }
+
+    /**
+     * Liest ein eingegebenes MHD (Y-m-d aus dem Datumsfeld oder d.m.Y von
+     * Hand) für eine neue Charge: Pflichtfeld, gültiges Datum und plausibel,
+     * siehe assertPlausibleExpiry(). $prefix steht vor jeder Fehlermeldung
+     * (z. B. der Artikelname bei der Inventur).
+     *
+     * @return string Y-m-d
+     */
+    private function readExpiry(string $value, bool $confirmed, string $missingMessage, string $prefix = ''): string
+    {
+        try {
+            if ($value === '') {
+                throw new RuntimeException($missingMessage);
+            }
+
+            $date = normalizeDate($value);
+
+            if ($date === null) {
+                throw new RuntimeException(
+                    'Ungültiges MHD: ' . $value . ' (erwartet z. B. 31.12.2027).'
+                );
+            }
+
+            $this->assertPlausibleExpiry($date, $confirmed);
+
+            return $date;
+        } catch (RuntimeException $exception) {
+            throw new RuntimeException($prefix . $exception->getMessage());
+        }
     }
 
     /**
@@ -688,7 +699,7 @@ class StockActions
         $quantity = $this->int($input, 'quantity');
         $batchId = $this->int($input, 'batch_id') ?: null;
 
-        $article = $this->articles->find($articleId);
+        $article = $this->articles->findActive($articleId);
         $location = $this->locations->find($locationId);
 
         if (!$article || !$location) {
@@ -717,18 +728,14 @@ class StockActions
             );
 
             $done = 'von ' . $toLocation['name'] . ' zurück nach ' . $location['name'] . ' gebucht';
-        } elseif ($kind === 'disposal') {
-            $this->stock->reverseTodayDisposal($articleId, $batchId, $locationId, $quantity);
-
-            $done = 'Entsorgung rückgängig, wieder in ' . $location['name'];
-        } elseif ($kind === 'receipt') {
-            $this->stock->reverseTodayReceipt($articleId, $batchId, $locationId, $quantity);
-
-            $done = 'Einlagerung rückgängig, aus ' . $location['name'] . ' entfernt';
         } else {
-            $this->stock->reverseTodayIssue($articleId, $batchId, $locationId, $quantity);
+            $this->stock->reverseToday($kind, $articleId, $batchId, $locationId, $quantity);
 
-            $done = 'zurück nach ' . $location['name'] . ' gebucht';
+            $done = match ($kind) {
+                'disposal' => 'Entsorgung rückgängig, wieder in ' . $location['name'],
+                'receipt' => 'Einlagerung rückgängig, aus ' . $location['name'] . ' entfernt',
+                default => 'zurück nach ' . $location['name'] . ' gebucht',
+            };
         }
 
         return ActionResult::redirect(
@@ -748,7 +755,7 @@ class StockActions
         $batchId = $this->int($input, 'batch_id');
         $locationId = $this->int($input, 'location_id');
 
-        $article = $this->articles->find($articleId);
+        $article = $this->articles->findActive($articleId);
         $location = $this->locations->find($locationId);
 
         if (!$article || !$location || $batchId <= 0) {
@@ -802,9 +809,9 @@ class StockActions
         $names = [];
 
         $article = function (string|int $articleId) use (&$names): array {
-            $article = $this->articles->find((int) $articleId);
+            $article = $this->articles->findActive((int) $articleId);
 
-            if (!$article || (int) $article['active'] !== 1) {
+            if (!$article) {
                 throw new RuntimeException(
                     'Ein Artikel der Inventur wurde nicht gefunden.'
                 );
@@ -872,21 +879,15 @@ class StockActions
                 continue;
             }
 
-            $expiryInput = is_string($values['expiry_date'] ?? null) ? trim($values['expiry_date']) : '';
-            $expiryDate = null;
-
-            if ((int) $row['has_expiry'] === 1) {
-                $expiryDate = normalizeDate($expiryInput);
-
-                if ($expiryDate === null) {
-                    throw new RuntimeException(
-                        $row['name'] . ': Bitte zur gefundenen Menge ein gültiges MHD eingeben (z. B. 31.12.2027).'
-                    );
-                }
-
-                // Abgelaufenes kann gefunden werden – nur Tippfehler im Jahr abfangen.
-                $this->assertPlausibleExpiry($expiryDate, true);
-            }
+            // Abgelaufenes kann gefunden werden – nur Tippfehler im Jahr abfangen (bestätigt).
+            $expiryDate = (int) $row['has_expiry'] === 1
+                ? $this->readExpiry(
+                    $this->string($values, 'expiry_date'),
+                    true,
+                    'Bitte zur gefundenen Menge ein MHD eingeben.',
+                    $row['name'] . ': '
+                )
+                : null;
 
             $found[] = ['article' => $row, 'expiry_date' => $expiryDate, 'quantity' => $quantity];
         }
@@ -943,7 +944,7 @@ class StockActions
         $target = $this->string($input, 'target', 'issue');
 
         try {
-            $article = $this->articles->find($this->int($input, 'article_id'));
+            $article = $this->articles->findActive($this->int($input, 'article_id'));
             $source = $this->locations->find($this->int($input, 'source'));
             $targetLocation = $target !== 'issue' ? $this->locations->find((int) $target) : null;
             $batches = $this->array($input, 'batches');

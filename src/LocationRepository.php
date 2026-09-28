@@ -15,6 +15,11 @@ use RuntimeException;
  */
 class LocationRepository
 {
+    use SortOrder;
+
+    private const SORT_TABLE = 'storage_locations';
+    private const SORT_ACTIVE_ONLY = true;
+
     public function __construct(
         private PDO $db
     ) {
@@ -227,52 +232,7 @@ class LocationRepository
             ->fetchColumn();
     }
 
-    /**
-     * Setzt die Sortierreihenfolge anhand der übergebenen ID-Liste neu
-     * (Reihenfolge der IDs = neue Reihenfolge). Wird vom Drag & Drop auf
-     * der Lagerorte-Seite aufgerufen.
-     */
-    public function reorder(array $ids): void
-    {
-        $statement = $this->db->prepare(
-            'UPDATE storage_locations
-             SET sort_order = :sort_order
-             WHERE id = :id
-             AND active = 1'
-        );
 
-        $this->db->beginTransaction();
-
-        try {
-
-            foreach ($ids as $position => $id) {
-
-                $statement->execute([
-                    'sort_order' => ($position + 1) * 10,
-                    'id' => (int) $id
-                ]);
-            }
-
-            $this->db->commit();
-
-        } catch (\Throwable $exception) {
-
-            $this->db->rollBack();
-
-            throw $exception;
-        }
-    }
-
-    private function nextSortOrder(): int
-    {
-        $sortOrder = $this->db->query(
-            'SELECT COALESCE(MAX(sort_order), 0)
-             FROM storage_locations
-             WHERE active = 1'
-        )->fetchColumn();
-
-        return ((int) $sortOrder) + 10;
-    }
 
     /**
      * Lagerort (aktiv oder deaktiviert) mit diesem Namen, ohne Groß-/

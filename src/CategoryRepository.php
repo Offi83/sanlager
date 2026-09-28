@@ -10,6 +10,11 @@ use RuntimeException;
  */
 class CategoryRepository
 {
+    use SortOrder;
+
+    private const SORT_TABLE = 'article_categories';
+    private const SORT_ACTIVE_ONLY = true;
+
     public function __construct(
         private PDO $db
     ) {
@@ -160,41 +165,6 @@ class CategoryRepository
         return (int) $statement->fetchColumn();
     }
 
-    /**
-     * Setzt die Sortierreihenfolge anhand der übergebenen ID-Liste neu
-     * (Reihenfolge der IDs = neue Reihenfolge). Wird vom Drag & Drop auf
-     * der Kategorien-Seite aufgerufen.
-     */
-    public function reorder(array $ids): void
-    {
-        $statement = $this->db->prepare(
-            'UPDATE article_categories
-             SET sort_order = :sort_order
-             WHERE id = :id
-             AND active = 1'
-        );
-
-        $this->db->beginTransaction();
-
-        try {
-
-            foreach ($ids as $position => $id) {
-
-                $statement->execute([
-                    'sort_order' => ($position + 1) * 10,
-                    'id' => (int) $id
-                ]);
-            }
-
-            $this->db->commit();
-
-        } catch (\Throwable $exception) {
-
-            $this->db->rollBack();
-
-            throw $exception;
-        }
-    }
 
     /**
      * Vergleich ohne Groß-/Kleinschreibung, siehe nameKey().
@@ -220,16 +190,5 @@ class CategoryRepository
         }
 
         return false;
-    }
-
-    private function nextSortOrder(): int
-    {
-        $sortOrder = $this->db->query(
-            'SELECT COALESCE(MAX(sort_order), 0)
-             FROM article_categories
-             WHERE active = 1'
-        )->fetchColumn();
-
-        return ((int) $sortOrder) + 10;
     }
 }

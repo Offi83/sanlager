@@ -12,7 +12,7 @@
 |
 |   0 2 * * *  cd /pfad/zu/sanlager && php bin/backup.php >> backups/backup.log 2>&1
 |
-| Einstellungen in der .env (siehe .env.example, docs/13-datensicherung.md):
+| Einstellungen in der .env (siehe .env.example, docs/06-datensicherung.md):
 |   BACKUP_DIR        Zielordner (Standard: backups/ im Projektordner)
 |   BACKUP_KEEP_DAYS  Aufbewahrung in Tagen (Standard: 30)
 |
@@ -33,12 +33,7 @@ try {
     $db = require $root . '/bootstrap.php';
 
     $directory = trim((string) ($_ENV['BACKUP_DIR'] ?? ''));
-
-    if ($directory === '') {
-        $directory = $root . '/backups';
-    } elseif (!str_starts_with($directory, '/')) {
-        $directory = $root . '/' . $directory;
-    }
+    $directory = projectPath($directory !== '' ? $directory : 'backups');
 
     // Nicht per ?: – sonst würde aus "0" stillschweigend 30.
     $keepDays = trim((string) ($_ENV['BACKUP_KEEP_DAYS'] ?? ''));

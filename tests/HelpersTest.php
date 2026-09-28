@@ -71,6 +71,26 @@ class HelpersTest extends TestCase
         }
     }
 
+    /**
+     * Eine Regel für App (expiryWarningDays) und Wochenbericht (ReportConfig).
+     */
+    public function testParseExpiryDays(): void
+    {
+        $this->assertSame(90, parseExpiryDays(''));
+        $this->assertSame(1, parseExpiryDays(' 1 '));
+        $this->assertSame(365, parseExpiryDays('365'));
+
+        foreach (['0', '366', 'bald', '-5', '30.5'] as $invalid) {
+            $this->assertNull(parseExpiryDays($invalid), $invalid);
+        }
+    }
+
+    public function testProjectPathResolvesRelativeToProjectFolder(): void
+    {
+        $this->assertSame('/media/usb/backups', projectPath('/media/usb/backups'));
+        $this->assertSame(dirname(__DIR__) . '/database/database.sqlite', projectPath('database/database.sqlite'));
+    }
+
     public function testNameKeyIgnoresCaseUmlautsAndSpaces(): void
     {
         $this->assertSame(nameKey('Mullbinde 8 cm'), nameKey('  MULLBINDE   8 cm '));

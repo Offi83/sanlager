@@ -23,9 +23,17 @@ composer licenses --no-dev
 | Paket | Zweck | Lizenz |
 |---|---|---|
 | vlucas/phpdotenv (inkl. graham-campbell/result-type, phpoption/phpoption) | `.env`-Konfiguration | BSD-3-Clause, MIT, Apache-2.0 |
-| endroid/qr-code (inkl. bacon/bacon-qr-code, dasprid/enum) | QR-Codes für Artikel und Etiketten | MIT, BSD-2-Clause |
+| endroid/qr-code (inkl. bacon/bacon-qr-code, dasprid/enum) | QR-Codes für Artikel und Etiketten; die mitgelieferte Schrift Open Sans (`assets/open_sans.ttf`) nutzt SanLager auch für die Etiketten des Etikettendruckers | MIT, BSD-2-Clause; Open Sans: Apache-2.0 |
 | symfony/mailer, symfony/mime u. a. Symfony-Komponenten | Versand des Wochenberichts | MIT |
 | egulias/email-validator, doctrine/lexer | Prüfung von E-Mail-Adressen | MIT |
 | psr/* | Schnittstellen-Standards | MIT |
 
 Nur für die Entwicklung (nicht auf dem Produktivserver): phpunit/phpunit (BSD-3-Clause) und Abhängigkeiten.
+
+## Separat installiert (optional)
+
+Nicht Teil von SanLager und nicht per Composer bezogen, sondern bei Bedarf selbst zu installieren (siehe [Installation → Etikettendrucker](docs/05-installation.md#etikettendrucker-optional)):
+
+| Programm | Zweck | Lizenz |
+|---|---|---|
+| [brother-ql-next](https://github.com/LunarEclipse363/brother_ql_next) (`brother_ql`) | Etiketten direkt an Brother-QL-Drucker schicken | GPL-3.0 |

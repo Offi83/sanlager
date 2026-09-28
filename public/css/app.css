@@ -426,6 +426,12 @@ tbody tr:last-child td {
     border: 1px solid #e0a0a0;
 }
 
+/* MHD bald erreicht (U24): auffallen, aber nicht wie ein Fehler. */
+.alert.caution {
+    background: #fff1d6;
+    border: 1px solid #f0b85a;
+}
+
 .warning,
 .expired-stock-warning {
     display: block;
@@ -1041,6 +1047,10 @@ tbody tr:last-child td {
     background: #fbeaea;
 }
 
+.scan-result.caution {
+    background: #fff1d6;
+}
+
 .today-summary {
     display: flex;
     flex-wrap: wrap;
@@ -1181,6 +1191,28 @@ tbody tr:last-child td {
     border-style: dashed;
     border-color: #ccc;
     background: #f8fafc;
+}
+
+/*
+ * Einzeletikett mit Etikettendrucker (LABEL_OUTPUT=printer): Vorschau
+ * des Bildes, das an den Drucker geht, daneben Drucken.
+ * Seitenverhältnis kommt aus der Vorlage (Länge / Rollenbreite).
+ */
+.label-printer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-4);
+}
+
+.label-preview {
+    display: block;
+    width: 100%;
+    max-width: 480px;
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
 }
 
 /* Sammeletiketten (?page=labels): Auswahl */

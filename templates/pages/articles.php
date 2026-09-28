@@ -150,16 +150,7 @@
                             $currentCategoryId = (int) ($item['category_id'] ?? 0);
                             ?>
 
-                            <tr
-                                class="article-category-row"
-                                style="<?= h(categoryStyle($item['category_color'] ?? null)) ?>"
-                            >
-                                <th colspan="4">
-                                    <span class="article-category-name">
-                                        <?= h($item['category_name'] ?? 'Ohne Kategorie') ?>
-                                    </span>
-                                </th>
-                            </tr>
+                            <?= renderCategoryRow($item, 4) ?>
 
                         <?php endif; ?>
 

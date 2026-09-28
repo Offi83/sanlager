@@ -37,8 +37,7 @@ class ArticleRepository
 
         $sql = 'SELECT
                     a.*,
-                    COALESCE(u.name, \'Stück\') AS unit,
-                    COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                    ' . UnitRepository::SELECT_COLUMNS . ',
                     c.name AS category_name,
                     c.color AS category_color,
                     c.sort_order AS category_sort_order
@@ -86,16 +85,15 @@ class ArticleRepository
 
     /**
      * Liefert einen einzelnen Artikel inkl. Kategorie-Infos, unabhängig
-     * vom `active`-Status (z. B. für die Bearbeiten-Seite eines gerade
-     * deaktivierten Artikels).
+     * vom `active`-Status. Zum Buchen, Ändern und Anzeigen stattdessen
+     * findActive() verwenden.
      */
     public function find(int $id): ?array
     {
         $statement = $this->db->prepare(
             'SELECT
                 a.*,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 c.name AS category_name,
                 c.color AS category_color,
                 c.sort_order AS category_sort_order
@@ -114,6 +112,19 @@ class ArticleRepository
         $article = $statement->fetch();
 
         return $article ?: null;
+    }
+
+    /**
+     * Wie find(), aber nur nicht gelöschte Artikel. Grundlage aller
+     * Buchungen und Änderungen: Ein Artikel kann auf einem anderen Gerät
+     * gelöscht werden, während seine Seite hier noch offen ist – Bestand
+     * daran wäre danach in keiner Liste mehr zu sehen.
+     */
+    public function findActive(int $id): ?array
+    {
+        $article = $this->find($id);
+
+        return $article !== null && (int) $article['active'] === 1 ? $article : null;
     }
 
     /**
@@ -226,8 +237,7 @@ class ArticleRepository
         $statement = $this->db->prepare(
             'SELECT
                 a.*,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 c.name AS category_name
              FROM articles a
              LEFT JOIN units u

@@ -29,8 +29,13 @@ $locationStockRows = $stock->getStockAtLocationDetailed(
 /*
  * Was hier unter dem Mindestbestand liegt – die Seite zeigt sonst nur,
  * was da ist, nicht was fehlt. Hinweis mit Link zur Auffüllliste.
+ * Die Gesamtzahl dient zugleich der Zahl am Reiter „Auffüllen“
+ * (public/index.php), sonst würde die Abfrage zweimal laufen.
  */
+$lowStockItems = $reports->getLowStockItems();
+$restockItemCount = count($lowStockItems);
+
 $locationMissing = array_values(array_filter(
-    $reports->getLowStockItems(),
+    $lowStockItems,
     static fn (array $row): bool => (int) $row['location_id'] === $viewLocationId
 ));

@@ -21,8 +21,8 @@
 |   *Repository.php  – reiner Datenbankzugriff je Tabelle/Bereich
 |   *Actions.php     – Validierung + Verarbeitung der POST-Aktionen
 |   helpers.php      – globale Helper (h(), redirect(), formatDate(), ...)
-| Bausteine der Vorlagen (Entsorgen-/Rückgängig-Button, Etikettenbogen) liegen in
-| templates/helpers.php.
+| Bausteine der Vorlagen (Kategoriezeile, Entsorgen-/Rückgängig-Button,
+| Etikettenbogen) liegen in templates/helpers.php.
 |--------------------------------------------------------------------------
 */
 
@@ -31,6 +31,8 @@ use LagerApp\ArticleRepository;
 use LagerApp\BatchRepository;
 use LagerApp\CategoryActions;
 use LagerApp\CategoryRepository;
+use LagerApp\LabelActions;
+use LagerApp\LabelConfig;
 use LagerApp\LocationActions;
 use LagerApp\LocationRepository;
 use LagerApp\StockActions;
@@ -38,8 +40,6 @@ use LagerApp\StockReports;
 use LagerApp\StockRepository;
 use LagerApp\UnitActions;
 use LagerApp\UnitRepository;
-
-require_once __DIR__ . '/../vendor/autoload.php';
 
 /*
  * Auffangnetz für unerwartete Fehler (z. B. Datenbank nicht erreichbar):
@@ -91,6 +91,21 @@ $categoryActions = new CategoryActions($categories);
 $unitActions = new UnitActions($units);
 $locationActions = new LocationActions($locationRepository, $stock);
 $stockActions = new StockActions($articles, $locationRepository, $stock, $batches);
+$labelActions = new LabelActions($articles, $_ENV);
+
+/*
+ * Etiketten: A4-Bögen über den Browser oder Etikettendrucker
+ * (LABEL_OUTPUT in .env, siehe LabelConfig). Ist die Einstellung
+ * fehlerhaft, zeigen die Etikettenseiten den Fehler und bieten A4 an.
+ */
+$labelConfigError = null;
+
+try {
+    $labelConfig = LabelConfig::fromEnv($_ENV);
+} catch (RuntimeException $exception) {
+    $labelConfig = LabelConfig::a4();
+    $labelConfigError = $exception->getMessage();
+}
 
 $categoryList = $categories->all();
 
@@ -142,7 +157,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isSameOriginRequest($_SERVER)) {
             ?? $categoryActions->dispatch($action, $_POST)
             ?? $unitActions->dispatch($action, $_POST)
             ?? $locationActions->dispatch($action, $_POST)
-            ?? $stockActions->dispatch($action, $_POST);
+            ?? $stockActions->dispatch($action, $_POST)
+            ?? $labelActions->dispatch($action, $_POST);
 
         $result?->send();
 
@@ -161,7 +177,9 @@ $flash = takeFlash();
 
 if ($flash !== null) {
     $message = $flash['text'];
-    $messageType = $flash['type'] === 'error' ? 'error' : 'success';
+    $messageType = in_array($flash['type'], ['error', 'caution'], true)
+        ? $flash['type']
+        : 'success';
 }
 
 /*
@@ -173,7 +191,7 @@ if ($flash !== null) {
 | eine Datendatei (z. B. new_article).
 */
 $pageNames = [
-    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label', 'labels',
+    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label', 'label_image', 'labels',
     'new_article', 'edit_article', 'categories', 'units', 'locations', 'location', 'packlist', 'inventory',
 ];
 

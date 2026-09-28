@@ -23,6 +23,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 * Ausbuchen oder Umbuchen in einen anderen Lagerort, dabei wird immer das älteste MHD zuerst genommen
 * Einlagern per Scan mit MHD, das für die folgenden Scans stehen bleibt
 * Menge vor dem Scan wählbar (z. B. 3 Packungen auf einmal), danach wieder 1
+* Orangefarbener Hinweis, wenn die gebuchte Charge bald abläuft
 * Alarm, wenn dabei abgelaufene Ware gebucht wurde: „Aussortieren“ nimmt die Buchung zurück und entsorgt die ganze abgelaufene Charge am Lagerort
 * Ton und Vibration (Android) als Rückmeldung beim Scannen, Ton je Gerät abschaltbar
 
@@ -37,6 +38,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 **Verwaltung**
 * Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck; die Artikelliste zeigt je Artikel, ob er ein MHD hat
 * Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), mit „alle 1×“ je Kategorie oder für alle Artikel
+* Etikettendrucker (optional): Brother QL-Serie per WLAN oder USB, auch rot/schwarz, Rollenbreite und Etikettenlänge einstellbar – noch nicht mit echtem Gerät getestet (siehe [Installation](docs/05-installation.md#etikettendrucker-optional))
 * MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien, Einheiten und Lagerorte anlegen und sortieren – Einheiten mit Einzahl und Mehrzahl („1 Rolle“, „5 Rollen“)
 * Je Lagerort eine Packliste zum Ausdrucken (Soll, Ist je MHD, Kästchen zum Abhaken) und eine Inventur: gezählte Mengen eintragen, Abweichungen werden als Korrektur gebucht
@@ -48,7 +50,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 ## ToDo
 
-* Unterstützung Labelprinter
+* Etikettendrucker mit echtem Gerät testen (Brother QL-810Wc, rot/schwarz)
 * Test mit QR-Code-Scanner
 
 ---
@@ -83,6 +85,18 @@ Dieselben Beispieldaten liegen als fertige Datenbank unter [`beispieldaten/beisp
 *Lagerorte anlegen, sortieren und deaktivieren*
 ![Lagerorte](images/lagerorte.png)
 
+*Inventur je Lagerort – gezählte Mengen eintragen, Abweichungen werden als Korrektur gebucht*
+![Inventur](images/inventur.png)
+
+*Packliste zum Ausdrucken – Soll, Ist je MHD und Kästchen zum Abhaken*
+![Packliste](images/packliste.png)
+
+*Sammeletiketten auf A4-Bögen (2 × 4), hier eine ganze Kategorie*
+![Etiketten](images/etiketten.png)
+
+*Mit Etikettendrucker (optional): Vorschau des Etiketts (rot/schwarz, 62 × 120 mm) und Druck ohne Druckdialog*
+![Etikettendrucker](images/etikettendrucker.png)
+
 *Wochenbericht per E-Mail*
 ![Wochenbericht](images/wochenbericht.png)
 
@@ -116,7 +130,7 @@ SanLager besteht aus einer webbasierten Anwendung und optional einem fest instal
 
 ## Dokumentation
 
-Die technische Dokumentation ist in einzelne Bereiche aufgeteilt.
+Die Dokumentation ist in einzelne Bereiche aufgeteilt – zuerst Einrichtung und Betrieb, dann die technischen Details.
 
 ### 📖 Projekt
 
@@ -128,9 +142,17 @@ Voraussetzungen, Konfiguration, Webserver und Aktualisieren per `script/pull.sh`
 
 ➡️ **[Installation](docs/05-installation.md)**
 
-### 🗄️ Datenbank
+### 💾 Datensicherung
 
-➡️ **[Dokumentation der Datenbankstruktur und der einzelnen Tabellen.](docs/10-datenbank.md)**
+Tägliche, geprüfte Sicherung der Datenbank per Cron, Aufbewahrung und Wiederherstellung:
+
+➡️ **[Datensicherung einrichten](docs/06-datensicherung.md)**
+
+### 📧 Wochenbericht
+
+Einrichtung des wöchentlichen Berichts per E-Mail (SMTP-Zugang, Empfänger, Cron-Job):
+
+➡️ **[Wochenbericht einrichten](docs/07-wochenbericht.md)**
 
 ### 🖥️ Raspberry Pi
 
@@ -142,25 +164,21 @@ Einrichtung des Raspberry Pi als festes SanLager-Terminal:
 * Chromium im Kiosk-Modus
 * automatische Anmeldung
 * Autostart
-* Fehlerbehebung
+* Log zur Fehlersuche
 
-➡️ **[Raspberry-Pi-Terminal einrichten](docs/90-raspberry-pi.md)**
+➡️ **[Raspberry-Pi-Terminal einrichten](docs/08-raspberry-pi.md)**
 
-### 📧 Wochenbericht
+### 🗄️ Datenbank
 
-Einrichtung des wöchentlichen Berichts per E-Mail (SMTP-Zugang, Empfänger, Cron-Job):
+Tabellen, Bewegungsarten und Migrationen:
 
-➡️ **[Wochenbericht einrichten](docs/12-wochenbericht.md)**
-
-### 💾 Datensicherung
-
-Tägliche, geprüfte Sicherung der Datenbank per Cron, Aufbewahrung und Wiederherstellung:
-
-➡️ **[Datensicherung einrichten](docs/13-datensicherung.md)**
+➡️ **[Datenbank](docs/10-datenbank.md)**
 
 ### 🔧 Entwicklung
 
-**[Dokumentation zur Projektstruktur, Entwicklung und Bereitstellung der Anwendung.](docs/11-entwicklung.md)**
+Projektstruktur, Tests, Screenshots, Beispieldatenbank sowie `push.sh`/`pull.sh`:
+
+➡️ **[Entwicklung](docs/11-entwicklung.md)**
 
 ---
 

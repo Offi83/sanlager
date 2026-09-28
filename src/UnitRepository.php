@@ -13,6 +13,19 @@ use RuntimeException;
  */
 class UnitRepository
 {
+    use SortOrder;
+
+    /**
+     * Spalten `unit` (Einzahl) und `unit_plural` (Mehrzahl) für Abfragen,
+     * die `units` als `u` dazuholen – wie quantityText() sie erwartet.
+     * Ohne Einheit gilt "Stück".
+     */
+    public const SELECT_COLUMNS = 'COALESCE(u.name, \'Stück\') AS unit, '
+        . 'COALESCE(u.plural, u.name, \'Stück\') AS unit_plural';
+
+    private const SORT_TABLE = 'units';
+    private const SORT_ACTIVE_ONLY = false;
+
     public function __construct(
         private PDO $db
     ) {
@@ -92,9 +105,7 @@ class UnitRepository
         $statement->execute([
             'name' => $name,
             'plural' => $plural !== '' ? $plural : $name,
-            'sort_order' => 10 + (int) $this->db
-                ->query('SELECT COALESCE(MAX(sort_order), 0) FROM units')
-                ->fetchColumn(),
+            'sort_order' => $this->nextSortOrder(),
         ]);
 
         return (int) $this->db->lastInsertId();
@@ -168,35 +179,6 @@ class UnitRepository
         ]);
     }
 
-    /**
-     * Neue Reihenfolge (Reihenfolge der IDs = Reihenfolge der Einheiten),
-     * vom Drag & Drop der Einheiten-Seite.
-     */
-    public function reorder(array $ids): void
-    {
-        $statement = $this->db->prepare(
-            'UPDATE units
-             SET sort_order = :sort_order
-             WHERE id = :id'
-        );
-
-        $this->db->beginTransaction();
-
-        try {
-            foreach (array_values($ids) as $position => $id) {
-                $statement->execute([
-                    'sort_order' => ($position + 1) * 10,
-                    'id' => (int) $id,
-                ]);
-            }
-
-            $this->db->commit();
-        } catch (\Throwable $exception) {
-            $this->db->rollBack();
-
-            throw $exception;
-        }
-    }
 
     /**
      * @throws RuntimeException wenn eine (andere) Einheit so heißt – in

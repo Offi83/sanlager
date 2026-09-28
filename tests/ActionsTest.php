@@ -9,6 +9,7 @@ use LagerApp\BatchRepository;
 use LagerApp\CategoryActions;
 use LagerApp\CategoryRepository;
 use LagerApp\Database;
+use LagerApp\LabelActions;
 use LagerApp\LocationActions;
 use LagerApp\LocationRepository;
 use LagerApp\StockActions;
@@ -60,6 +61,31 @@ class ActionsTest extends TestCase
     {
         return new ArticleActions($this->articles, $this->categories, $this->stock, $this->locations);
     }
+
+    /**
+     * Etiketten-Aktionen mit Testfunktion statt brother_ql.
+     *
+     * @param array<int, array<int, string>> $calls Aufrufe (Befehlszeilen)
+     */
+    private function labelActions(array $env, ?array &$calls = [], string $output = ''): LabelActions
+    {
+        return new LabelActions(
+            $this->articles,
+            $env,
+            static function (array $command) use (&$calls, $output): array {
+                $calls[] = $command;
+
+                return ['exitCode' => 0, 'output' => $output];
+            },
+            static fn (): bool => true
+        );
+    }
+
+    private const LABEL_PRINTER_ENV = [
+        'LABEL_OUTPUT' => 'printer',
+        'LABEL_PRINTER' => 'tcp://192.168.1.50:9100',
+        'LABEL_RED' => 'true',
+    ];
 
     private function receive(int $quantity): void
     {
@@ -279,6 +305,8 @@ class ActionsTest extends TestCase
             try {
                 $this->receiveWithExpiry($expiry, confirmed: true);
                 $this->fail('Angenommen: ' . $expiry);
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException $exception) {
                 $this->assertStringContainsString('Bitte das Jahr prüfen', $exception->getMessage());
             }
@@ -305,6 +333,8 @@ class ActionsTest extends TestCase
             try {
                 $this->receiveWithExpiry($expiry);
                 $this->fail('Ohne Bestätigung angenommen: ' . $expiry);
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException $exception) {
                 $this->assertStringContainsString($message, $exception->getMessage());
             }
@@ -366,6 +396,8 @@ class ActionsTest extends TestCase
                 'expiry_date' => date('d.m.Y', strtotime('+1 year')),
             ]);
             $this->fail('MHD für Artikel ohne MHD angelegt.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('hat kein MHD', $exception->getMessage());
         }
@@ -419,6 +451,8 @@ class ActionsTest extends TestCase
             try {
                 $actions->dispatch('create_unit', ['name' => $variant, 'plural' => '']);
                 $this->fail('Variante angelegt: ' . $variant);
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException $exception) {
                 $this->assertStringContainsString('gibt es schon (Rolle)', $exception->getMessage());
             }
@@ -445,6 +479,8 @@ class ActionsTest extends TestCase
                 'article_number' => 'P-2', 'name' => 'Pflaster 2', 'category_id' => $category, 'unit_id' => '9999',
             ]);
             $this->fail('Unbekannte Einheit angenommen.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertSame('Bitte eine Einheit auswählen.', $exception->getMessage());
         }
@@ -467,6 +503,8 @@ class ActionsTest extends TestCase
         try {
             $actions->dispatch('delete_unit', ['id' => (string) $roll['id']]);
             $this->fail('Benutzte Einheit gelöscht.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('noch von 1 Artikel verwendet', $exception->getMessage());
         }
@@ -567,6 +605,8 @@ class ActionsTest extends TestCase
             try {
                 $save($invalid);
                 $this->fail('Mindestbestand "' . $invalid . '" wurde angenommen.');
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException $exception) {
                 $this->assertStringContainsString('Ungültiger Mindestbestand für Hauptlager', $exception->getMessage());
             }
@@ -584,6 +624,43 @@ class ActionsTest extends TestCase
         $this->assertFalse($result->json['success']);
     }
 
+    /**
+     * Kategorien, Lagerorte und Einheiten sortieren gleich (SortOrder):
+     * Reihenfolge der Liste zählt, nicht ihre Schlüssel; neue Einträge
+     * kommen ans Ende.
+     */
+    public function testReorderIsTheSameForCategoriesLocationsAndUnits(): void
+    {
+        $units = new UnitRepository($this->db);
+
+        $lists = [
+            'reorder_categories' => [new CategoryActions($this->categories), fn () => $this->categories->all(),
+                fn () => $this->categories->create('Neu ' . uniqid(), 'N', '#123456')],
+            'reorder_locations' => [new LocationActions($this->locations, $this->stock), fn () => $this->locations->all(),
+                fn () => $this->locations->create('Neu ' . uniqid(), '')],
+            'reorder_units' => [new UnitActions($units), fn () => $units->all(),
+                fn () => $units->create('Neu ' . uniqid())],
+        ];
+
+        foreach ($lists as $action => [$actions, $all, $create]) {
+            if (count($all()) < 2) {
+                $create();
+            }
+
+            $ids = array_reverse(array_column($all(), 'id'));
+            $result = $actions->dispatch($action, ['ids' => array_combine(
+                array_map(static fn (int $i): string => 'k' . $i, array_keys($ids)),
+                array_map('strval', $ids)
+            )]);
+
+            $this->assertTrue($result->json['success'], $action);
+            $this->assertSame($ids, array_column($all(), 'id'), $action);
+
+            $newId = $create();
+            $this->assertSame($newId, (int) array_column($all(), 'id')[count($ids)], $action . ': neu ans Ende');
+        }
+    }
+
     public function testCategoryCreateValidatesColor(): void
     {
         $actions = new CategoryActions($this->categories);
@@ -591,6 +668,8 @@ class ActionsTest extends TestCase
         try {
             $actions->dispatch('create_category', ['name' => 'Test', 'short_name' => 'T', 'color' => 'rot']);
             $this->fail('Ungültige Farbe wurde akzeptiert.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertSame('Ungültige Farbe.', $exception->getMessage());
         }
@@ -783,6 +862,8 @@ class ActionsTest extends TestCase
             try {
                 $this->stockActions()->dispatch('stock_move', $extra + $base);
                 $this->fail('Nicht abgelehnt: ' . $case);
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException $exception) {
                 $this->assertStringContainsString($expected, $exception->getMessage(), $case);
             }
@@ -800,6 +881,8 @@ class ActionsTest extends TestCase
         try {
             $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
             $this->fail('Artikel mit Bestand wurde gelöscht.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('noch Bestand vorhanden ist (2 Stück', $exception->getMessage());
         }
@@ -860,6 +943,8 @@ class ActionsTest extends TestCase
             try {
                 $this->articles->create($number, $name, '', 'Stück', null);
                 $this->fail('Doppelter Artikel angelegt: ' . $name);
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException $exception) {
                 $this->assertStringContainsString($expected, $exception->getMessage());
             }
@@ -870,6 +955,54 @@ class ActionsTest extends TestCase
 
         $this->expectExceptionMessage('Namen existiert bereits');
         $this->articles->create('A-004', 'ärmelschoner', '', 'Stück', null);
+    }
+
+    /**
+     * Z. B. Artikelseite auf dem Pi noch offen, der Artikel wurde inzwischen
+     * am Handy gelöscht: Buchungen und Änderungen daran werden abgelehnt,
+     * sonst läge Bestand an einem Artikel, den keine Liste mehr zeigt.
+     */
+    public function testDeletedArticleCannotBeBookedOrChanged(): void
+    {
+        $this->receive(1);
+        $this->stock->issueOldest($this->articleId, $this->mainId);
+        $this->articleActions()->dispatch('deactivate_article', ['id' => (string) $this->articleId]);
+
+        $id = (string) $this->articleId;
+        $attempts = [
+            'stock_move' => [$this->stockActions(), [
+                'article_id' => $id, 'quantity' => '5', 'from' => 'receipt',
+                'to' => (string) $this->mainId, 'batch_selection' => 'none',
+            ]],
+            'undo_issue' => [$this->stockActions(), [
+                'article_id' => $id, 'batch_id' => '0', 'location_id' => (string) $this->mainId, 'quantity' => '1',
+            ]],
+            'set_article_minimums' => [$this->articleActions(), [
+                'article_id' => $id, 'minimum_stock' => [(string) $this->mainId => '3'],
+            ]],
+            'update_article' => [$this->articleActions(), [
+                'id' => $id, 'article_number' => 'A-001', 'name' => 'Geändert',
+                'category_id' => (string) $this->categories->all()[0]['id'],
+            ]],
+            'deactivate_article' => [$this->articleActions(), ['id' => $id]],
+        ];
+
+        foreach ($attempts as $action => [$actions, $input]) {
+            $error = null;
+
+            try {
+                $actions->dispatch($action, $input);
+            } catch (RuntimeException $exception) {
+                $error = $exception->getMessage();
+            }
+
+            $this->assertNotNull($error, $action . ' wurde für einen gelöschten Artikel ausgeführt.');
+        }
+
+        $this->assertSame(0, $this->stock->getPhysicalStock($this->articleId));
+        $this->assertNull($this->stock->getStockForArticle($this->articleId)[0]['minimum_stock']);
+        $this->assertSame(0, (int) $this->articles->find($this->articleId)['active']);
+        $this->assertSame('Mullbinde', $this->articles->find($this->articleId)['name']);
     }
 
     public function testArticleNumberIsRequiredWhenEditing(): void
@@ -884,6 +1017,8 @@ class ActionsTest extends TestCase
                 'category_id' => $category,
             ]);
             $this->fail('Artikelnummer ließ sich leeren.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertSame('Bitte eine Artikelnummer eingeben.', $exception->getMessage());
         }
@@ -943,6 +1078,8 @@ class ActionsTest extends TestCase
         try {
             $this->locations->create('KISTE 1', '');
             $this->fail('Doppelter Lagerort angelegt.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('existiert bereits (Kiste 1)', $exception->getMessage());
         }
@@ -1044,6 +1181,8 @@ class ActionsTest extends TestCase
                     'count' => [(string) $this->articleId => ['none' => '1']],
                 ]);
                 $this->fail($case . ': angenommen');
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
             } catch (RuntimeException) {
             }
         }
@@ -1066,7 +1205,7 @@ class ActionsTest extends TestCase
             'quantity' => '2',
         ]);
 
-        $this->assertTrue($result->json['expired']);
+        $this->assertSame('expired', $result->json['warning']);
         $this->assertSame([[
             'batch_id' => $expired,
             'expiry_date' => date('d.m.Y', strtotime('-1 day')),
@@ -1088,6 +1227,30 @@ class ActionsTest extends TestCase
         ]);
 
         $this->assertSame([], $result->json['expired_batches']);
+    }
+
+    public function testBookingWarningDistinguishesSoonFromExpired(): void
+    {
+        $soon = $this->batches->findOrCreate($this->articleId, date('Y-m-d', strtotime('+3 days')));
+        $this->stock->move($this->articleId, $this->mainId, 2, 'receipt', null, $soon);
+        $this->receive(2);
+
+        $book = fn (): ActionResult => $this->stockActions()->dispatch('issue', [
+            'ajax' => '1',
+            'article_number' => 'A-001',
+        ]);
+
+        // MHD bald erreicht: Warnung, aber kein Alarm wie bei abgelaufener Ware.
+        $result = $book();
+        $this->assertSame('soon', $result->json['warning']);
+        $this->assertSame([], $result->json['expired_batches']);
+
+        // Ohne Ajax: gelbe statt roter Meldung.
+        $result = $this->stockActions()->dispatch('issue', ['article_number' => 'A-001']);
+        $this->assertSame('caution', $result->messageType);
+
+        // Charge ohne MHD: keine Warnung.
+        $this->assertSame('', $book()->json['warning']);
     }
 
     public function testSortOutExpiredAction(): void
@@ -1120,5 +1283,102 @@ class ActionsTest extends TestCase
         $this->assertSame(400, $result->status);
         $this->assertFalse($result->json['success']);
         $this->assertSame(1, (int) $this->db->query("SELECT COUNT(*) FROM stock_movements WHERE movement_type = 'disposal'")->fetchColumn());
+    }
+
+    public function testPrintLabelsSendsImagesToPrinter(): void
+    {
+        $calls = [];
+
+        $result = $this->labelActions(self::LABEL_PRINTER_ENV, $calls)->dispatch('print_labels', [
+            'qty' => [(string) $this->articleId => '3'],
+            'return' => 'label',
+        ]);
+
+        $this->assertSame('?page=label&id=' . $this->articleId, $result->redirectUrl);
+        $this->assertSame('3 Etiketten an den Drucker gesendet.', $result->message);
+        $this->assertCount(1, $calls);
+        $this->assertContains('--red', $calls[0]);
+        $this->assertCount(3, array_filter($calls[0], static fn (string $part): bool => str_ends_with($part, '.png')));
+    }
+
+    public function testPrintLabelsFromCollectionKeepsSelection(): void
+    {
+        $other = $this->articles->create('A-002', 'Pflaster', '', 'Stück', null);
+        $inactive = $this->articles->create('A-003', 'Alt', '', 'Stück', null);
+        $this->articles->deactivate($inactive);
+
+        $calls = [];
+
+        // USB meldet den Druck zurück: "gedruckt" statt "gesendet".
+        $result = $this->labelActions(
+            ['LABEL_PRINTER' => 'file:///dev/usb/lp0'] + self::LABEL_PRINTER_ENV,
+            $calls,
+            "INFO:brother_ql.backends.helpers:Printing was successful. Waiting for the next job.\n"
+        )->dispatch('print_labels', [
+            'qty' => [
+                (string) $this->articleId => '500',
+                (string) $other => '1',
+                (string) $inactive => '2',
+                'x' => 'abc',
+                '999' => '1',
+            ],
+            'return' => 'labels',
+        ]);
+
+        $this->assertSame(
+            '?page=labels&' . http_build_query(['qty' => [$this->articleId => 99, $other => 1]]),
+            $result->redirectUrl
+        );
+        $this->assertSame('100 Etiketten gedruckt.', $result->message);
+        $this->assertCount(10, $calls, 'in Aufträgen zu je 10 Etiketten');
+
+        $result = $this->labelActions(self::LABEL_PRINTER_ENV)->dispatch('print_labels', [
+            'qty' => [(string) $other => '1'],
+        ]);
+
+        $this->assertSame('1 Etikett an den Drucker gesendet.', $result->message);
+        $this->assertSame('?page=labels&' . http_build_query(['qty' => [$other => 1]]), $result->redirectUrl);
+    }
+
+    public function testPrintLabelsNeedsPrinterAndQuantity(): void
+    {
+        $this->assertNull($this->labelActions([])->dispatch('something_else', []));
+
+        $errors = [];
+
+        foreach ([
+            [[], ['qty' => [(string) $this->articleId => '1']]],
+            [['LABEL_OUTPUT' => 'printer'], ['qty' => [(string) $this->articleId => '1']]],
+            [self::LABEL_PRINTER_ENV, ['qty' => [(string) $this->articleId => '0']]],
+            [self::LABEL_PRINTER_ENV, ['qty' => 'x']],
+        ] as [$env, $input]) {
+            $calls = [];
+
+            try {
+                $this->labelActions($env, $calls)->dispatch('print_labels', $input);
+                $errors[] = null;
+            } catch (RuntimeException $exception) {
+                $errors[] = $exception->getMessage();
+            }
+
+            $this->assertSame([], $calls);
+        }
+
+        $this->assertStringContainsString('LABEL_OUTPUT=printer', $errors[0]);
+        $this->assertStringContainsString('LABEL_PRINTER fehlt', $errors[1]);
+        $this->assertSame('Bitte bei mindestens einem Artikel eine Anzahl eintragen.', $errors[2]);
+        $this->assertSame('Bitte bei mindestens einem Artikel eine Anzahl eintragen.', $errors[3]);
+    }
+
+    public function testPrintLabelsReportsPrinterError(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Keine Rolle eingelegt');
+
+        $this->labelActions(
+            ['LABEL_PRINTER' => 'file:///dev/usb/lp0'] + self::LABEL_PRINTER_ENV,
+            $calls,
+            "ERROR:brother_ql.backends.helpers:Errors occured: ['No media when printing']\n"
+        )->dispatch('print_labels', ['qty' => [(string) $this->articleId => '1']]);
     }
 }

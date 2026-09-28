@@ -330,42 +330,16 @@ document.addEventListener('DOMContentLoaded', function () {
     /*
      * Einlagern mit ungewöhnlichem MHD (schon abgelaufen oder mehr als
      * 20 Jahre voraus): gleich beim Eintragen nachfragen, nicht erst beim
-     * Scannen. Die Bestätigung gilt, bis das MHD geändert wird; der
-     * Server lehnt solche Daten ohne sie ab (confirm_expiry, siehe
-     * StockActions::assertPlausibleExpiry()).
+     * Scannen (expiryQuestion() aus expiry-check.js). Die Bestätigung
+     * gilt, bis das MHD geändert wird; der Server lehnt solche Daten ohne
+     * sie ab (confirm_expiry, siehe StockActions::assertPlausibleExpiry()).
      */
-    function isoDate(date) {
-
-        return date.getFullYear()
-            + '-' + String(date.getMonth() + 1).padStart(2, '0')
-            + '-' + String(date.getDate()).padStart(2, '0');
-
-    }
-
     expiryInput.addEventListener('change', function () {
 
         confirmExpiry.value = '0';
         releaseScanLock();
 
-        const expiry = expiryInput.value;
-
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
-            return;
-        }
-
-        const today = new Date();
-        const inTwentyYears = new Date();
-        inTwentyYears.setFullYear(today.getFullYear() + 20);
-
-        const shown = expiry.split('-').reverse().join('.');
-
-        let question = null;
-
-        if (expiry < isoDate(today)) {
-            question = 'Das MHD ' + shown + ' ist bereits abgelaufen. Trotzdem einlagern?';
-        } else if (expiry > isoDate(inTwentyYears)) {
-            question = 'Das MHD ' + shown + ' liegt über 20 Jahre in der Zukunft. Stimmt das Jahr?';
-        }
+        const question = expiryQuestion(expiryInput.value);
 
         if (question === null) {
             return;
@@ -401,14 +375,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    function showResult(message, error = false) {
+    /*
+     * level: true/'error' = rot (Fehler, abgelaufene Ware),
+     * 'caution' = orange (MHD bald erreicht), sonst grün.
+     */
+    function showResult(message, level = false) {
 
         scanResult.textContent = message;
         scanResult.hidden = false;
 
         scanResult.classList.toggle(
             'error',
-            error
+            level === true || level === 'error'
+        );
+
+        scanResult.classList.toggle(
+            'caution',
+            level === 'caution'
         );
 
     }
@@ -602,21 +585,20 @@ document.addEventListener('DOMContentLoaded', function () {
         showResult(
             data.article_name
             + ' – '
-            + lastResultCount
-            + ' '
-            // Einzahl nur bei genau 1 ("1 Rolle", "2 Rollen").
-            + (lastResultCount === 1 ? data.unit : (data.unit_plural || data.unit))
+            + unitText(lastResultCount, data)
             + ' '
             + data.action_label
             // Artikel ohne MHD: keine Angabe.
             + (data.expiry_date ? ' – MHD ' + data.expiry_date : ''),
-            data.expired === true
+            data.warning === 'expired'
+                ? 'error'
+                : (data.warning === 'soon' ? 'caution' : false)
         );
 
         if (data.expired_batches && data.expired_batches.length > 0) {
             showAlarm(data);
         } else {
-            signal(data.expired === true ? 'warning' : 'ok');
+            signal(data.warning !== '' ? 'warning' : 'ok');
         }
 
         return data;

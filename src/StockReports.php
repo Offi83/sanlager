@@ -29,7 +29,7 @@ class StockReports
      * Artikel/Charge/Lagerort. Umbuchungen (`transfer_out`/`transfer_in`)
      * und Entsorgungen (`disposal`) zählen bewusst nicht dazu, da dabei
      * kein Material verbraucht wird. Rückgängig gemachte Ausbuchungen
-     * (`issue_reversal`, siehe reverseTodayIssue()) werden abgezogen;
+     * (`issue_reversal`, siehe StockRepository::reverseToday()) werden abgezogen;
      * vollständig zurückgenommene Zeilen entfallen.
      */
     public function getTodayIssues(): array
@@ -73,8 +73,7 @@ class StockReports
                 sl.id AS location_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 a.has_expiry,
                 b.expiry_date,
                 sl.name AS location_name,
@@ -135,8 +134,7 @@ class StockReports
                 t.to_location_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 a.has_expiry,
                 b.expiry_date,
                 src.name AS from_location_name,
@@ -210,8 +208,7 @@ class StockReports
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 sl.name AS location_name,
                 ABS(SUM(sm.quantity)) AS quantity
              FROM stock_movements sm
@@ -256,8 +253,7 @@ class StockReports
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 sl.id AS location_id,
                 sl.name AS location_name,
                 c.name AS category_name,
@@ -392,8 +388,7 @@ class StockReports
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 sl.id AS location_id,
                 sl.name AS location_name,
                 sl.sort_order AS location_sort_order,

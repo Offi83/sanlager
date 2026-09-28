@@ -70,8 +70,7 @@ class StockRepository
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 a.has_expiry,
                 c.name AS category_name,
                 c.color AS category_color,
@@ -100,8 +99,8 @@ class StockRepository
                 c.name COLLATE NOCASE,
                 a.name COLLATE NOCASE,
                 CASE
-                    WHEN b.expiry_date IS NULL THEN 0
-                    ELSE 1
+                    WHEN b.expiry_date IS NULL THEN 1
+                    ELSE 0
                 END,
                 b.expiry_date'
         );
@@ -136,8 +135,7 @@ class StockRepository
                 a.id AS article_id,
                 a.name AS article_name,
                 a.article_number,
-                COALESCE(u.name, \'Stück\') AS unit,
-                COALESCE(u.plural, u.name, \'Stück\') AS unit_plural,
+                ' . UnitRepository::SELECT_COLUMNS . ',
                 a.has_expiry,
                 c.name AS category_name,
                 c.color AS category_color,
@@ -416,8 +414,8 @@ class StockRepository
              HAVING SUM(sm.quantity) > 0
              ORDER BY
                 CASE
-                    WHEN b.expiry_date IS NULL THEN 0
-                    ELSE 1
+                    WHEN b.expiry_date IS NULL THEN 1
+                    ELSE 0
                 END,
                 b.expiry_date,
                 sl.sort_order,
@@ -622,34 +620,20 @@ class StockRepository
         int $locationId,
         ?int $batchId = null
     ): int {
-        if ($batchId === null) {
-            $statement = $this->db->prepare(
-                'SELECT COALESCE(SUM(quantity), 0)
-                 FROM stock_movements
-                 WHERE article_id = :article_id
-                 AND location_id = :location_id
-                 AND batch_id IS NULL'
-            );
+        // IS statt = : trifft bei null auch "ohne MHD" (batch_id IS NULL).
+        $statement = $this->db->prepare(
+            'SELECT COALESCE(SUM(quantity), 0)
+             FROM stock_movements
+             WHERE article_id = :article_id
+             AND location_id = :location_id
+             AND batch_id IS :batch_id'
+        );
 
-            $statement->execute([
-                'article_id' => $articleId,
-                'location_id' => $locationId
-            ]);
-        } else {
-            $statement = $this->db->prepare(
-                'SELECT COALESCE(SUM(quantity), 0)
-                 FROM stock_movements
-                 WHERE article_id = :article_id
-                 AND location_id = :location_id
-                 AND batch_id = :batch_id'
-            );
-
-            $statement->execute([
-                'article_id' => $articleId,
-                'location_id' => $locationId,
-                'batch_id' => $batchId
-            ]);
-        }
+        $statement->execute([
+            'article_id' => $articleId,
+            'location_id' => $locationId,
+            'batch_id' => $batchId,
+        ]);
 
         return (int) $statement->fetchColumn();
     }
@@ -719,12 +703,6 @@ class StockRepository
         ?string $note = null,
         int $quantity = 1
     ): array {
-        if ($fromLocationId === $toLocationId) {
-            throw new RuntimeException(
-                'Quell- und Ziellagerort dürfen nicht identisch sein.'
-            );
-        }
-
         return $this->transactional(function () use ($articleId, $fromLocationId, $toLocationId, $note, $quantity): array {
             $batches = $this->takeOldestBatches($articleId, $fromLocationId, $quantity);
 
@@ -762,12 +740,6 @@ class StockRepository
         int $quantity,
         ?string $note = null
     ): void {
-        if ($fromLocationId === $toLocationId) {
-            throw new RuntimeException(
-                'Quell- und Ziellagerort dürfen nicht identisch sein.'
-            );
-        }
-
         $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note): void {
             $this->transferPair($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note, false);
         });
@@ -794,20 +766,13 @@ class StockRepository
         int $toLocationId,
         ?string $note = null
     ): array {
-        if ($fromLocationId === $toLocationId) {
-            throw new RuntimeException(
-                'Quell- und Ziellagerort dürfen nicht identisch sein.'
-            );
-        }
-
         return $this->transactional(function () use ($fromLocationId, $toLocationId, $note): array {
             $statement = $this->db->prepare(
                 'SELECT
                     sm.article_id,
                     sm.batch_id,
                     SUM(sm.quantity) AS quantity,
-                    COALESCE(u.name, \'Stück\') AS unit,
-                    COALESCE(u.plural, u.name, \'Stück\') AS unit_plural
+                    ' . UnitRepository::SELECT_COLUMNS . '
                  FROM stock_movements sm
                  INNER JOIN articles a
                     ON a.id = sm.article_id
@@ -926,97 +891,52 @@ class StockRepository
     }
 
     /**
-     * Nimmt heutige Ausbuchungen eines Artikels (Charge + Lagerort) ganz
-     * oder teilweise zurück, z. B. nach einem Fehlscan.
+     * Rücknehmbare Buchungsarten für reverseToday(): Vorzeichen der
+     * Buchung, Verb für die Fehlermeldung und Notiz der Gegenbuchung.
+     */
+    private const REVERSIBLE = [
+        'issue' => ['sign' => -1, 'verb' => 'ausgebucht', 'note' => 'Ausbuchung rückgängig gemacht'],
+        'disposal' => ['sign' => -1, 'verb' => 'entsorgt', 'note' => 'Entsorgung rückgängig gemacht'],
+        'receipt' => ['sign' => 1, 'verb' => 'eingelagert', 'note' => 'Einlagerung rückgängig gemacht'],
+    ];
+
+    /**
+     * Nimmt heutige Ausbuchungen (`issue`), Entsorgungen (`disposal`) oder
+     * Einlagerungen (`receipt`) eines Artikels (Charge + Lagerort) ganz
+     * oder teilweise zurück, z. B. nach einem Fehlscan oder einem Scan mit
+     * falschem MHD. Umbuchungen siehe reverseTodayTransfer().
      *
      * Es wird nichts gelöscht: Die Rücknahme ist eine Gegenbuchung vom Typ
-     * `issue_reversal` (Zugang an Lagerort und Charge der Ausbuchung),
-     * damit die Historie nachvollziehbar bleibt. Zurückgenommen werden
-     * kann höchstens, was heute netto ausgebucht wurde.
+     * `<Typ>_reversal` an Lagerort und Charge der Buchung, damit die
+     * Historie nachvollziehbar bleibt. Zurückgenommen werden kann höchstens,
+     * was heute netto gebucht wurde; eine Einlagerung nur, solange davon
+     * am Lagerort noch genug liegt.
      *
-     * @throws RuntimeException bei ungültiger Menge
-     */
-    public function reverseTodayIssue(
-        int $articleId,
-        ?int $batchId,
-        int $locationId,
-        int $quantity
-    ): void {
-        $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
-            $this->assertReversible(
-                $quantity,
-                -$this->todayNetQuantity(['issue', 'issue_reversal'], $articleId, $batchId, $locationId),
-                'ausgebucht'
-            );
-
-            $this->move(
-                $articleId,
-                $locationId,
-                $quantity,
-                'issue_reversal',
-                'Ausbuchung rückgängig gemacht',
-                $batchId
-            );
-        });
-    }
-
-    /**
-     * Nimmt eine heutige Entsorgung ganz oder teilweise zurück
-     * (Gegenbuchung `disposal_reversal`), siehe reverseTodayIssue().
-     *
-     * @throws RuntimeException bei ungültiger Menge
-     */
-    public function reverseTodayDisposal(
-        int $articleId,
-        ?int $batchId,
-        int $locationId,
-        int $quantity
-    ): void {
-        $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
-            $this->assertReversible(
-                $quantity,
-                -$this->todayNetQuantity(['disposal', 'disposal_reversal'], $articleId, $batchId, $locationId),
-                'entsorgt'
-            );
-
-            $this->move(
-                $articleId,
-                $locationId,
-                $quantity,
-                'disposal_reversal',
-                'Entsorgung rückgängig gemacht',
-                $batchId
-            );
-        });
-    }
-
-    /**
-     * Nimmt eine heutige Einlagerung ganz oder teilweise zurück, z. B. nach
-     * einem Scan mit falschem MHD (Gegenbuchung `receipt_reversal`, ein
-     * Abgang). Scheitert, wenn davon am Lagerort nicht mehr genug liegt
-     * (schon ausgebucht oder umgebucht).
-     *
+     * @param string $type issue|disposal|receipt
      * @throws RuntimeException bei ungültiger Menge oder fehlendem Bestand
      */
-    public function reverseTodayReceipt(
+    public function reverseToday(
+        string $type,
         int $articleId,
         ?int $batchId,
         int $locationId,
         int $quantity
     ): void {
-        $this->transactional(function () use ($articleId, $batchId, $locationId, $quantity): void {
+        $reversal = self::REVERSIBLE[$type] ?? throw new RuntimeException('Ungültiger Bewegungstyp.');
+
+        $this->transactional(function () use ($type, $reversal, $articleId, $batchId, $locationId, $quantity): void {
             $this->assertReversible(
                 $quantity,
-                $this->todayNetQuantity(['receipt', 'receipt_reversal'], $articleId, $batchId, $locationId),
-                'eingelagert'
+                $reversal['sign'] * $this->todayNetQuantity([$type, $type . '_reversal'], $articleId, $batchId, $locationId),
+                $reversal['verb']
             );
 
             $this->move(
                 $articleId,
                 $locationId,
                 $quantity,
-                'receipt_reversal',
-                'Einlagerung rückgängig gemacht',
+                $type . '_reversal',
+                $reversal['note'],
                 $batchId
             );
         });
@@ -1195,7 +1115,7 @@ class StockRepository
     ): int {
         return $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity): int {
             if ($toLocationId === null) {
-                $this->reverseTodayIssue($articleId, $batchId, $fromLocationId, $quantity);
+                $this->reverseToday('issue', $articleId, $batchId, $fromLocationId, $quantity);
             } else {
                 $this->reverseTodayTransfer($articleId, $batchId, $fromLocationId, $toLocationId, $quantity);
             }
@@ -1235,9 +1155,10 @@ class StockRepository
      * `receipt_reversal`/`issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
      * hier intern negiert, nachdem geprüft wurde, dass genug Bestand der
      * betroffenen Charge an diesem Lagerort vorhanden ist. Nur `correction`
-     * (Inventur, siehe applyInventory()) wird mit Vorzeichen übergeben. Für eine vollständige Umbuchung (Abgang an
-     * einem Lagerort + Zugang an einem anderen) siehe transferPair(),
-     * das move() zweimal in einer Transaktion aufruft.
+     * (Inventur, siehe applyInventory()) wird mit Vorzeichen übergeben.
+     * Für eine vollständige Umbuchung (Abgang an einem Lagerort + Zugang
+     * an einem anderen) siehe transferPair(), das move() zweimal in einer
+     * Transaktion aufruft.
      *
      * @param int|null $transferId verbindet die beiden Hälften einer
      *                             Umbuchung, siehe transferPair()
@@ -1354,6 +1275,12 @@ class StockRepository
         ?string $note,
         bool $reversal
     ): void {
+        if ($fromLocationId === $toLocationId) {
+            throw new RuntimeException(
+                'Quell- und Ziellagerort dürfen nicht identisch sein.'
+            );
+        }
+
         $this->transactional(function () use ($articleId, $batchId, $fromLocationId, $toLocationId, $quantity, $note, $reversal): void {
             /*
              * Neue, eindeutige Kennung. Unter der Schreibsperre der

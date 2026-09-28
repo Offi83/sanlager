@@ -57,21 +57,40 @@
                 <h1>Etiketten drucken</h1>
 
                 <p>
-                    Anzahl je Artikel eintragen – gedruckt wird auf
-                    A4-Bögen mit 2 × 4 Etiketten (105 × 74 mm).
+                    <?php if ($labelConfig->usesPrinter()): ?>
+                        Anzahl je Artikel eintragen – gedruckt wird auf dem
+                        Etikettendrucker (<?= h($labelConfig->description()) ?>).
+                    <?php else: ?>
+                        Anzahl je Artikel eintragen – gedruckt wird auf
+                        A4-Bögen mit 2 × 4 Etiketten (105 × 74 mm).
+                    <?php endif; ?>
                 </p>
 
             </div>
 
         </div>
 
-        <form
-            method="get"
-            class="labels-form"
-        >
+        <?php /* A4: Druckansicht per GET. Etikettendrucker: direkt drucken per POST (LabelActions). */ ?>
+        <?php if ($labelConfig->usesPrinter()): ?>
 
-            <input type="hidden" name="page" value="labels">
-            <input type="hidden" name="print" value="1">
+            <form
+                method="post"
+                class="labels-form"
+            >
+
+                <input type="hidden" name="action" value="print_labels">
+
+        <?php else: ?>
+
+            <form
+                method="get"
+                class="labels-form"
+            >
+
+                <input type="hidden" name="page" value="labels">
+                <input type="hidden" name="print" value="1">
+
+        <?php endif; ?>
 
             <div class="card">
 
@@ -108,7 +127,7 @@
                         type="submit"
                         class="button button-primary"
                     >
-                        Etiketten anzeigen
+                        <?= $labelConfig->usesPrinter() ? 'Drucken' : 'Etiketten anzeigen' ?>
                     </button>
 
                 </div>

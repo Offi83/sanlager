@@ -26,14 +26,12 @@ if ($articleId <= 0) {
     redirect('?page=articles');
 }
 
-$article = $articles->find($articleId);
+$article = $articles->findActive($articleId);
 
 /*
- * Unbekannte und gelöschte Artikel: zurück zur Liste. Gelöschte würden
- * sich sonst per Adresse weiter bebuchen lassen – der Bestand wäre dann
- * nirgends mehr sichtbar.
+ * Unbekannte und gelöschte Artikel: zurück zur Liste.
  */
-if (!$article || (int) $article['active'] !== 1) {
+if (!$article) {
     redirect('?page=articles');
 }
 

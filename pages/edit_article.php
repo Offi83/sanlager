@@ -7,12 +7,12 @@
  * Variablen stehen der Vorlage templates/pages/ zur Verfügung.
  */
 
-$editArticle = $articles->find((int) ($_GET['id'] ?? 0));
+$editArticle = $articles->findActive((int) ($_GET['id'] ?? 0));
 
 /*
  * Unbekannte und gelöschte Artikel: zurück zur Liste.
  */
-if (!$editArticle || (int) $editArticle['active'] !== 1) {
+if (!$editArticle) {
     redirect('?page=articles');
 }
 

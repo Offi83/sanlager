@@ -3,7 +3,6 @@
 namespace LagerApp;
 
 use RuntimeException;
-use Throwable;
 
 /**
  * Verarbeitet die POST-Aktionen rund um Kategorien
@@ -12,6 +11,7 @@ use Throwable;
 class CategoryActions
 {
     use ReadsInput;
+    use SortOrderAction;
 
     public function __construct(
         private CategoryRepository $categories
@@ -31,7 +31,7 @@ class CategoryActions
             'create_category' => $this->create($input),
             'update_category' => $this->update($input),
             'delete_category' => $this->delete($input),
-            'reorder_categories' => $this->reorder($input),
+            'reorder_categories' => $this->reorderResult($input, $this->categories->reorder(...), 'Ungültige Kategorienreihenfolge.'),
             default => null,
         };
     }
@@ -129,35 +129,5 @@ class CategoryActions
         $this->categories->delete($id);
 
         return ActionResult::redirect('?page=categories', 'Kategorie gelöscht');
-    }
-
-    /**
-     * Liefert im Gegensatz zu den anderen Aktionen immer JSON zurück
-     * (wird per fetch() vom Drag-&-Drop-Skript der Kategorien-Seite
-     * aufgerufen), auch im Fehlerfall.
-     */
-    private function reorder(array $input): ActionResult
-    {
-        $ids = $input['ids'] ?? null;
-
-        if (!is_array($ids)) {
-            return ActionResult::json([
-                'success' => false,
-                'error' => 'Ungültige Kategorienreihenfolge.'
-            ], 400);
-        }
-
-        try {
-            $this->categories->reorder($ids);
-        } catch (Throwable $exception) {
-            return ActionResult::json([
-                'success' => false,
-                'error' => userMessage($exception)
-            ], 400);
-        }
-
-        return ActionResult::json([
-            'success' => true
-        ]);
     }
 }

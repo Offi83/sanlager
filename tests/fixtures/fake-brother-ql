@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+/*
+ * Ersatz für brother_ql in tests/PagesTest.php: druckt nichts, sondern
+ * schreibt die Argumente und die Größe der übergebenen Bilder als eine
+ * JSON-Zeile in die Datei aus FAKE_BROTHER_QL_LOG.
+ */
+
+$args = array_slice($argv, 1);
+$images = array_values(array_filter($args, static fn (string $arg): bool => str_ends_with($arg, '.png')));
+
+file_put_contents(
+    (string) getenv('FAKE_BROTHER_QL_LOG'),
+    json_encode([
+        'args' => $args,
+        'sizes' => array_map(static fn (string $file): array => array_slice(getimagesize($file), 0, 2), $images),
+    ]) . "\n",
+    FILE_APPEND
+);
+
+fwrite(STDERR, "INFO:brother_ql.backends.helpers:Sending instructions to the printer. Total: 1 bytes.\n");

@@ -71,13 +71,9 @@ final class ReportConfig
             }
         }
 
-        $expiryDays = $value('REPORT_EXPIRY_DAYS');
+        $expiryDays = parseExpiryDays($value('REPORT_EXPIRY_DAYS'));
 
-        if ($expiryDays === '') {
-            $expiryDays = '90';
-        }
-
-        if (!ctype_digit($expiryDays) || (int) $expiryDays < 1 || (int) $expiryDays > 365) {
+        if ($expiryDays === null) {
             $errors[] = 'REPORT_EXPIRY_DAYS muss eine Zahl zwischen 1 und 365 sein.';
         }
 
@@ -98,7 +94,7 @@ final class ReportConfig
             $mailerDsn,
             $from,
             $recipients,
-            (int) $expiryDays,
+            $expiryDays,
             $appUrl !== '' ? $appUrl : null
         );
     }

@@ -102,7 +102,7 @@ class ArticleActions
 
         $categoryId = $this->int($input, 'category_id');
 
-        if ($id <= 0) {
+        if ($id <= 0 || !$this->articles->findActive($id)) {
             throw new RuntimeException(
                 'Ungültiger Artikel.'
             );
@@ -172,7 +172,7 @@ class ArticleActions
     {
         $id = $this->int($input, 'id');
 
-        $article = $this->articles->find($id);
+        $article = $this->articles->findActive($id);
 
         if (!$article) {
             throw new RuntimeException(
@@ -213,7 +213,7 @@ class ArticleActions
     {
         $articleId = $this->int($input, 'article_id');
 
-        if ($articleId <= 0 || !$this->articles->find($articleId)) {
+        if ($articleId <= 0 || !$this->articles->findActive($articleId)) {
             throw new RuntimeException(
                 'Ungültiger Artikel.'
             );

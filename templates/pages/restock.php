@@ -128,16 +128,7 @@
 
                                         <?php $currentCategory = $rowCategory; ?>
 
-                                        <tr
-                                            class="article-category-row"
-                                            style="<?= h(categoryStyle($row['category_color'] ?? null)) ?>"
-                                        >
-                                            <th colspan="<?= $group['is_default'] ? 4 : 5 ?>">
-                                                <span class="article-category-name">
-                                                    <?= h($row['category_name'] ?? 'Ohne Kategorie') ?>
-                                                </span>
-                                            </th>
-                                        </tr>
+                                        <?= renderCategoryRow($row, $group['is_default'] ? 4 : 5) ?>
 
                                     <?php endif; ?>
 

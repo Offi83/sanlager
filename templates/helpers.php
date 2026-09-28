@@ -39,11 +39,27 @@ function renderDisposeForm(
 }
 
 /**
+ * Überschriftszeile einer Kategorie in einer Tabelle (Artikelliste,
+ * MHD-Übersicht, Auffüllen, Lagerort, Inventur): Name auf der
+ * Kategoriefarbe, Schriftfarbe automatisch lesbar (categoryStyle()).
+ *
+ * @param array $row enthält `category_name` und `category_color` (beide optional)
+ */
+function renderCategoryRow(array $row, int $colspan): string
+{
+    return '<tr class="article-category-row" style="' . h(categoryStyle($row['category_color'] ?? null)) . '">'
+        . '<th colspan="' . $colspan . '">'
+        . '<span class="article-category-name">' . h($row['category_name'] ?? 'Ohne Kategorie') . '</span>'
+        . '</th>'
+        . '</tr>';
+}
+
+/**
  * Rückgängig-Button (Pfeil) für eine Zeile auf "Heute": nimmt
  * nach Rückfrage die ganze Zeile zurück. Gegenbuchung statt Löschen,
  * siehe StockActions::undoToday().
  *
- * @param string $action undo_issue|undo_transfer|undo_disposal
+ * @param string $action undo_issue|undo_transfer|undo_disposal|undo_receipt
  * @param array<string, int|null> $fields versteckte Felder (article_id, batch_id, ...)
  * @param string $question Rückfrage, z. B. "3 Stück Mullbinde zurück nach Hauptlager buchen?"
  */

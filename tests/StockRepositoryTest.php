@@ -133,6 +133,8 @@ class StockRepositoryTest extends TestCase
         try {
             $this->stock->issueOldest($this->articleId, $this->mainId, null, 4);
             $this->fail('Mehr ausgebucht als vorhanden.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('nur 3 vorhanden', $exception->getMessage());
         }
@@ -176,6 +178,8 @@ class StockRepositoryTest extends TestCase
         try {
             $this->stock->move($this->articleId, $this->mainId, 0, 'receipt');
             $this->fail('Menge 0 wurde akzeptiert.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException) {
         }
 
@@ -332,7 +336,7 @@ class StockRepositoryTest extends TestCase
             $this->stock->issueOldest($this->articleId, $this->mainId);
         }
 
-        $this->stock->reverseTodayIssue($this->articleId, $batch, $this->mainId, 1);
+        $this->stock->reverseToday('issue', $this->articleId, $batch, $this->mainId, 1);
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
         $this->assertSame(2, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
@@ -342,7 +346,7 @@ class StockRepositoryTest extends TestCase
         $types = $this->db->query('SELECT movement_type FROM stock_movements ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
         $this->assertSame(['receipt', 'issue', 'issue', 'issue', 'issue_reversal'], $types);
 
-        $this->stock->reverseTodayIssue($this->articleId, $batch, $this->mainId, 2);
+        $this->stock->reverseToday('issue', $this->articleId, $batch, $this->mainId, 2);
 
         $this->assertSame([], $this->reports->getTodayIssues());
         $this->assertSame(0, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
@@ -354,12 +358,14 @@ class StockRepositoryTest extends TestCase
         $this->stock->issueOldest($this->articleId, $this->mainId);
 
         try {
-            $this->stock->reverseTodayIssue($this->articleId, null, $this->mainId, 2);
+            $this->stock->reverseToday('issue', $this->articleId, null, $this->mainId, 2);
             $this->fail('Mehr zurückgebucht als ausgebucht.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException) {
         }
 
-        $this->stock->reverseTodayIssue($this->articleId, null, $this->mainId, 1);
+        $this->stock->reverseToday('issue', $this->articleId, null, $this->mainId, 1);
         $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
 
         // Umbuchungen lassen sich hierüber nicht "zurücknehmen".
@@ -367,7 +373,7 @@ class StockRepositoryTest extends TestCase
 
         $this->expectException(RuntimeException::class);
 
-        $this->stock->reverseTodayIssue($this->articleId, null, $this->mainId, 1);
+        $this->stock->reverseToday('issue', $this->articleId, null, $this->mainId, 1);
     }
 
     public function testDisposeExpiredBatchRemovesItCompletely(): void
@@ -435,6 +441,8 @@ class StockRepositoryTest extends TestCase
         try {
             $this->stock->reverseTodayTransfer($this->articleId, $batch, $this->mainId, $this->boxId, 2);
             $this->fail('Mehr zurückgenommen als umgebucht.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException) {
         }
 
@@ -496,14 +504,14 @@ class StockRepositoryTest extends TestCase
         $this->assertCount(1, $disposals);
         $this->assertSame(3, (int) $disposals[0]['quantity']);
 
-        $this->stock->reverseTodayDisposal($this->articleId, $expired, $this->mainId, 3);
+        $this->stock->reverseToday('disposal', $this->articleId, $expired, $this->mainId, 3);
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $expired));
         $this->assertSame([], $this->reports->getTodayDisposals());
 
         $this->expectException(RuntimeException::class);
 
-        $this->stock->reverseTodayDisposal($this->articleId, $expired, $this->mainId, 1);
+        $this->stock->reverseToday('disposal', $this->articleId, $expired, $this->mainId, 1);
     }
 
     public function testReverseTodayReceipt(): void
@@ -520,20 +528,22 @@ class StockRepositoryTest extends TestCase
         $this->assertSame([], $this->reports->getTodayReceipts());
         $batch = $this->receive(5, $this->day('+2 years'));
 
-        $this->stock->reverseTodayReceipt($this->articleId, $batch, $this->mainId, 2);
+        $this->stock->reverseToday('receipt', $this->articleId, $batch, $this->mainId, 2);
 
         $this->assertSame(8, $this->stock->getStockAtLocation($this->articleId, $this->mainId, $batch));
         $this->assertSame(3, (int) $this->reports->getTodayReceipts()[0]['quantity']);
 
         // Nicht mehr zurücknehmen, als heute eingelagert wurde.
         try {
-            $this->stock->reverseTodayReceipt($this->articleId, $batch, $this->mainId, 4);
+            $this->stock->reverseToday('receipt', $this->articleId, $batch, $this->mainId, 4);
             $this->fail('Mehr zurückgenommen als heute eingelagert.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (RuntimeException $exception) {
             $this->assertStringContainsString('heute wurden davon nur 3 eingelagert', $exception->getMessage());
         }
 
-        $this->stock->reverseTodayReceipt($this->articleId, $batch, $this->mainId, 3);
+        $this->stock->reverseToday('receipt', $this->articleId, $batch, $this->mainId, 3);
         $this->assertSame([], $this->reports->getTodayReceipts());
     }
 
@@ -544,7 +554,7 @@ class StockRepositoryTest extends TestCase
 
         $this->expectException(RuntimeException::class);
 
-        $this->stock->reverseTodayReceipt($this->articleId, null, $this->mainId, 1);
+        $this->stock->reverseToday('receipt', $this->articleId, null, $this->mainId, 1);
     }
 
     public function testMinimumAtDeactivatedLocationIsIgnored(): void
@@ -611,6 +621,24 @@ class StockRepositoryTest extends TestCase
         $this->assertSame(
             ['Kiste 1', 'Hauptlager'],
             array_column($this->stock->getStockByBatchAndLocation($this->articleId), 'location_name')
+        );
+    }
+
+    public function testStockWithoutExpiryIsListedLastEverywhere(): void
+    {
+        $this->receive(1, null);
+        $this->receive(1, $this->day('+2 years'));
+        $this->receive(1, $this->day('+1 year'));
+
+        $expected = [$this->day('+1 year'), $this->day('+2 years'), null];
+
+        $this->assertSame(
+            $expected,
+            array_column($this->stock->getStockAtLocationDetailed($this->mainId), 'expiry_date')
+        );
+        $this->assertSame(
+            $expected,
+            array_column($this->stock->getStockByBatchAndLocation($this->articleId), 'expiry_date')
         );
     }
 
@@ -761,6 +789,8 @@ class StockRepositoryTest extends TestCase
                 ['article_id' => $this->articleId, 'batch_id' => null, 'counted' => -1],
             ]);
             $this->fail('Negative Zählung wurde angenommen.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (\RuntimeException) {
         }
 
@@ -805,6 +835,8 @@ class StockRepositoryTest extends TestCase
         try {
             $this->stock->sortOutExpired($this->articleId, $batch, $this->mainId, null, 1);
             $this->fail('Nicht abgelaufene Charge wurde aussortiert.');
+        } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+            throw $failure; // fail() erbt von RuntimeException
         } catch (\RuntimeException) {
         }
 

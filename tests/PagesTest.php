@@ -57,14 +57,26 @@ class PagesTest extends TestCase
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
 
+        [self::$server, self::$baseUrl] = self::startServer(['LABEL_OUTPUT' => 'a4']);
+    }
+
+    /**
+     * Startet einen PHP-Entwicklungsserver mit der Demo-Datenbank und
+     * zusätzlichen Umgebungsvariablen (z. B. Etikettendrucker).
+     *
+     * @param array<string, string> $env
+     * @return array{0: resource, 1: string} Prozess und Basis-URL
+     */
+    private static function startServer(array $env): array
+    {
+        $root = dirname(__DIR__);
+
         // Freien Port ermitteln.
         $probe = stream_socket_server('tcp://127.0.0.1:0');
         $port = (int) substr(strrchr(stream_socket_get_name($probe, false), ':'), 1);
         fclose($probe);
 
-        self::$baseUrl = 'http://127.0.0.1:' . $port;
-
-        self::$server = proc_open(
+        $server = proc_open(
             [
                 PHP_BINARY,
                 '-d', 'variables_order=EGPCS',
@@ -80,7 +92,11 @@ class PagesTest extends TestCase
             [1 => ['file', self::$dir . '/server.log', 'a'], 2 => ['file', self::$dir . '/server.log', 'a']],
             $pipes,
             $root,
-            getenv() + ['DB_DATABASE' => $dbFile, 'APP_DEBUG' => 'false', 'APP_TIMEZONE' => 'Europe/Berlin']
+            $env + getenv() + [
+                'DB_DATABASE' => self::$dir . '/demo.sqlite',
+                'APP_DEBUG' => 'false',
+                'APP_TIMEZONE' => 'Europe/Berlin',
+            ]
         );
 
         for ($i = 0; $i < 50; $i++) {
@@ -89,13 +105,35 @@ class PagesTest extends TestCase
             if ($socket) {
                 fclose($socket);
 
-                return;
+                return [$server, 'http://127.0.0.1:' . $port];
             }
 
             usleep(100_000);
         }
 
         throw new RuntimeException('Testserver startet nicht: ' . @file_get_contents(self::$dir . '/server.log'));
+    }
+
+    /**
+     * Führt $test gegen einen zweiten Server mit anderen Einstellungen
+     * aus (request() geht solange an diesen Server).
+     */
+    private static function withServer(array $env, callable $test): void
+    {
+        [$server, $baseUrl] = self::startServer($env);
+        $previousUrl = self::$baseUrl;
+        $previousCookie = self::$cookie;
+        self::$baseUrl = $baseUrl;
+        self::$cookie = '';
+
+        try {
+            $test();
+        } finally {
+            self::$baseUrl = $previousUrl;
+            self::$cookie = $previousCookie;
+            proc_terminate($server);
+            proc_close($server);
+        }
     }
 
     public static function tearDownAfterClass(): void
@@ -745,5 +783,100 @@ class PagesTest extends TestCase
             self::request('?page=issue', ['action' => ['issue'], 'article_number' => 'x']),
             'Aktion als Array'
         );
+    }
+
+    public function testLabelPageWithoutPrinterHasNoImageRoute(): void
+    {
+        $response = self::request(self::resolve('?page=label_image&id={article}'));
+
+        $this->assertSame(404, $response['status']);
+
+        $body = self::request(self::resolve('?page=article&id={article}'))['body'];
+        $this->assertMatchesRegularExpression('#href="\?page=label&id=\d+"\s+class="button"\s+target="_blank"#', $body);
+    }
+
+    public function testLabelPrinterModePrintsFromLabelPages(): void
+    {
+        $log = self::$dir . '/brother-ql.log';
+        $article = self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'");
+
+        self::withServer([
+            'LABEL_OUTPUT' => 'printer',
+            'LABEL_PRINTER' => 'tcp://192.0.2.10:9100',
+            'LABEL_RED' => 'true',
+            'BROTHER_QL' => __DIR__ . '/fixtures/fake-brother-ql',
+            'FAKE_BROTHER_QL_LOG' => $log,
+        ], function () use ($article, $log): void {
+
+            // Artikelseite: Etikett nicht mehr in neuem Tab (kein Druckdialog).
+            $body = self::request('?page=article&id=' . $article)['body'];
+            $this->assertMatchesRegularExpression('#href="\?page=label&id=' . $article . '"\s+class="button"\s*>#', $body);
+
+            // Einzeletikett: Vorschau und Drucken per POST (ein Etikett) – keine A4-Bögen.
+            $response = self::request('?page=label&id=' . $article);
+            $this->assertCleanPage($response, 'Etikett (Drucker)');
+            $body = $response['body'];
+            $this->assertStringContainsString('src="?page=label_image&amp;id=' . $article . '"', $body);
+            $this->assertStringContainsString('name="action" value="print_labels"', $body);
+            $this->assertStringContainsString('<input type="hidden" name="qty[' . $article . ']" value="1">', $body);
+            $this->assertStringNotContainsString('type="number"', $body, 'keine Anzahl, je Klick ein Etikett');
+            $this->assertStringContainsString('62 × 120 mm', $body);
+            $this->assertStringContainsString('rot/schwarz', $body);
+            $this->assertStringNotContainsString('label-print-page', $body);
+
+            // Vorschaubild.
+            $response = self::request('?page=label_image&id=' . $article);
+            $this->assertSame(200, $response['status']);
+            $this->assertContains('Content-Type: image/png', $response['headers']);
+            $this->assertSame([1347, 696], array_slice(getimagesizefromstring($response['body']), 0, 2));
+            $this->assertSame(404, self::request('?page=label_image&id=999999')['status']);
+
+            // Drucken: zurück zum Etikett mit Meldung, brother_ql bekam 2 Bilder.
+            $response = self::request('?page=label&id=' . $article, [
+                'action' => 'print_labels',
+                'return' => 'label',
+                'qty' => [$article => '2'],
+            ]);
+            $this->assertSame(302, $response['status'], $response['body']);
+            $this->assertSame('?page=label&id=' . $article, $response['location']);
+            $this->assertStringContainsString('2 Etiketten an den Drucker gesendet.', self::request('?page=label&id=' . $article)['body']);
+
+            $call = json_decode(trim((string) file_get_contents($log)), true);
+            $this->assertSame(['-b', 'network', '-m', 'QL-810W', '-p', 'tcp://192.0.2.10:9100', 'print', '-l', '62red', '-r', '90', '--red'], array_slice($call['args'], 0, 12));
+            $this->assertSame([[1347, 696], [1347, 696]], $call['sizes']);
+
+            // Sammeletiketten: dieselbe Auswahl, abgeschickt an den Drucker.
+            $response = self::request('?page=labels');
+            $this->assertCleanPage($response, 'Sammeletiketten (Drucker)');
+            $this->assertMatchesRegularExpression('#<form\s+method="post"\s+class="labels-form"#', $response['body']);
+            $this->assertStringContainsString('name="action" value="print_labels"', $response['body']);
+            $this->assertStringNotContainsString('A4', $response['body']);
+
+            // Alte Adresse der Druckansicht zeigt die Auswahl statt Bögen.
+            $response = self::request('?page=labels&print=1&qty[' . $article . ']=3');
+            $this->assertCleanPage($response, 'Sammeletiketten print=1 (Drucker)');
+            $this->assertStringNotContainsString('label-print-page', $response['body']);
+            $this->assertMatchesRegularExpression('#name="qty\[' . $article . '\]"[^>]*value="3"#s', $response['body']);
+
+            // Fehler vom Drucker: Meldung auf der Seite, kein technischer Fehler.
+            $response = self::request('?page=labels', ['action' => 'print_labels', 'qty' => [$article => '0']]);
+            $this->assertCleanPage($response, 'Sammeletiketten ohne Anzahl (Drucker)');
+            $this->assertStringContainsString('Bitte bei mindestens einem Artikel eine Anzahl eintragen.', $response['body']);
+        });
+    }
+
+    public function testInvalidLabelPrinterSettingsFallBackToSheets(): void
+    {
+        self::withServer(['LABEL_OUTPUT' => 'printer', 'LABEL_PRINTER' => ''], function (): void {
+            $response = self::request(self::resolve('?page=label&id={article}'));
+
+            $this->assertCleanPage($response, 'Etikett mit falscher Einstellung');
+            $this->assertStringContainsString('LABEL_PRINTER fehlt', $response['body']);
+            $this->assertStringContainsString('class="label-print-page"', $response['body']);
+
+            $response = self::request('?page=labels');
+            $this->assertStringContainsString('LABEL_PRINTER fehlt', $response['body']);
+            $this->assertStringContainsString('Etiketten anzeigen', $response['body']);
+        });
     }
 }

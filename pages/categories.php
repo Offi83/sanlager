@@ -7,7 +7,7 @@
  * Variablen stehen der Vorlage templates/pages/ zur Verfügung.
  */
 
-$categoryList = $categories->all();
+// $categoryList (aktive Kategorien) lädt bereits public/index.php.
 
 $editCategory = null;
 

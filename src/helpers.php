@@ -143,19 +143,44 @@ function categoryStyle(?string $color): string
 
 /**
  * Vorlaufzeit in Tagen, ab der ein MHD als "bald erreicht" gilt – aus
- * REPORT_EXPIRY_DAYS in der .env (1–365, sonst 90). Derselbe Wert wie im
- * Wochenbericht (siehe ReportConfig), damit Mail und MHD-Übersicht
+ * REPORT_EXPIRY_DAYS in der .env, bei fehlendem oder ungültigem Wert 90.
+ * Derselbe Wert wie im Wochenbericht (siehe ReportConfig, der einen
+ * ungültigen Wert als Fehler meldet), damit Mail und MHD-Übersicht
  * dasselbe melden.
  */
 function expiryWarningDays(): int
 {
-    $value = is_string($_ENV['REPORT_EXPIRY_DAYS'] ?? null)
-        ? trim($_ENV['REPORT_EXPIRY_DAYS'])
-        : '';
+    $value = is_string($_ENV['REPORT_EXPIRY_DAYS'] ?? null) ? $_ENV['REPORT_EXPIRY_DAYS'] : '';
+
+    return parseExpiryDays($value) ?? 90;
+}
+
+/**
+ * REPORT_EXPIRY_DAYS auswerten: leer = 90 (Standard), sonst eine ganze
+ * Zahl von 1 bis 365; alles andere ergibt null.
+ */
+function parseExpiryDays(string $value): ?int
+{
+    $value = trim($value);
+
+    if ($value === '') {
+        return 90;
+    }
 
     return ctype_digit($value) && (int) $value >= 1 && (int) $value <= 365
         ? (int) $value
-        : 90;
+        : null;
+}
+
+/**
+ * Pfad aus der .env (DB_DATABASE, BACKUP_DIR): relativ zum Projektordner
+ * oder absolut.
+ */
+function projectPath(string $path): string
+{
+    return str_starts_with($path, '/')
+        ? $path
+        : dirname(__DIR__) . '/' . $path;
 }
 
 /**

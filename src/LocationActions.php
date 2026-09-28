@@ -3,7 +3,6 @@
 namespace LagerApp;
 
 use RuntimeException;
-use Throwable;
 
 /**
  * Verarbeitet die POST-Aktionen rund um Lagerorte
@@ -12,6 +11,7 @@ use Throwable;
 class LocationActions
 {
     use ReadsInput;
+    use SortOrderAction;
 
     public function __construct(
         private LocationRepository $locations,
@@ -32,7 +32,7 @@ class LocationActions
             'create_location' => $this->create($input),
             'update_location' => $this->update($input),
             'deactivate_location' => $this->deactivate($input),
-            'reorder_locations' => $this->reorder($input),
+            'reorder_locations' => $this->reorderResult($input, $this->locations->reorder(...), 'Ungültige Lagerortreihenfolge.'),
             default => null,
         };
     }
@@ -102,35 +102,5 @@ class LocationActions
         $this->locations->deactivate($id);
 
         return ActionResult::redirect('?page=locations', 'Lagerort deaktiviert');
-    }
-
-    /**
-     * Liefert im Gegensatz zu den anderen Aktionen immer JSON zurück
-     * (wird per fetch() vom Drag-&-Drop-Skript der Lagerorte-Seite
-     * aufgerufen), auch im Fehlerfall.
-     */
-    private function reorder(array $input): ActionResult
-    {
-        $ids = $input['ids'] ?? null;
-
-        if (!is_array($ids)) {
-            return ActionResult::json([
-                'success' => false,
-                'error' => 'Ungültige Lagerortreihenfolge.'
-            ], 400);
-        }
-
-        try {
-            $this->locations->reorder($ids);
-        } catch (Throwable $exception) {
-            return ActionResult::json([
-                'success' => false,
-                'error' => userMessage($exception)
-            ], 400);
-        }
-
-        return ActionResult::json([
-            'success' => true
-        ]);
     }
 }
