@@ -184,6 +184,35 @@ function projectPath(string $path): string
 }
 
 /**
+ * Entwicklungsstand für die Fußzeile aus der Datei VERSION, die
+ * script/version.sh schreibt (bei jedem pull.sh und start.sh):
+ *   - Release-Tag "v0.5.0"          → "Version 0.5.0"
+ *   - Commit-Datum (ISO 8601)       → "Stand 28.09.2026, 14:32" (Zeitzone der Anwendung)
+ * Ohne oder mit ungültiger Datei null.
+ */
+function appVersion(?string $file = null): ?string
+{
+    $file ??= projectPath('VERSION');
+    $content = is_file($file) ? trim((string) file_get_contents($file)) : '';
+
+    if (preg_match('/^v?(\d+\.\d+\.\d+)$/', $content, $match)) {
+        return 'Version ' . $match[1];
+    }
+
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:?\d{2})$/', $content)) {
+        return null;
+    }
+
+    try {
+        $time = new DateTimeImmutable($content);
+    } catch (Exception) {
+        return null;
+    }
+
+    return 'Stand ' . $time->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('d.m.Y, H:i');
+}
+
+/**
  * Liefert CSS-Klasse und Warntext für ein MHD in einem Aufwasch,
  * statt Ablaufberechnung und Schwellwerte zweimal zu duplizieren.
  *

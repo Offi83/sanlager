@@ -7,6 +7,9 @@
 
 <footer class="app-footer">
     SanLager ·
+    <?php if (($version = appVersion()) !== null): ?>
+        <?= h($version) ?> ·
+    <?php endif; ?>
     <a href="https://github.com/Offi83/sanlager/blob/main/LICENSE">GPL-3.0</a><span class="footer-source"> ·
     <a href="https://github.com/Offi83/sanlager">Quellcode</a></span>
 </footer>

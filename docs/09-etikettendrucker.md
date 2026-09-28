@@ -15,7 +15,7 @@ Das Etikett liegt quer auf der Box: oben die Kategorie als Balken, darunter link
 └────────────────────────────────────────────┘
 ```
 
-Lange Namen werden an Leerzeichen und nach Bindestrichen umbrochen (bis zu drei Zeilen) und dabei kleiner, aber nie kleiner als die Artikelnummer; kurze Namen werden höchstens so groß, wie „Ohrthermometer“ gerade auf eine Zeile passt. Maße und Einheiten bleiben zusammen („10 × 10 cm“, „100 ml“, „Gr. 4“). Passt ein einzelnes Wort dann immer noch nicht, wird es mit Trennstrich umbrochen – nach Breite, nicht nach Silben (z. B. „Blutzuckerm-essstreifen“).
+Lange Namen werden an Leerzeichen und nach Bindestrichen umbrochen (bis zu drei Zeilen) und dabei kleiner, aber nie kleiner als die Artikelnummer. Maße und Einheiten bleiben zusammen („10 × 10 cm“, „100 ml“, „Gr. 4“). Passt ein einzelnes Wort dann immer noch nicht, wird es mit Trennstrich umbrochen – nach Breite, nicht nach Silben (z. B. „Blutzuckerm-essstreifen“).
 
 ## Drucker gehört an den Server
 

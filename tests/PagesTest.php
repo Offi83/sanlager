@@ -265,6 +265,21 @@ class PagesTest extends TestCase
         $this->assertStringContainsString('</html>', $response['body'], $path . ': Seite vollständig');
     }
 
+    public function testFooterShowsVersionIfKnown(): void
+    {
+        $response = self::request('/');
+        $this->assertCleanPage($response, '/');
+
+        // VERSION schreibt script/version.sh (pull.sh, start.sh); ohne Datei entfällt der Stand.
+        $version = appVersion();
+        $expected = $version === null ? '' : preg_quote($version, '~') . ' ·\s*';
+
+        $this->assertMatchesRegularExpression(
+            '~<footer[^>]*>\s*SanLager ·\s*' . $expected . '<a href="[^"]+/LICENSE">GPL-3.0</a>~',
+            $response['body']
+        );
+    }
+
     public function testUnknownIdsRedirectInsteadOfFailing(): void
     {
         foreach ([

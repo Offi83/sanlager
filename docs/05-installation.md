@@ -203,3 +203,5 @@ Neue Versionen kommen mit `script/pull.sh` auf den Server:
    ```
 
 Das Skript sichert zuerst die Datenbank, holt dann den Code, installiert die PHP-Abhängigkeiten und führt fehlende Migrationen aus. `.env`, Datenbank, Sicherungen sowie `.htaccess`/`.htpasswd` werden nicht von Git verwaltet und bleiben unverändert. Die einzelnen Schritte stehen unter [Entwicklung → Änderungen auf dem Server bereitstellen](11-entwicklung.md#änderungen-auf-dem-server-bereitstellen).
+
+Welcher Stand läuft, steht danach unten auf jeder Seite: „Version 0.5.0“ bei einem Release, sonst Datum und Uhrzeit des letzten Commits (siehe [Version in der Fußzeile](11-entwicklung.md#version-in-der-fußzeile)).

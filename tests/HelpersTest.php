@@ -134,4 +134,36 @@ class HelpersTest extends TestCase
         $this->assertSame('background-color: #64748b; color: #fff;', categoryStyle(null));
         $this->assertSame('background-color: #64748b; color: #fff;', categoryStyle('red; position: fixed'));
     }
+
+    public static function versionFiles(): array
+    {
+        return [
+            'Release-Tag' => ["v0.5.0\n", 'Version 0.5.0'],
+            'Release ohne v' => ['1.0.0', 'Version 1.0.0'],
+            'Zwischenstand (git %cI)' => ["2026-09-28T14:32:05+02:00\n", 'Stand 28.09.2026, 14:32'],
+            'Zwischenstand in UTC' => ['2026-01-10T07:05:00Z', 'Stand 10.01.2026, 08:05'],
+            'Tag ohne Versionsnummer' => ['test-tag', null],
+            'unvollständige Version' => ['v0.5', null],
+            'nur Datum' => ['2026-09-28', null],
+            'leer' => ['', null],
+        ];
+    }
+
+    #[DataProvider('versionFiles')]
+    public function testAppVersionShowsReleaseOrCommitTime(string $content, ?string $expected): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'sanlager-version-');
+
+        try {
+            file_put_contents($file, $content);
+            $this->assertSame($expected, appVersion($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testAppVersionWithoutFileIsNull(): void
+    {
+        $this->assertNull(appVersion(sys_get_temp_dir() . '/sanlager-gibt-es-nicht-' . bin2hex(random_bytes(4))));
+    }
 }
