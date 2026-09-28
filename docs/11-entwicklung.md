@@ -38,8 +38,7 @@ sanlager/
 │   ├── demo-data.php
 │   ├── pull.sh
 │   ├── push.sh
-│   ├── screenshots.sh
-│   └── version.sh
+│   └── screenshots.sh
 ├── src/
 │   ├── ActionResult.php
 │   ├── ArticleActions.php
@@ -143,7 +142,7 @@ wird **nicht über GitHub verteilt**.
 
 ### `script/`
 
-Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`, `version.sh`) sowie für Screenshots und Beispieldaten (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
+Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`) sowie für Screenshots und Beispieldaten (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
 
 ### `docs/`
 
@@ -170,7 +169,7 @@ Gestartet wird mit
 ./start.sh
 ```
 
-Das Skript zeigt die PHP- und SQLite-Version, schreibt den [Stand für die Fußzeile](#version-in-der-fußzeile) und startet den PHP-Entwicklungsserver unter <http://localhost:8080> (beenden mit Strg+C). Die lokale SQLite-Datenbank (`database/database.sqlite`) wird beim ersten Aufruf automatisch angelegt. Ohne `.env` gelten die Standardwerte; wer Fehlerdetails im Browser sehen will, kopiert `.env.example` nach `.env` und setzt dort `APP_DEBUG=true`. Der PHP-Entwicklungsserver ist nur für Entwicklung und Tests gedacht, nicht für den Betrieb.
+Das Skript zeigt die PHP- und SQLite-Version und startet den PHP-Entwicklungsserver unter <http://localhost:8080> (beenden mit Strg+C). Die lokale SQLite-Datenbank (`database/database.sqlite`) wird beim ersten Aufruf automatisch angelegt. Ohne `.env` gelten die Standardwerte; wer Fehlerdetails im Browser sehen will, kopiert `.env.example` nach `.env` und setzt dort `APP_DEBUG=true`. Der PHP-Entwicklungsserver ist nur für Entwicklung und Tests gedacht, nicht für den Betrieb.
 
 Zum Ausprobieren mit Beispieldaten eignet sich die [Beispieldatenbank](#beispieldatenbank).
 
@@ -269,7 +268,7 @@ Auf dem Server wird der aktuelle Stand aus GitHub mit `script/pull.sh` übernomm
 Nach einer Rückfrage führt das Skript nacheinander aus:
 
 1. **Datensicherung** mit `bin/backup.php` (siehe [Datensicherung](06-datensicherung.md)) – das Update kann Migrationen mitbringen, die die Datenbank umbauen. Scheitert die Sicherung, fragt das Skript, ob es ohne weitermachen soll.
-2. **Code holen:** `git fetch --tags` und `git reset --hard origin/main`, danach `script/version.sh` für die [Fußzeile](#version-in-der-fußzeile).
+2. **Code holen:** `git fetch --tags` (auch neue Release-Tags für die [Versionsanzeige](#version-in-der-fußzeile)) und `git reset --hard origin/main`.
 3. **Abhängigkeiten installieren:** `composer install --no-dev --optimize-autoloader`, passend zur neuen `composer.lock`.
 4. **Datenbank aktualisieren:** `bin/migrate.php` führt fehlende Migrationen sofort aus, damit ein Fehler gleich im Terminal steht. Gibt es noch keine Datenbank, legt es keine an (sie gehörte sonst dem Benutzer im Terminal statt dem Webserver). Hat dieser Benutzer keine Schreibrechte auf die Datenbank, wird die Migration beim nächsten Seitenaufruf nachgeholt.
 
@@ -277,14 +276,14 @@ Nicht von Git verwaltete Dateien – `.env`, `database/database.sqlite`, Sicheru
 
 ## Version in der Fußzeile
 
-Unten auf jeder Seite steht, welcher Stand läuft:
+Unten auf jeder Seite steht, welcher Stand läuft. Maßgeblich ist das letzte GitHub-Release:
 
-* **Release:** Trägt der aktuelle Commit einen Tag wie `v0.5.0`, steht dort „Version 0.5.0“.
-* **Zwischenstand:** sonst Datum und Uhrzeit des Commits, z. B. „Stand 28.09.2026, 14:32“ – bei Commits über `push.sh` also praktisch der Zeitpunkt des Pushs.
+* **Release:** Ist der laufende Stand genau ein Release (Tag `v0.5.0`), steht dort „Version 0.5.0“.
+* **Zwischenstand:** Kamen danach weitere Pushs, wird die Version um Datum und Uhrzeit des letzten Commits ergänzt: „Version 0.5.0 + Stand 28.09.2026, 14:32“ – bei Commits über `push.sh` praktisch der Zeitpunkt des Pushs.
 
-`script/version.sh` schreibt das in die Datei `VERSION` (nicht in Git), `appVersion()` in `src/helpers.php` liest sie. Aufgerufen wird das Skript von `pull.sh` und `start.sh`; ohne Datei entfällt die Angabe.
+`appVersion()` in `src/helpers.php` liest das bei jedem Seitenaufruf direkt aus Git (höchster Tag der Form `vX.Y.Z` im laufenden Stand, andere Tags zählen nicht). Ohne Git bzw. ohne Git-Repository entfällt die Angabe.
 
-**Release anlegen:** Auf GitHub unter „Releases“ → „Draft a new release“ einen neuen Tag `vX.Y.Z` auf dem aktuellen Stand von `main` anlegen, dann auf dem Server `./script/pull.sh` ausführen – auch wenn sich am Code nichts geändert hat, damit die Fußzeile die Version zeigt. Die Versionsnummer muss die Form `vX.Y.Z` haben, sonst erscheint weiter das Datum.
+**Release anlegen:** Auf GitHub unter „Releases“ → „Draft a new release“ einen neuen Tag `vX.Y.Z` auf dem aktuellen Stand von `main` anlegen, dann auf dem Server `./script/pull.sh` ausführen – auch wenn sich am Code nichts geändert hat: Erst dann kennt der Server den neuen Tag.
 
 ## Git
 

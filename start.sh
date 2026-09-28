@@ -16,7 +16,4 @@ echo ""
 echo "Beenden mit CTRL+C"
 echo ""
 
-# Stand für die Fußzeile (Release-Tag oder Datum des letzten Commits)
-./script/version.sh
-
 php -S localhost:8080 -t public

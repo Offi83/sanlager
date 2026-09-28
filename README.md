@@ -47,7 +47,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 * Wöchentlicher Bericht per E-Mail
 * Touch-Bedienung, angepasst an das Raspberry-Pi-Display (800×480)
 * Läuft ohne Internet, die Daten liegen in einer lokalen SQLite-Datenbank
-* Unten auf jeder Seite die laufende Version bzw. bei einem Zwischenstand Datum und Uhrzeit
+* Unten auf jeder Seite die laufende Version (letztes GitHub-Release, bei späteren Pushs mit Datum und Uhrzeit)
 
 ## ToDo
 

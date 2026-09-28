@@ -15,6 +15,3 @@ sanlager-*.sqlite
 # darf nie per script/push.sh (git add -A) auf GitHub landen
 .htaccess
 .htpasswd
-# Entwicklungsstand für die Fußzeile, schreibt script/version.sh
-# (aufgerufen von pull.sh und start.sh)
-/VERSION

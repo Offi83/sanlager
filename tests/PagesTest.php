@@ -270,7 +270,7 @@ class PagesTest extends TestCase
         $response = self::request('/');
         $this->assertCleanPage($response, '/');
 
-        // VERSION schreibt script/version.sh (pull.sh, start.sh); ohne Datei entfällt der Stand.
+        // Aus Git (Release-Tag, ggf. mit Datum des letzten Commits); ohne Git entfällt die Angabe.
         $version = appVersion();
         $expected = $version === null ? '' : preg_quote($version, '~') . ' ·\s*';
 

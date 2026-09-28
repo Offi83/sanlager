@@ -2,7 +2,7 @@
 
 # Aktualisiert den Server auf den Stand von GitHub (origin/main):
 #   1. Datensicherung (bin/backup.php)
-#   2. Code holen, Stand für die Fußzeile nach VERSION (script/version.sh)
+#   2. Code holen (mit Release-Tags für die Versionsanzeige)
 #   3. PHP-Abhängigkeiten passend zu composer.lock installieren
 #   4. Migrationen sofort ausführen (bin/migrate.php)
 
@@ -58,13 +58,12 @@ fi
 echo
 echo "=== Änderungen von GitHub holen ==="
 # --tags: auch Release-Tags, die erst nach dem letzten Update auf GitHub
-# angelegt wurden (sonst stünde in der Fußzeile weiter das Datum).
+# angelegt wurden – die Fußzeile zeigt die Version aus dem Tag.
 git fetch --tags origin || exit 1
 
 echo
 echo "=== Lokalen Code aktualisieren ==="
 git reset --hard origin/main || exit 1
-./script/version.sh && echo "Stand: $(cat VERSION)"
 
 echo
 echo "=== Abhängigkeiten installieren ==="

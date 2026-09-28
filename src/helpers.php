@@ -184,32 +184,69 @@ function projectPath(string $path): string
 }
 
 /**
- * Entwicklungsstand für die Fußzeile aus der Datei VERSION, die
- * script/version.sh schreibt (bei jedem pull.sh und start.sh):
- *   - Release-Tag "v0.5.0"          → "Version 0.5.0"
- *   - Commit-Datum (ISO 8601)       → "Stand 28.09.2026, 14:32" (Zeitzone der Anwendung)
- * Ohne oder mit ungültiger Datei null.
+ * Laufende Version für die Fußzeile, direkt aus Git gelesen:
+ *   - Commit ist ein Release (Tag vX.Y.Z)  → "Version 0.5.0"
+ *   - weitere Commits nach dem Release     → "Version 0.5.0 + Stand 28.09.2026, 14:32"
+ *   - noch kein Release                    → "Stand 28.09.2026, 14:32"
+ * Maßgeblich ist der höchste Release-Tag, der im aktuellen Stand enthalten
+ * ist; andere Tags (z. B. v1.0.0-rc1) zählen nicht. Ohne Git oder ohne
+ * Repository null. Einmal je Anfrage ermittelt.
  */
-function appVersion(?string $file = null): ?string
+function appVersion(?string $dir = null): ?string
 {
-    $file ??= projectPath('VERSION');
-    $content = is_file($file) ? trim((string) file_get_contents($file)) : '';
+    static $cache = [];
 
-    if (preg_match('/^v?(\d+\.\d+\.\d+)$/', $content, $match)) {
-        return 'Version ' . $match[1];
+    $dir ??= dirname(__DIR__);
+
+    if (array_key_exists($dir, $cache)) {
+        return $cache[$dir];
     }
 
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:?\d{2})$/', $content)) {
-        return null;
+    // safe.directory: Das Repository gehört dem Benutzer von pull.sh, nicht
+    // dem Webserver – ohne die Freigabe verweigert Git sonst die Auskunft.
+    $git = static function (string $args) use ($dir): ?string {
+        exec('git -c safe.directory=' . escapeshellarg('*') . ' -C ' . escapeshellarg($dir) . ' ' . $args . ' 2> /dev/null', $output, $code);
+
+        return $code === 0 ? trim(implode("\n", $output)) : null;
+    };
+
+    $commitDate = $git('log -1 --format=%cI');
+
+    if ($commitDate === null || $commitDate === '') {
+        return $cache[$dir] = null;
     }
 
-    try {
-        $time = new DateTimeImmutable($content);
-    } catch (Exception) {
-        return null;
+    $tag = null;
+
+    foreach (explode("\n", $git("tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname") ?? '') as $candidate) {
+        if (preg_match('/^v\d+\.\d+\.\d+$/', $candidate)) {
+            $tag = $candidate;
+            break;
+        }
     }
 
-    return 'Stand ' . $time->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('d.m.Y, H:i');
+    $commitsSince = $tag === null ? 0 : (int) $git('rev-list --count ' . escapeshellarg($tag . '..HEAD'));
+
+    return $cache[$dir] = formatAppVersion($tag, $commitsSince, $commitDate);
+}
+
+/**
+ * Text für die Fußzeile aus Release-Tag, Anzahl Commits seit dem Release und
+ * Commit-Datum (ISO 8601), siehe appVersion(). Datum in der Zeitzone der
+ * Anwendung.
+ */
+function formatAppVersion(?string $tag, int $commitsSince, string $commitDate): string
+{
+    $version = $tag === null ? null : 'Version ' . ltrim($tag, 'v');
+
+    if ($version !== null && $commitsSince === 0) {
+        return $version;
+    }
+
+    $time = new DateTimeImmutable($commitDate);
+    $stand = 'Stand ' . $time->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('d.m.Y, H:i');
+
+    return $version === null ? $stand : $version . ' + ' . $stand;
 }
 
 /**
