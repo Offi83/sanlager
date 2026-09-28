@@ -240,7 +240,7 @@ class PagesTest extends TestCase
             'Artikel' => ['?page=article&id={article}', 'Bestand nach MHD'],
             'Artikel bearbeiten' => ['?page=edit_article&id={article}', 'name="unit_id"'],
             'Neuer Artikel' => ['?page=new_article', 'Artikelnummer'],
-            'Etikett' => ['?page=label&id={article}', 'diag-bz-streifen'],
+            'Etikett' => ['?page=label&id={article}', 'Etikett Blutzuckermessstreifen'],
             'Etiketten Auswahl' => ['?page=labels', 'Alle Artikel'],
             'Etiketten Kategorie' => ['?page=labels&category={category}', 'Etiketten anzeigen'],
             'Kategorien' => ['?page=categories', 'Verbandmaterial'],
@@ -564,7 +564,18 @@ class PagesTest extends TestCase
 
         $this->assertSame(1, substr_count($body, 'class="label-print-page"'));
         $this->assertSame(8, substr_count($body, '<div class="label">'));
-        $this->assertSame(8, substr_count($body, '<div class="label-number">diag-bz-streifen</div>'));
+
+        // Dasselbe Bild wie beim Etikettendrucker (LabelImage).
+        $this->assertSame(8, substr_count($body, 'src="?page=label_image&amp;id=' . self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'") . '"'));
+        $this->assertSame(8, substr_count($body, 'alt="Etikett Blutzuckermessstreifen"'));
+
+        // Größe steht im HTML: Der Druckdialog kennt sie, bevor das Bild
+        // geladen ist (sonst verrutscht das Etikett im Feld).
+        $this->assertSame(8, substr_count($body, 'width="1170" height="696"'));
+
+        // Gedruckt wird ein PDF (feste Seiten, kein Verrutschen im Druckdialog).
+        $article = self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'");
+        $this->assertStringContainsString('href="?page=labels_pdf&amp;qty%5B' . $article . '%5D=8"', $body);
     }
 
     public function testCollectiveLabelsSelectionAndSheets(): void
@@ -592,9 +603,11 @@ class PagesTest extends TestCase
         $body = $response['body'];
 
         $this->assertMatchesRegularExpression('#7\s+Etiketten\s+auf 1\s+Bogen#', $body);
+        $this->assertMatchesRegularExpression('#href="\?page=labels_pdf&amp;[^"]*qty%5B' . $article . '%5D=6[^"]*"#', $body);
+        $this->assertMatchesRegularExpression('#href="\?page=labels_pdf&amp;[^"]*qty%5B' . $other . '%5D=1[^"]*"#', $body);
         $this->assertSame(1, substr_count($body, 'class="label-print-page"'));
         $this->assertSame(7, substr_count($body, '<div class="label">'));
-        $this->assertSame(6, substr_count($body, '<div class="label-number">diag-bz-streifen</div>'));
+        $this->assertSame(6, substr_count($body, 'src="?page=label_image&amp;id=' . $article . '"'));
         $this->assertSame(1, substr_count($body, 'label-empty'), 'nur am Ende frei');
         $this->assertGreaterThan(strpos($body, '<div class="label">'), strpos($body, 'label-empty'));
         $this->assertStringNotContainsString('skip', $body);
@@ -785,14 +798,45 @@ class PagesTest extends TestCase
         );
     }
 
-    public function testLabelPageWithoutPrinterHasNoImageRoute(): void
+    public function testLabelImageForA4SheetsHasRedBar(): void
     {
         $response = self::request(self::resolve('?page=label_image&id={article}'));
 
-        $this->assertSame(404, $response['status']);
+        $this->assertSame(200, $response['status']);
+        $this->assertContains('Content-Type: image/png', $response['headers']);
 
+        // 62 × 105 mm wie beim Etikettendrucker, Balken oben rot.
+        $image = imagecreatefromstring($response['body']);
+        $this->assertSame([1170, 696], [imagesx($image), imagesy($image)]);
+        $this->assertSame(['red' => 255, 'green' => 0, 'blue' => 0, 'alpha' => 0], imagecolorsforindex($image, imagecolorat($image, 2, 2)));
+
+        $this->assertSame(404, self::request('?page=label_image&id=999999')['status']);
+
+        // Etikett-Seite hat eigene Knöpfe, kein neuer Tab mehr nötig.
         $body = self::request(self::resolve('?page=article&id={article}'))['body'];
-        $this->assertMatchesRegularExpression('#href="\?page=label&id=\d+"\s+class="button"\s+target="_blank"#', $body);
+        $this->assertMatchesRegularExpression('#href="\?page=label&id=\d+"\s+class="button"\s*>#', $body);
+    }
+
+    public function testLabelSheetsAsPdf(): void
+    {
+        $article = self::id("SELECT id FROM articles WHERE article_number = 'diag-bz-streifen'");
+        $other = self::id("SELECT MIN(id) FROM articles WHERE active = 1 AND id <> " . $article);
+
+        // 9 Etiketten = 2 Bögen, als PDF zum Anzeigen im Browser.
+        $response = self::request('?page=labels_pdf&qty[' . $article . ']=8&qty[' . $other . ']=1');
+
+        $this->assertSame(200, $response['status']);
+        $this->assertContains('Content-Type: application/pdf', $response['headers']);
+        $this->assertContains('Content-Disposition: inline; filename="etiketten.pdf"', $response['headers']);
+        $this->assertStringStartsWith('%PDF-1.4', $response['body']);
+        $this->assertSame(2, preg_match_all('#/Type /Page #', $response['body']));
+        $this->assertSame(2, preg_match_all('#/Subtype /Image#', $response['body']), 'je Artikel ein Bild');
+
+        // Nichts gewählt: zurück zur Auswahl mit Hinweis.
+        $response = self::request('?page=labels_pdf&qty[' . $article . ']=0');
+        $this->assertSame(302, $response['status']);
+        $this->assertSame('?page=labels', $response['location']);
+        $this->assertStringContainsString('Bitte bei mindestens einem Artikel eine Anzahl eintragen.', self::request('?page=labels')['body']);
     }
 
     public function testLabelPrinterModePrintsFromLabelPages(): void
@@ -820,7 +864,7 @@ class PagesTest extends TestCase
             $this->assertStringContainsString('name="action" value="print_labels"', $body);
             $this->assertStringContainsString('<input type="hidden" name="qty[' . $article . ']" value="1">', $body);
             $this->assertStringNotContainsString('type="number"', $body, 'keine Anzahl, je Klick ein Etikett');
-            $this->assertStringContainsString('62 × 120 mm', $body);
+            $this->assertStringContainsString('62 × 105 mm', $body);
             $this->assertStringContainsString('rot/schwarz', $body);
             $this->assertStringNotContainsString('label-print-page', $body);
 
@@ -828,7 +872,7 @@ class PagesTest extends TestCase
             $response = self::request('?page=label_image&id=' . $article);
             $this->assertSame(200, $response['status']);
             $this->assertContains('Content-Type: image/png', $response['headers']);
-            $this->assertSame([1347, 696], array_slice(getimagesizefromstring($response['body']), 0, 2));
+            $this->assertSame([1170, 696], array_slice(getimagesizefromstring($response['body']), 0, 2));
             $this->assertSame(404, self::request('?page=label_image&id=999999')['status']);
 
             // Drucken: zurück zum Etikett mit Meldung, brother_ql bekam 2 Bilder.
@@ -843,7 +887,7 @@ class PagesTest extends TestCase
 
             $call = json_decode(trim((string) file_get_contents($log)), true);
             $this->assertSame(['-b', 'network', '-m', 'QL-810W', '-p', 'tcp://192.0.2.10:9100', 'print', '-l', '62red', '-r', '90', '--red'], array_slice($call['args'], 0, 12));
-            $this->assertSame([[1347, 696], [1347, 696]], $call['sizes']);
+            $this->assertSame([[1170, 696], [1170, 696]], $call['sizes']);
 
             // Sammeletiketten: dieselbe Auswahl, abgeschickt an den Drucker.
             $response = self::request('?page=labels');

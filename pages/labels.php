@@ -71,13 +71,13 @@ if (($_GET['print'] ?? '') === '1' && $labelCount === 0) {
 /*
  * Bögen zum Drucken: jeder Artikel so oft wie gewählt
  * (in der Reihenfolge der Artikelliste), aufgeteilt in Bögen zu je acht.
- * Der QR-Code wird je Artikel nur einmal erzeugt.
+ * Das Etikettenbild (?page=label_image) lädt der Browser je Artikel nur
+ * einmal.
  */
 $labelSheets = [];
 
 if ($labelPrint) {
     $labelSlots = [];
-    $labelQrGenerator = new \LagerApp\QrCodeGenerator();
 
     foreach ($labelArticles as $labelArticle) {
         $quantity = $labelQuantities[(int) $labelArticle['id']] ?? 0;
@@ -86,14 +86,7 @@ if ($labelPrint) {
             continue;
         }
 
-        $label = [
-            'article' => $labelArticle,
-            'qr' => !empty($labelArticle['article_number'])
-                ? $labelQrGenerator->generate($labelArticle['article_number'])
-                : null,
-        ];
-
-        array_push($labelSlots, ...array_fill(0, $quantity, $label));
+        array_push($labelSlots, ...array_fill(0, $quantity, $labelArticle));
     }
 
     $labelSheets = array_chunk($labelSlots, $labelsPerSheet);

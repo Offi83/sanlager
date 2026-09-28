@@ -172,9 +172,9 @@ Basic Auth nur zusammen mit HTTPS verwenden, sonst gehen die Zugangsdaten unvers
 
 > **Noch nicht mit einem echten Gerät getestet.** Die Anbindung ist programmiert und automatisch getestet (mit einem Ersatz für den Drucker), ein Brother QL-810Wc steht aber noch nicht zur Verfügung. Bis zum ersten echten Probedruck können Abmessungen, Rot/Schwarz-Druck und Fehlermeldungen vom Gerät abweichen – Rückmeldungen dazu bitte als Issue.
 
-Ohne Etikettendrucker druckt SanLager die Etiketten auf **A4-Bögen** (2 × 4 à 105 × 74 mm) über den Druckdialog des Browsers. Mit `LABEL_OUTPUT=printer` gehen sie stattdessen direkt an einen **Brother-Etikettendrucker der QL-Serie** – ohne Druckdialog und von jedem Gerät aus (Pi, PC, Handy). Das Einzeletikett zeigt dann eine Vorschau und „Drucken“ (je Klick ein Etikett); mehrere Etiketten auf einmal gehen über die Sammeletiketten.
+Ohne Etikettendrucker druckt SanLager die Etiketten auf **A4-Bögen** (2 × 4 à 105 × 74 mm). Sie sehen genauso aus wie die vom Etikettendrucker (dasselbe Bild, 62 × 105 mm, mit Rand im 105 × 74-mm-Feld) und haben immer einen roten Balken. Gedruckt werden die Bögen als **PDF** („Drucken“ öffnet es in einem neuen Tab): Darin sitzt jedes Etikett auf festen Millimetern, egal welcher Browser oder Druckdialog. Im PDF-Fenster mit Skalierung „100 %“ bzw. „Tatsächliche Größe“ drucken. (Der Browserdruck der Seite selbst übernimmt über den Systemdialog – macOS, auch aus Chrome – oder in Safari die Ränder des Druckertreibers; dann verrutscht der Bogen und es kommen Leerseiten dazu.) Mit `LABEL_OUTPUT=printer` gehen sie stattdessen direkt an einen **Brother-Etikettendrucker der QL-Serie** – ohne Druckdialog und von jedem Gerät aus (Pi, PC, Handy). Das Einzeletikett zeigt dann eine Vorschau und „Drucken“ (je Klick ein Etikett); mehrere Etiketten auf einmal gehen über die Sammeletiketten.
 
-Das Etikett liegt quer auf der Box: oben die Kategorie als Balken, darunter links Name und Artikelnummer, rechts der QR-Code. Beispiel mit 62 mm breiter Rolle und 120 mm Länge (passt gut auf die Stirnseite einer Eurobox 300 × 400 mm):
+Das Etikett liegt quer auf der Box: oben die Kategorie als Balken, darunter links Name und Artikelnummer, rechts der QR-Code. Beispiel mit 62 mm breiter Rolle und 105 mm Länge (passt gut auf die Stirnseite einer Eurobox 300 × 400 mm):
 
 ```text
 ┌────────────────────────────────────────────┐
@@ -184,6 +184,8 @@ Das Etikett liegt quer auf der Box: oben die Kategorie als Balken, darunter link
 │  VB-008                          └───────┘ │
 └────────────────────────────────────────────┘
 ```
+
+Lange Namen werden an Leerzeichen und nach Bindestrichen umbrochen (bis zu drei Zeilen) und dabei kleiner, aber nie kleiner als die Artikelnummer; kurze Namen werden höchstens so groß, wie „Ohrthermometer“ gerade auf eine Zeile passt. Maße und Einheiten bleiben zusammen („10 × 10 cm“, „100 ml“, „Gr. 4“). Passt ein einzelnes Wort dann immer noch nicht, wird es mit Trennstrich umbrochen – nach Breite, nicht nach Silben (z. B. „Blutzuckerm-essstreifen“).
 
 ### Warum brother_ql statt Druckertreiber
 
@@ -244,18 +246,18 @@ LABEL_OUTPUT=printer
 LABEL_PRINTER=tcp://192.168.1.50:9100
 LABEL_PRINTER_MODEL=QL-810W
 LABEL_WIDTH_MM=62
-LABEL_LENGTH_MM=120
+LABEL_LENGTH_MM=105
 LABEL_RED=true
 BROTHER_QL=/opt/brother-ql/bin/brother_ql
 ```
 
 | Einstellung | Bedeutung | Standard |
 |---|---|---|
-| `LABEL_OUTPUT` | `a4` = A4-Bögen über den Browser, `printer` = Etikettendrucker | `a4` |
+| `LABEL_OUTPUT` | `a4` = A4-Bögen (als PDF zum Drucken), `printer` = Etikettendrucker | `a4` |
 | `LABEL_PRINTER` | `tcp://<IP>:9100` (WLAN/Netzwerk) oder `file:///dev/usb/lp0` (USB) | – |
 | `LABEL_PRINTER_MODEL` | Modell, wie `brother_ql` es nennt (QL-810Wc = `QL-810W`) | `QL-810W` |
 | `LABEL_WIDTH_MM` | Breite der Rolle = Höhe des Etiketts auf der Box | `62` |
-| `LABEL_LENGTH_MM` | Länge eines Etiketts (40–300 mm) | `120` |
+| `LABEL_LENGTH_MM` | Länge eines Etiketts (40–300 mm) | `105` |
 | `LABEL_RED` | Kategorie-Balken rot statt schwarz | `false` |
 | `BROTHER_QL` | Pfad zum Programm `brother_ql` | `/opt/brother-ql/bin/brother_ql` |
 
@@ -263,7 +265,7 @@ Unterstützt werden **Endlosrollen** (keine vorgestanzten Etiketten). Name, QR-C
 
 | `LABEL_WIDTH_MM` | Rolle (Beispiel) | Hinweis |
 |---|---|---|
-| `62` | DK-22205 (schwarz), **DK-22251 (rot/schwarz)** | empfohlen, QR-Code ca. 40 mm |
+| `62` | DK-22205 (schwarz), **DK-22251 (rot/schwarz)** | empfohlen, QR-Code ca. 36 mm |
 | `50`, `38`, `54` | DK-22223 (50 mm), DK-22225 (38 mm) | |
 | `29` | DK-22210 | kleinste sinnvolle Breite, QR-Code ca. 17 mm |
 | `102` | DK-22243 | nur QL-1050/1060N/1100/1110NWB/1115NWB |

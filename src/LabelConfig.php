@@ -8,8 +8,8 @@ use RuntimeException;
  * Einstellungen für den Etikettendruck, ausschließlich aus der .env-Datei
  * (siehe .env.example und docs/05-installation.md#etikettendrucker).
  *
- * LABEL_OUTPUT=a4 (Standard) druckt wie bisher A4-Bögen über den
- * Druckdialog des Browsers. LABEL_OUTPUT=printer schickt die Etiketten
+ * LABEL_OUTPUT=a4 (Standard) druckt A4-Bögen als PDF (LabelSheetPdf).
+ * LABEL_OUTPUT=printer schickt die Etiketten
  * über brother_ql (Paket brother-ql-next) direkt an einen Brother-
  * Etikettendrucker der QL-Serie – per WLAN/Netzwerk (tcp://…) oder USB
  * (file:///dev/usb/lp0). Nur so ist Rot/Schwarz-Druck möglich; die
@@ -58,18 +58,20 @@ final class LabelConfig
         public readonly string $printerAddress = '',
         public readonly string $model = 'QL-810W',
         public readonly int $widthMm = 62,
-        public readonly int $lengthMm = 120,
+        public readonly int $lengthMm = 105,
         public readonly bool $red = false,
         public readonly string $brotherQl = '/opt/brother-ql/bin/brother_ql'
     ) {
     }
 
     /**
-     * A4-Bögen über den Browser (auch Rückfall bei fehlerhafter Einstellung).
+     * A4-Bögen als PDF (auch Rückfall bei fehlerhafter Einstellung).
+     * Die Etiketten darauf sind dasselbe Bild wie beim Etikettendrucker
+     * (62 × 105 mm), immer mit rotem Balken – A4 druckt ein Farbdrucker.
      */
     public static function a4(): self
     {
-        return new self(false);
+        return new self(false, red: true);
     }
 
     /**
@@ -119,7 +121,7 @@ final class LabelConfig
             $errors[] = 'LABEL_WIDTH_MM: 102 mm breite Rollen passen nur in die QL-1000er-Modelle.';
         }
 
-        $length = self::number($value('LABEL_LENGTH_MM'), 120);
+        $length = self::number($value('LABEL_LENGTH_MM'), 105);
 
         if ($length < self::MIN_LENGTH_MM || $length > self::MAX_LENGTH_MM) {
             $errors[] = 'LABEL_LENGTH_MM muss eine Zahl zwischen ' . self::MIN_LENGTH_MM

@@ -52,11 +52,22 @@ final class LabelImage
 
     private const MAX_NAME_LINES = 3;
 
+    /**
+     * Längster Name, der noch in der größten Schrift erscheint.
+     */
+    private const MAX_SIZE_REFERENCE = 'Ohrthermometer';
+
     /** @var array{x: int, y: int, size: int}|null */
     private ?array $qrBox = null;
 
     /** @var array{x: int, y: int, width: int, height: int} */
     private array $textBox = ['x' => 0, 'y' => 0, 'width' => 0, 'height' => 0];
+
+    /** @var array<int, string> */
+    private array $nameLines = [];
+
+    private float $nameSize = 0;
+    private float $numberSize = 0;
 
     public function __construct(private LabelConfig $config)
     {
@@ -88,8 +99,7 @@ final class LabelImage
             );
         }
 
-        $width = (int) round($this->config->lengthMm / 25.4 * self::DPI) - 2 * self::FEED_MARGIN_DOTS;
-        $height = $this->config->printableDots();
+        [$width, $height] = self::size($this->config);
 
         // Palettenbild: kann nur die hier angelegten Farben enthalten.
         $image = imagecreate($width, $height);
@@ -119,7 +129,7 @@ final class LabelImage
         $textRight = $width - $margin;
 
         if ($articleNumber !== '') {
-            $qrSize = min($contentHeight, (int) round($width * 0.4));
+            $qrSize = min($contentHeight, (int) round($width * 0.36));
 
             $this->qrBox = [
                 'x' => $width - $margin - $qrSize,
@@ -146,6 +156,19 @@ final class LabelImage
     }
 
     /**
+     * Bildgröße in Punkten: [Länge, Rollenbreite] (quer wie auf der Box).
+     *
+     * @return array{0: int, 1: int}
+     */
+    public static function size(LabelConfig $config): array
+    {
+        return [
+            (int) round($config->lengthMm / 25.4 * self::DPI) - 2 * self::FEED_MARGIN_DOTS,
+            $config->printableDots(),
+        ];
+    }
+
+    /**
      * Lage des QR-Codes im zuletzt erzeugten Etikett (null ohne
      * Artikelnummer). Für Tests.
      *
@@ -165,6 +188,27 @@ final class LabelImage
     public function textBox(): array
     {
         return $this->textBox;
+    }
+
+    /**
+     * Zeilen und Schriftgröße des Namens bzw. der Artikelnummer im
+     * zuletzt erzeugten Etikett. Für Tests.
+     *
+     * @return array<int, string>
+     */
+    public function nameLines(): array
+    {
+        return $this->nameLines;
+    }
+
+    public function nameSize(): float
+    {
+        return $this->nameSize;
+    }
+
+    public function numberSize(): float
+    {
+        return $this->numberSize;
     }
 
     /**
@@ -205,14 +249,15 @@ final class LabelImage
     {
         $box = $this->textBox;
         $numberHeight = 0;
+        $this->numberSize = 0;
 
         if ($articleNumber !== '') {
-            $numberSize = $this->fitSize($articleNumber, $box['width'], (int) round($box['height'] * 0.16));
-            $numberHeight = $this->lineHeight($numberSize);
+            $this->numberSize = $this->fitSize($articleNumber, $box['width'], (int) round($box['height'] * 0.13));
+            $numberHeight = $this->lineHeight($this->numberSize);
 
             $this->drawText(
                 $image,
-                $numberSize,
+                $this->numberSize,
                 $box['x'],
                 $box['y'] + $box['height'] - $numberHeight,
                 $color,
@@ -224,43 +269,59 @@ final class LabelImage
             $numberHeight += (int) round($numberHeight * 0.4);
         }
 
-        [$size, $lines] = $this->wrapName($name, $box['width'], $box['height'] - $numberHeight);
-        $lineHeight = $this->lineHeight($size);
+        // Der Name ist das Wichtigste: nie kleiner als die Artikelnummer.
+        // Höchstens so groß, dass „Ohrthermometer“ gerade auf eine Zeile
+        // passt – kurze Namen wie „Schere“ werden sonst riesig.
+        $nameHeight = $box['height'] - $numberHeight;
+        $minSize = max($this->numberSize * 1.15, $nameHeight / 12, 6.0);
+        $maxSize = max($minSize, $this->largestSize(self::MAX_SIZE_REFERENCE, $box['width'], $nameHeight / 3.3));
 
-        foreach ($lines as $index => $line) {
-            $this->drawText($image, $size, $box['x'], $box['y'] + $index * $lineHeight, $color, $line, true);
+        [$this->nameSize, $this->nameLines] = $this->wrapName($name, $box['width'], $nameHeight, $minSize, $maxSize);
+        $lineHeight = $this->lineHeight($this->nameSize);
+
+        foreach ($this->nameLines as $index => $line) {
+            $this->drawText($image, $this->nameSize, $box['x'], $box['y'] + $index * $lineHeight, $color, $line, true);
         }
     }
 
     /**
-     * Größte Schrift, bei der der Name in höchstens drei Zeilen passt.
-     * Notfalls kleinste Schrift mit harten Umbrüchen, zu viel wird mit …
-     * abgeschnitten.
+     * Größte Schrift (bis $maxSize), bei der der Name in höchstens drei Zeilen passt,
+     * umbrochen an Leerzeichen und nach Bindestrichen. Passt ein Wort
+     * dann nicht, wird es mit Trennstrich umbrochen (kaum kleiner als
+     * nötig); was dann noch zu viel ist, wird mit … abgeschnitten.
      *
      * @return array{0: float, 1: array<int, string>}
      */
-    private function wrapName(string $name, int $width, int $height): array
+    private function wrapName(string $name, int $width, int $height, float $minSize, float $maxSize): array
     {
-        $minSize = max(6.0, $height / 12);
+        $fits = fn (?array $lines, float $size): bool => $lines !== null
+            && count($lines) <= self::MAX_NAME_LINES
+            && count($lines) * $this->lineHeight($size) <= $height;
 
-        for ($size = $height / 3.3; $size >= $minSize; $size *= 0.94) {
-            $lines = $this->wrapWords($name, $size, $width);
+        foreach ($this->sizes(min($height / 3.3, $maxSize), $minSize) as $size) {
+            $lines = $this->wrapWords($name, $size, $width, false);
 
-            if ($lines !== null
-                && count($lines) <= self::MAX_NAME_LINES
-                && count($lines) * $this->lineHeight($size) <= $height
-            ) {
+            if ($fits($lines, $size)) {
+                return [$size, $lines];
+            }
+        }
+
+        foreach ($this->sizes(min($minSize * 1.5, $maxSize), $minSize) as $size) {
+            $lines = $this->wrapWords($name, $size, $width, true);
+
+            if ($fits($lines, $size)) {
                 return [$size, $lines];
             }
         }
 
         $size = $minSize;
         $maxLines = max(1, min(self::MAX_NAME_LINES, intdiv($height, $this->lineHeight($size))));
-        $lines = $this->wrapCharacters($name, $size, $width);
+        $lines = $this->wrapWords($name, $size, $width, true);
 
         if (count($lines) > $maxLines) {
             $lines = array_slice($lines, 0, $maxLines);
             $last = $maxLines - 1;
+            $lines[$last] = rtrim($lines[$last], '-');
 
             while ($lines[$last] !== '' && $this->textWidth($lines[$last] . '…', $size, true) > $width) {
                 $lines[$last] = mb_substr($lines[$last], 0, -1);
@@ -273,58 +334,129 @@ final class LabelImage
     }
 
     /**
-     * Zeilenumbruch an Leerzeichen; null, wenn ein einzelnes Wort zu
-     * breit ist (dann kleinere Schrift versuchen).
+     * Größte Schrift (höchstens $limit), in der $text fett auf eine Zeile
+     * der Breite $width passt.
+     */
+    private function largestSize(string $text, int $width, float $limit): float
+    {
+        $size = $limit * min(1, $width / $this->textWidth($text, $limit, true));
+
+        // Die Breite wächst nicht ganz gleichmäßig mit (Rundung, Fettdruck).
+        while ($size > 1 && $this->textWidth($text, $size, true) > $width) {
+            $size *= 0.99;
+        }
+
+        return $size;
+    }
+
+    /**
+     * Schriftgrößen von $from in Schritten von 6 % abwärts, zuletzt genau
+     * $to (damit die kleinste erlaubte Größe immer mitgeprüft wird).
+     *
+     * @return array<int, float>
+     */
+    private function sizes(float $from, float $to): array
+    {
+        $sizes = [];
+
+        for ($size = $from; $size > $to; $size *= 0.94) {
+            $sizes[] = $size;
+        }
+
+        $sizes[] = $to;
+
+        return $sizes;
+    }
+
+    /**
+     * Zeilenumbruch an Leerzeichen und nach Bindestrichen
+     * („Thermometer-“ / „Schutzhüllen“). Ist ein Teil breiter als eine
+     * Zeile: null (kleinere Schrift versuchen) oder, mit $breakWords, mit
+     * Trennstrich umbrechen.
      *
      * @return array<int, string>|null
      */
-    private function wrapWords(string $text, float $size, int $width): ?array
+    private function wrapWords(string $text, float $size, int $width, bool $breakWords): ?array
     {
         $lines = [];
         $line = '';
 
-        foreach (preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY) as $word) {
-            if ($this->textWidth($word, $size, true) > $width) {
-                return null;
+        foreach (preg_split('/[ \t\r\n]+/', self::keepTogether($text), -1, PREG_SPLIT_NO_EMPTY) as $word) {
+            foreach (preg_split('/(?<=-)/u', $word, -1, PREG_SPLIT_NO_EMPTY) as $index => $piece) {
+                $glue = $index === 0 ? ' ' : '';
+
+                if ($this->textWidth($piece, $size, true) > $width) {
+                    if (!$breakWords) {
+                        return null;
+                    }
+
+                    $parts = $this->breakWord($piece, $size, $width);
+                    $piece = array_pop($parts);
+
+                    if ($line !== '') {
+                        $lines[] = $line;
+                    }
+
+                    array_push($lines, ...$parts);
+                    $line = $piece;
+                    continue;
+                }
+
+                $candidate = $line === '' ? $piece : $line . $glue . $piece;
+
+                if ($this->textWidth($candidate, $size, true) <= $width) {
+                    $line = $candidate;
+                    continue;
+                }
+
+                $lines[] = $line;
+                $line = $piece;
             }
-
-            $candidate = $line === '' ? $word : $line . ' ' . $word;
-
-            if ($this->textWidth($candidate, $size, true) <= $width) {
-                $line = $candidate;
-                continue;
-            }
-
-            $lines[] = $line;
-            $line = $word;
         }
 
         $lines[] = $line;
 
-        return $lines;
+        // Geschützte Leerzeichen (keepTogether()) wieder als normale zeichnen.
+        return str_replace("\u{00A0}", ' ', $lines);
     }
 
     /**
-     * Zeilenumbruch nach Zeichen, für Wörter, die sonst nicht passen.
+     * Maße und Einheiten nicht auseinanderreißen: geschütztes Leerzeichen
+     * in „10 × 10 cm“, „100 ml“, „2,5 cm“, „Gr. 4“ (wrapWords() trennt nur
+     * an normalen Leerzeichen).
+     */
+    private static function keepTogether(string $text): string
+    {
+        $nbsp = "\u{00A0}";
+
+        $text = preg_replace('/(\d)\s*([×x])\s*(?=\d)/u', '$1' . $nbsp . '$2' . $nbsp, $text);
+        $text = preg_replace('/(\d) (?=(?:mm|cm|m|ml|l|g|kg|mg|µl|Stk\.?|St\.|%)(?![\p{L}]))/u', '$1' . $nbsp, $text);
+
+        return preg_replace('/\b(Gr\.|Größe|Nr\.) (?=\S)/u', '$1' . $nbsp, $text);
+    }
+
+    /**
+     * Ein zu langes Wort mit Trennstrich auf mehrere Zeilen verteilen.
      *
      * @return array<int, string>
      */
-    private function wrapCharacters(string $text, float $size, int $width): array
+    private function breakWord(string $word, float $size, int $width): array
     {
-        $lines = [''];
+        $parts = [];
+        $part = '';
 
-        foreach (mb_str_split(preg_replace('/\s+/u', ' ', $text)) as $character) {
-            $last = count($lines) - 1;
-
-            if ($lines[$last] !== '' && $this->textWidth($lines[$last] . $character, $size, true) > $width) {
-                $lines[] = ltrim($character);
-                continue;
+        foreach (mb_str_split($word) as $character) {
+            if ($part !== '' && $this->textWidth($part . $character . '-', $size, true) > $width) {
+                $parts[] = $part . '-';
+                $part = '';
             }
 
-            $lines[$last] .= $character;
+            $part .= $character;
         }
 
-        return $lines;
+        $parts[] = $part;
+
+        return $parts;
     }
 
     /**

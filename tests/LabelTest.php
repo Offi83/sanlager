@@ -68,12 +68,25 @@ class LabelTest extends TestCase
         $this->assertTrue($config->usesPrinter());
         $this->assertSame('QL-810W', $config->model);
         $this->assertSame(62, $config->widthMm);
-        $this->assertSame(120, $config->lengthMm);
+        $this->assertSame(105, $config->lengthMm);
         $this->assertFalse($config->red);
         $this->assertSame('/opt/brother-ql/bin/brother_ql', $config->brotherQl);
         $this->assertSame('network', $config->backend());
         $this->assertSame('62', $config->labelIdentifier());
         $this->assertSame(696, $config->printableDots());
+    }
+
+    public function testA4LabelsLookLikePrinterLabelsWithRedBar(): void
+    {
+        $config = LabelConfig::a4();
+
+        // A4-Bögen zeigen dasselbe Bild wie der Etikettendrucker, immer mit
+        // rotem Balken (Farbdrucker); nur die Druckereinstellungen fehlen.
+        $this->assertFalse($config->usesPrinter());
+        $this->assertTrue($config->red);
+        $this->assertSame(62, $config->widthMm);
+        $this->assertSame(105, $config->lengthMm);
+        $this->assertTrue(LabelConfig::fromEnv(['LABEL_OUTPUT' => 'a4', 'LABEL_RED' => 'false'])->red, 'LABEL_RED gilt nur für den Drucker');
     }
 
     public function testRedUsesRedLabelAndUsbUsesKernelBackend(): void
@@ -189,10 +202,10 @@ class LabelTest extends TestCase
     {
         $image = (new LabelImage(self::config()))->create(self::ARTICLE);
 
-        // Querformat wie auf der Box: Länge × Rollenbreite. 120 mm bei
-        // 300 dpi = 1417 Punkte, abzüglich der Ränder, die der Drucker am
+        // Querformat wie auf der Box: Länge × Rollenbreite. 105 mm bei
+        // 300 dpi = 1240 Punkte, abzüglich der Ränder, die der Drucker am
         // Anfang und Ende selbst vorschiebt (je 35 Punkte).
-        $this->assertSame(1417 - 70, imagesx($image));
+        $this->assertSame(1240 - 70, imagesx($image));
         $this->assertSame(696, imagesy($image));
     }
 
@@ -236,8 +249,8 @@ class LabelTest extends TestCase
         $this->assertLessThanOrEqual(imagesx($image), $qr['x'] + $qr['size']);
         $this->assertLessThanOrEqual(imagesy($image), $qr['y'] + $qr['size']);
 
-        // 62-mm-Rolle: QR-Code etwa 40 mm (Hand-Scanner).
-        $this->assertGreaterThanOrEqual(430, $qr['size']);
+        // 62 × 105 mm: QR-Code etwa 36 mm (Hand-Scanner).
+        $this->assertGreaterThanOrEqual(420, $qr['size']);
     }
 
     #[DataProvider('rollWidths')]
@@ -263,6 +276,66 @@ class LabelTest extends TestCase
         }
     }
 
+    public function testLongWordsBreakAtHyphenAndNameStaysLargerThanNumber(): void
+    {
+        $label = new LabelImage(self::config());
+
+        $label->create(['name' => 'Thermometer-Schutzhüllen'] + self::ARTICLE);
+        $this->assertSame(['Thermometer-', 'Schutzhüllen'], $label->nameLines());
+        $this->assertGreaterThan($label->numberSize(), $label->nameSize());
+
+        // Ohne Bindestrich: lieber mit Trennstrich umbrechen als winzig.
+        $label->create(['name' => 'Blutzuckermessstreifen'] + self::ARTICLE);
+        $this->assertGreaterThan($label->numberSize(), $label->nameSize());
+        $this->assertCount(2, $label->nameLines());
+        $this->assertStringEndsWith('-', $label->nameLines()[0]);
+        $this->assertSame('Blutzuckermessstreifen', str_replace('-', '', implode('', $label->nameLines())));
+
+        // Passt ein Wort in der kleinsten Größe, wird es nicht getrennt.
+        $label->create(['name' => 'Händedesinfektion 100 ml'] + self::ARTICLE);
+        $this->assertSame(['Händedesinfektion', '100 ml'], $label->nameLines());
+
+        // Kurze Namen bleiben groß und ungetrennt.
+        $label->create(['name' => 'Mullbinde 8 cm'] + self::ARTICLE);
+        $this->assertNotContains('-', array_map(static fn (string $line): string => substr($line, -1), $label->nameLines()));
+    }
+
+    public function testMeasurementsStayTogether(): void
+    {
+        $label = new LabelImage(self::config());
+        $lines = static fn (): array => array_map(
+            static fn (string $line): string => str_replace("\u{00A0}", ' ', $line),
+            $label->nameLines()
+        );
+
+        $label->create(['name' => 'Kompresse 10 × 10 cm'] + self::ARTICLE);
+        $this->assertSame(['Kompresse', '10 × 10 cm'], $lines());
+
+        $label->create(['name' => 'Beatmungsmaske Gr. 4'] + self::ARTICLE);
+        $maskLines = $lines();
+        $this->assertStringEndsWith('Gr. 4', end($maskLines));
+        $this->assertNotSame('4', end($maskLines));
+    }
+
+        public function testShortNamesAreNotHuge(): void
+    {
+        $label = new LabelImage(self::config());
+
+        $label->create(['name' => 'Schere'] + self::ARTICLE);
+        $short = $label->nameSize();
+
+        $label->create(['name' => 'Ohrthermometer'] + self::ARTICLE);
+        $reference = $label->nameSize();
+        $this->assertSame(['Ohrthermometer'], $label->nameLines());
+
+        // Höchstens so groß wie „Ohrthermometer“ auf einer Zeile – kurze
+        // Namen werden nicht größer.
+        $this->assertEqualsWithDelta($reference, $short, 0.01);
+
+        $label->create(['name' => 'Mullbinde 8 cm'] + self::ARTICLE);
+        $this->assertLessThanOrEqual($reference + 0.01, $label->nameSize());
+    }
+
     public function testArticleWithoutNumberHasNoQrCode(): void
     {
         $label = new LabelImage(self::config());
@@ -276,7 +349,7 @@ class LabelTest extends TestCase
         $png = (new LabelImage(self::config(['LABEL_RED' => 'true'])))->png(self::ARTICLE);
 
         $this->assertStringStartsWith("\x89PNG", $png);
-        $this->assertSame([1347, 696], array_slice(getimagesizefromstring($png), 0, 2));
+        $this->assertSame([1170, 696], array_slice(getimagesizefromstring($png), 0, 2));
     }
 
     // ------------------------------------------------------------------

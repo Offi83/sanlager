@@ -18,20 +18,22 @@
                     <?= $labelCount ?> <?= $labelCount === 1 ? 'Etikett' : 'Etiketten' ?>
                     auf <?= count($labelSheets) ?> <?= count($labelSheets) === 1 ? 'Bogen' : 'Bögen' ?>
                     (A4, 2 × 4 à 105 × 74 mm), jeweils ab dem ersten Platz eines neuen Bogens.
-                    Beim Drucken Skalierung „100 %“ bzw. „Tatsächliche Größe“ wählen.
+                    „Drucken“ öffnet ein PDF – dort mit Skalierung „100 %“ bzw.
+                    „Tatsächliche Größe“ drucken.
                 </p>
 
             </div>
 
             <div class="actions">
 
-                <button
-                    type="button"
+                <?php /* PDF statt Browserdruck: siehe LabelSheetPdf. */ ?>
+                <a
+                    href="<?= h('?' . http_build_query(['page' => 'labels_pdf', 'qty' => $labelQuantities])) ?>"
                     class="button button-primary"
-                    onclick="window.print()"
+                    target="_blank"
                 >
                     Drucken
-                </button>
+                </a>
 
             </div>
 

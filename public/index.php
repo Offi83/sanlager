@@ -191,7 +191,7 @@ if ($flash !== null) {
 | eine Datendatei (z. B. new_article).
 */
 $pageNames = [
-    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label', 'label_image', 'labels',
+    'issue', 'today_issues', 'expiry', 'restock', 'articles', 'article', 'label', 'label_image', 'labels', 'labels_pdf',
     'new_article', 'edit_article', 'categories', 'units', 'locations', 'location', 'packlist', 'inventory',
 ];
 

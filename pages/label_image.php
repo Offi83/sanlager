@@ -1,15 +1,13 @@
 <?php
 
 /*
- * Vorschau eines Etiketts für den Etikettendrucker als PNG – dasselbe
- * Bild, das an den Drucker geht (siehe LabelImage). Gibt nur das Bild aus,
- * kein HTML. Ohne Etikettendrucker (LABEL_OUTPUT=a4) und für unbekannte
- * Artikel: 404.
+ * Ein Etikett als PNG (siehe LabelImage): Vorschau für den
+ * Etikettendrucker – dasselbe Bild, das an den Drucker geht – und die
+ * Etiketten auf den A4-Bögen. Gibt nur das Bild aus, kein HTML.
+ * Unbekannte Artikel: 404.
  */
 
-$labelImageArticle = $labelConfig->usesPrinter()
-    ? $articles->findActive((int) ($_GET['id'] ?? 0))
-    : null;
+$labelImageArticle = $articles->findActive((int) ($_GET['id'] ?? 0));
 
 if (!$labelImageArticle) {
     http_response_code(404);

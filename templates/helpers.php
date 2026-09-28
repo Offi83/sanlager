@@ -87,35 +87,32 @@ function renderUndoForm(
 /**
  * Ein A4-Bogen Etiketten (2 × 4 à 105 × 74 mm, siehe .label-print-page in
  * app.css) – für das Einzeletikett und die Sammeletiketten. Ein Platz ist
- * entweder ['article' => Artikel, 'qr' => SVG oder null] oder null für
- * einen frei bleibenden Platz (Rest des letzten Bogens).
+ * ein Artikel oder null für einen frei bleibenden Platz (Rest des letzten
+ * Bogens).
  *
- * @param array<int, array{article: array, qr: ?string}|null> $slots
+ * Jedes Etikett ist dasselbe Bild wie beim Etikettendrucker (LabelImage,
+ * ?page=label_image, 62 × 105 mm) – so sehen beide gleich aus, und lange
+ * Namen werden auf dieselbe Weise eingepasst.
+ *
+ * @param array<int, array|null> $slots
  */
 function renderLabelSheet(array $slots): string
 {
     $html = '<div class="label-print-page">';
 
-    foreach ($slots as $slot) {
-        if ($slot === null) {
+    // Größe ins HTML, damit der Druckdialog sie kennt, bevor das Bild lädt.
+    [$width, $height] = \LagerApp\LabelImage::size(\LagerApp\LabelConfig::a4());
+
+    foreach ($slots as $article) {
+        if ($article === null) {
             $html .= '<div class="label label-empty" aria-hidden="true"></div>';
             continue;
         }
 
-        $article = $slot['article'];
-
         $html .= '<div class="label">'
-            . '<div class="label-category">' . h($article['category_name'] ?? 'Sonstiges') . '</div>'
-            . '<div class="label-content">'
-            . '<div class="label-text">'
-            . '<div class="label-name">' . h($article['name']) . '</div>'
-            . (!empty($article['article_number'])
-                ? '<div class="label-number">' . h($article['article_number']) . '</div>'
-                : '')
-            . '</div>'
-            // SVG aus QrCodeGenerator, enthält nur die Artikelnummer.
-            . ($slot['qr'] !== null ? '<div class="label-qr">' . $slot['qr'] . '</div>' : '')
-            . '</div>'
+            . '<img src="' . h('?page=label_image&id=' . (int) $article['id']) . '"'
+            . ' width="' . $width . '" height="' . $height . '"'
+            . ' alt="' . h('Etikett ' . $article['name']) . '">'
             . '</div>';
     }
 

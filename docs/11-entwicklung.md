@@ -53,6 +53,7 @@ sanlager/
 │   ├── LabelConfig.php
 │   ├── LabelImage.php
 │   ├── LabelPrinter.php
+│   ├── LabelSheetPdf.php
 │   ├── LocalDay.php
 │   ├── LocationActions.php
 │   ├── LocationRepository.php
@@ -115,7 +116,7 @@ Enthält die PHP-Klassen für Datenbankzugriff und Geschäftslogik sowie globale
 * **`*Actions.php`** – verarbeitet die POST-Aktionen der `index.php` (Validierung der Eingaben, Aufruf der passenden Repository-Methoden). Jede `dispatch($action, $input)`-Methode bekommt die Formularwerte als Array übergeben (in der Anwendung `$_POST`), kümmert sich nur um die Aktionen, für die sie zuständig ist, und liefert für alle anderen `null` – `index.php` fragt dadurch einfach alle Action-Klassen nacheinander. Die Actions greifen nie direkt auf `$_POST` zu und senden selbst keine Header, sondern geben ein `ActionResult` (Redirect oder JSON) zurück, das `index.php` ausgibt. Dadurch lassen sie sich in Tests aufrufen.
 * **`ActionResult.php`** – Ergebnis einer Aktion (Weiterleitung oder JSON-Antwort).
 * **`SortOrder.php` / `SortOrderAction.php`** – Reihenfolge per Drag & Drop (Spalte `sort_order`), gemeinsam für Kategorien, Lagerorte und Einheiten: `SortOrder` im Repository (`reorder()`, neue Einträge ans Ende), `SortOrderAction` für die zugehörige POST-Aktion (antwortet immer mit JSON).
-* **`Label*.php`** – Etikettendrucker (`LABEL_OUTPUT=printer`): `LabelConfig` liest und prüft die Einstellungen aus der `.env`, `LabelImage` zeichnet ein Etikett als PNG (GD, nur Schwarz/Rot/Weiß), `LabelPrinter` ruft `brother_ql` auf und übersetzt dessen Fehlermeldungen, `LabelActions` ist die POST-Aktion `print_labels`. Die Vorschau liefert `?page=label_image` (nur das Bild, kein HTML). In den Tests ersetzt eine Testfunktion bzw. `tests/fixtures/fake-brother-ql` den Drucker – mit einem echten Gerät ist das noch nicht getestet, siehe [Installation → Etikettendrucker](05-installation.md#etikettendrucker-optional).
+* **`Label*.php`** – Etikettendrucker (`LABEL_OUTPUT=printer`): `LabelConfig` liest und prüft die Einstellungen aus der `.env`, `LabelImage` zeichnet ein Etikett als PNG (GD, nur Schwarz/Rot/Weiß), `LabelPrinter` ruft `brother_ql` auf und übersetzt dessen Fehlermeldungen, `LabelActions` ist die POST-Aktion `print_labels`. Die Vorschau liefert `?page=label_image` (nur das Bild, kein HTML) – dasselbe Bild zeigen auch die A4-Bögen. `LabelSheetPdf` setzt die A4-Bögen als PDF zusammen (`?page=labels_pdf`, ohne PDF-Bibliothek: die PNG-Bilddaten werden unverändert eingebettet), weil der Browserdruck über den Systemdialog die Ränder des Druckertreibers übernimmt und der Bogen dann verrutscht. In den Tests ersetzt eine Testfunktion bzw. `tests/fixtures/fake-brother-ql` den Drucker – mit einem echten Gerät ist das noch nicht getestet, siehe [Installation → Etikettendrucker](05-installation.md#etikettendrucker-optional).
 * **`ReadsInput.php`** – liest Formularwerte typsicher aus (`string()`, `int()`, `array()`); manipulierte Werte (z. B. ein Array statt Text) gelten als nicht ausgefüllt.
 * **`helpers.php`** – kleine globale Funktionen, die sowohl in den Vorlagen als auch in den Action-Klassen gebraucht werden. Wird über den `files`-Autoload-Eintrag in `composer.json` automatisch geladen:
   * Ausgabe: `h()` (HTML-Escaping), `icon()`, `formatDate()`, `formatExpiry()`, `categoryStyle()` (Kategoriefarbe mit lesbarer Schriftfarbe)

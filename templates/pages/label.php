@@ -57,6 +57,42 @@
 
     <?php else: ?>
 
+        <?php /* A4: Vorschau des Bogens, gedruckt wird das PDF (siehe LabelSheetPdf). */ ?>
+        <div class="page-header labels-toolbar">
+
+            <div>
+
+                <a
+                    href="?page=article&id=<?= (int) $article['id'] ?>"
+                    class="back-link"
+                >
+                    ← <?= h($article['name']) ?>
+                </a>
+
+                <h1>Etikett drucken</h1>
+
+                <p>
+                    A4-Bogen mit 8 gleichen Etiketten (2 × 4 à 105 × 74 mm).
+                    „Drucken“ öffnet ein PDF – dort mit Skalierung „100 %“ bzw.
+                    „Tatsächliche Größe“ drucken.
+                </p>
+
+            </div>
+
+            <div class="actions">
+
+                <a
+                    href="<?= h('?' . http_build_query(['page' => 'labels_pdf', 'qty' => [(int) $article['id'] => 8]])) ?>"
+                    class="button button-primary"
+                    target="_blank"
+                >
+                    Drucken
+                </a>
+
+            </div>
+
+        </div>
+
         <?php foreach ($labelSheets as $labelSheet): ?>
             <?= renderLabelSheet($labelSheet) ?>
         <?php endforeach; ?>

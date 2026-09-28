@@ -37,7 +37,7 @@ Es gibt eine an 800×480 px angepasste Ansicht für den Raspberry-Pi-Touchscreen
 
 **Verwaltung**
 * Artikel mit Bestand, Mindestbestand, QR-Code und Etikettendruck; die Artikelliste zeigt je Artikel, ob er ein MHD hat
-* Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), mit „alle 1×“ je Kategorie oder für alle Artikel
+* Sammeletiketten: mehrere Artikel oder eine ganze Kategorie auf A4-Bögen (2 × 4), mit „alle 1×“ je Kategorie oder für alle Artikel; die Etiketten sehen aus wie die vom Etikettendrucker (roter Kategorie-Balken, Name, Artikelnummer, QR-Code); gedruckt wird ein PDF, damit nichts verrutscht
 * Etikettendrucker (optional): Brother QL-Serie per WLAN oder USB, auch rot/schwarz, Rollenbreite und Etikettenlänge einstellbar – noch nicht mit echtem Gerät getestet (siehe [Installation](docs/05-installation.md#etikettendrucker-optional))
 * MHD je Artikel abschaltbar, z. B. für Mullbinden – dann entfallen die MHD-Felder
 * Kategorien, Einheiten und Lagerorte anlegen und sortieren – Einheiten mit Einzahl und Mehrzahl („1 Rolle“, „5 Rollen“)
@@ -94,7 +94,7 @@ Dieselben Beispieldaten liegen als fertige Datenbank unter [`beispieldaten/beisp
 *Sammeletiketten auf A4-Bögen (2 × 4), hier eine ganze Kategorie*
 ![Etiketten](images/etiketten.png)
 
-*Mit Etikettendrucker (optional): Vorschau des Etiketts (rot/schwarz, 62 × 120 mm) und Druck ohne Druckdialog*
+*Mit Etikettendrucker (optional): Vorschau des Etiketts (rot/schwarz, 62 × 105 mm) und Druck ohne Druckdialog*
 ![Etikettendrucker](images/etikettendrucker.png)
 
 *Wochenbericht per E-Mail*
