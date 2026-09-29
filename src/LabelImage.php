@@ -7,6 +7,7 @@ use Endroid\QrCode\RoundBlockSizeMode;
 use Endroid\QrCode\Writer\SvgWriter;
 use GdImage;
 use RuntimeException;
+use Vanderlee\Syllable\Syllable;
 
 /**
  * Zeichnet ein Etikett für den Etikettendrucker als Bild (PHP-Erweiterung
@@ -68,6 +69,14 @@ final class LabelImage
 
     private float $nameSize = 0;
     private float $numberSize = 0;
+
+    /**
+     * Silbentrennung (vanderlee/syllable, deutsche TeX-Trennmuster,
+     * offline). Ohne Cache-Datei: Das Einlesen der Muster dauert nur
+     * einige Millisekunden, und der Webserver darf nicht in vendor/
+     * schreiben.
+     */
+    private static ?Syllable $syllable = null;
 
     public function __construct(private LabelConfig $config)
     {
@@ -422,21 +431,29 @@ final class LabelImage
 
     /**
      * Maße und Einheiten nicht auseinanderreißen: geschütztes Leerzeichen
-     * in „10 × 10 cm“, „100 ml“, „2,5 cm“, „Gr. 4“ (wrapWords() trennt nur
-     * an normalen Leerzeichen).
+     * in „10 × 10 cm“, „6 cm x 4 m“, „100 ml“, „2,5 cm“, „Gr. 4“
+     * (wrapWords() trennt nur an normalen Leerzeichen).
      */
     private static function keepTogether(string $text): string
     {
         $nbsp = "\u{00A0}";
+        $number = '\d+(?:[,.]\d+)?';
+        $unit = '(?:mm|cm|m|ml|l|g|kg|mg|µl|Stk\.?|St\.|%)(?![\p{L}])';
 
-        $text = preg_replace('/(\d)\s*([×x])\s*(?=\d)/u', '$1' . $nbsp . '$2' . $nbsp, $text);
-        $text = preg_replace('/(\d) (?=(?:mm|cm|m|ml|l|g|kg|mg|µl|Stk\.?|St\.|%)(?![\p{L}]))/u', '$1' . $nbsp, $text);
+        // Maßkette: Zahl mit Einheit, auch mehrere mit × oder x verbunden.
+        $text = preg_replace_callback(
+            "/(?<![\\d,.])$number(?:[ \\t]*$unit)?(?:[ \\t]*[×x][ \\t]*$number(?:[ \\t]*$unit)?)*/u",
+            static fn (array $match): string => preg_replace('/[ \t]+/', $nbsp, $match[0]),
+            $text
+        );
 
         return preg_replace('/\b(Gr\.|Größe|Nr\.) (?=\S)/u', '$1' . $nbsp, $text);
     }
 
     /**
-     * Ein zu langes Wort mit Trennstrich auf mehrere Zeilen verteilen.
+     * Ein zu langes Wort mit Trennstrich auf mehrere Zeilen verteilen –
+     * an Silbengrenzen, so viele Silben je Zeile wie passen. Nur eine
+     * einzelne Silbe, die allein zu breit ist, wird nach Platz getrennt.
      *
      * @return array<int, string>
      */
@@ -445,18 +462,58 @@ final class LabelImage
         $parts = [];
         $part = '';
 
-        foreach (mb_str_split($word) as $character) {
-            if ($part !== '' && $this->textWidth($part . $character . '-', $size, true) > $width) {
+        foreach (self::syllables($word) as $syllable) {
+            if ($part !== '' && $this->textWidth($part . $syllable . '-', $size, true) > $width) {
                 $parts[] = $part . '-';
                 $part = '';
             }
 
-            $part .= $character;
+            if ($this->textWidth($syllable . '-', $size, true) <= $width) {
+                $part .= $syllable;
+                continue;
+            }
+
+            foreach (mb_str_split($syllable) as $character) {
+                if ($part !== '' && $this->textWidth($part . $character . '-', $size, true) > $width) {
+                    $parts[] = $part . '-';
+                    $part = '';
+                }
+
+                $part .= $character;
+            }
         }
 
         $parts[] = $part;
 
         return $parts;
+    }
+
+    /**
+     * Silben eines Wortes („Blut“, „zu“, „cker“ …). Ein Bindestrich am
+     * Ende (aus wrapWords()) bleibt an der letzten Silbe.
+     *
+     * @return array<int, string>
+     */
+    private static function syllables(string $word): array
+    {
+        self::$syllable ??= (static function (): Syllable {
+            $syllable = new Syllable('de-1996');
+            $syllable->setCache(null);
+
+            return $syllable;
+        })();
+
+        $stem = rtrim($word, '-');
+        $syllables = array_values(array_filter(self::$syllable->splitWord($stem), 'strlen'));
+
+        // Sicherheitshalber: Die Silben müssen genau das Wort ergeben.
+        if ($syllables === [] || implode('', $syllables) !== $stem) {
+            return [$word];
+        }
+
+        $syllables[count($syllables) - 1] .= substr($word, strlen($stem));
+
+        return $syllables;
     }
 
     /**

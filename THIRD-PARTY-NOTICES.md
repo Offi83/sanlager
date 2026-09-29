@@ -24,6 +24,7 @@ composer licenses --no-dev
 |---|---|---|
 | vlucas/phpdotenv (inkl. graham-campbell/result-type, phpoption/phpoption) | `.env`-Konfiguration | BSD-3-Clause, MIT, Apache-2.0 |
 | endroid/qr-code (inkl. bacon/bacon-qr-code, dasprid/enum) | QR-Codes für Artikel und Etiketten; die mitgelieferte Schrift Open Sans (`assets/open_sans.ttf`) nutzt SanLager auch für die Etiketten des Etikettendruckers | MIT, BSD-2-Clause; Open Sans: Apache-2.0 |
+| vanderlee/syllable (inkl. deutscher Trennmuster hyph-de-1996 von Stephan Hennig, Werner Lemberg u. a.) | Silbentrennung langer Artikelnamen auf den Etiketten | MIT |
 | symfony/mailer, symfony/mime u. a. Symfony-Komponenten | Versand des Wochenberichts | MIT |
 | egulias/email-validator, doctrine/lexer | Prüfung von E-Mail-Adressen | MIT |
 | psr/* | Schnittstellen-Standards | MIT |

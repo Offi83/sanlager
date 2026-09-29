@@ -5,7 +5,7 @@ Diese Seite führt in der Reihenfolge durch die Einrichtung eines Servers: Paket
 ## Voraussetzungen
 
 * Linux, z. B. Debian oder Raspberry Pi OS
-* PHP **8.5.x** mit den Erweiterungen `pdo_sqlite`, `mbstring` und `simplexml` (QR-Codes)
+* PHP **8.5.x** mit den Erweiterungen `pdo_sqlite`, `mbstring`, `simplexml` (QR-Codes) und `dom` (Silbentrennung auf Etiketten)
 * SQLite 3
 * Composer
 * Git
@@ -19,7 +19,7 @@ Auf Debian bzw. Raspberry Pi OS sind das die Pakete:
 sudo apt install apache2 libapache2-mod-php8.5 php8.5-sqlite3 php8.5-mbstring php8.5-xml composer git
 ```
 
-PHP 8.5 ist nicht in jeder Distribution enthalten; kommt es aus einer zusätzlichen Paketquelle (z. B. `packages.sury.org`), heißen die Pakete wie oben. Ob die Erweiterungen aktiv sind, zeigt `php -m` (in der Liste müssen `pdo_sqlite`, `mbstring` und `SimpleXML` stehen).
+PHP 8.5 ist nicht in jeder Distribution enthalten; kommt es aus einer zusätzlichen Paketquelle (z. B. `packages.sury.org`), heißen die Pakete wie oben. Ob die Erweiterungen aktiv sind, zeigt `php -m` (in der Liste müssen `pdo_sqlite`, `mbstring`, `SimpleXML` und `dom` stehen; die beiden letzten kommen mit `php8.5-xml`).
 
 Für den optionalen [Etikettendrucker](09-etikettendrucker.md) kommen später `php8.5-gd` und `brother_ql` hinzu.
 

@@ -291,6 +291,12 @@ class LabelTest extends TestCase
         $this->assertStringEndsWith('-', $label->nameLines()[0]);
         $this->assertSame('Blutzuckermessstreifen', str_replace('-', '', implode('', $label->nameLines())));
 
+        // Getrennt wird nach Silben (Blut-zu-cker-mess-strei-fen).
+        $this->assertContains(
+            $label->nameLines()[0],
+            ['Blut-', 'Blutzu-', 'Blutzucker-', 'Blutzuckermess-', 'Blutzuckermessstrei-']
+        );
+
         // Passt ein Wort in der kleinsten Größe, wird es nicht getrennt.
         $label->create(['name' => 'Händedesinfektion 100 ml'] + self::ARTICLE);
         $this->assertSame(['Händedesinfektion', '100 ml'], $label->nameLines());
@@ -310,6 +316,20 @@ class LabelTest extends TestCase
 
         $label->create(['name' => 'Kompresse 10 × 10 cm'] + self::ARTICLE);
         $this->assertSame(['Kompresse', '10 × 10 cm'], $lines());
+
+        // Ganze Maßketten mit Einheiten bleiben zusammen (nicht „6 cm“ / „x 4 m“).
+        $label->create(['name' => 'Fixierbinde 6 cm x 4 m'] + self::ARTICLE);
+        $this->assertSame(['Fixierbinde', '6 cm x 4 m'], $lines());
+
+        $label->create(['name' => 'Heftpflaster 2,5 cm × 5 m'] + self::ARTICLE);
+        $this->assertSame(['Heftpflaster', '2,5 cm × 5 m'], $lines());
+
+        $label->create(['name' => 'Fixierbinde 10cm x 4m'] + self::ARTICLE);
+        $this->assertSame(['Fixierbinde', '10cm x 4m'], $lines());
+
+        $label->create(['name' => 'Fixierbinde elastisch 6 cm x 4 m'] + self::ARTICLE);
+        $elasticLines = $lines();
+        $this->assertSame('6 cm x 4 m', end($elasticLines));
 
         $label->create(['name' => 'Beatmungsmaske Gr. 4'] + self::ARTICLE);
         $maskLines = $lines();
