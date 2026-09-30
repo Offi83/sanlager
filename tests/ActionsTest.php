@@ -251,8 +251,8 @@ class ActionsTest extends TestCase
 
         $result = $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
-            'from' => 'receipt',
-            'to' => (string) $this->mainId,
+            'source' => 'receipt',
+            'target' => (string) $this->mainId,
             'quantity' => '3',
             'batch_selection' => 'new',
             'expiry_date' => date('d.m.Y', $expiry),
@@ -274,8 +274,8 @@ class ActionsTest extends TestCase
         try {
             $this->stockActions()->dispatch('stock_move', [
                 'article_id' => (string) $this->articleId,
-                'from' => 'receipt',
-                'to' => (string) $this->mainId,
+                'source' => 'receipt',
+                'target' => (string) $this->mainId,
                 'quantity' => '1',
                 'batch_selection' => 'new',
                 'expiry_date' => '31.02.2027',
@@ -289,8 +289,8 @@ class ActionsTest extends TestCase
     {
         return $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
-            'from' => 'receipt',
-            'to' => (string) $this->mainId,
+            'source' => 'receipt',
+            'target' => (string) $this->mainId,
             'quantity' => '1',
             'batch_selection' => $batch,
             'expiry_date' => $expiry,
@@ -358,8 +358,8 @@ class ActionsTest extends TestCase
 
         $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
-            'from' => (string) $this->mainId,
-            'to' => 'issue',
+            'source' => (string) $this->mainId,
+            'target' => 'issue',
             'quantity' => '1',
             'batch_selection' => (string) $expired,
         ]);
@@ -389,8 +389,8 @@ class ActionsTest extends TestCase
         try {
             $this->stockActions()->dispatch('stock_move', [
                 'article_id' => (string) $bandage['id'],
-                'from' => 'receipt',
-                'to' => (string) $this->mainId,
+                'source' => 'receipt',
+                'target' => (string) $this->mainId,
                 'quantity' => '5',
                 'batch_selection' => 'new',
                 'expiry_date' => date('d.m.Y', strtotime('+1 year')),
@@ -404,8 +404,8 @@ class ActionsTest extends TestCase
 
         $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $bandage['id'],
-            'from' => 'receipt',
-            'to' => (string) $this->mainId,
+            'source' => 'receipt',
+            'target' => (string) $this->mainId,
             'quantity' => '5',
             'batch_selection' => 'none',
         ]);
@@ -487,7 +487,7 @@ class ActionsTest extends TestCase
 
         // Meldungen in der passenden Form.
         $this->stockActions()->dispatch('stock_move', [
-            'article_id' => (string) $plaster['id'], 'from' => 'receipt', 'to' => (string) $this->mainId,
+            'article_id' => (string) $plaster['id'], 'source' => 'receipt', 'target' => (string) $this->mainId,
             'quantity' => '3', 'batch_selection' => 'none',
         ]);
         $this->assertSame('Pflaster – 1 Rolle ausgebucht (ohne MHD)', $this->stockActions()->dispatch('issue', ['article_number' => 'P-1'])->message);
@@ -797,8 +797,8 @@ class ActionsTest extends TestCase
         // Bewusst die neuere Charge umbuchen – anders als beim Scannen (FIFO).
         $result = $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
-            'from' => (string) $this->mainId,
-            'to' => (string) $boxId,
+            'source' => (string) $this->mainId,
+            'target' => (string) $boxId,
             'batch_selection' => (string) $new,
             'quantity' => '3',
         ]);
@@ -808,7 +808,7 @@ class ActionsTest extends TestCase
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $boxId, $new));
 
         $this->assertStringContainsString(
-            '&from=' . $this->mainId . '&to=' . $boxId,
+            '&source=' . $this->mainId . '&target=' . $boxId,
             $result->redirectUrl
         );
         $this->assertSame('3 Stück umgebucht: Hauptlager → Kiste 1', $result->message);
@@ -821,22 +821,22 @@ class ActionsTest extends TestCase
     {
         $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
-            'from' => 'receipt',
-            'to' => (string) $this->mainId,
+            'source' => 'receipt',
+            'target' => (string) $this->mainId,
             'quantity' => '4',
         ]);
 
         $result = $this->stockActions()->dispatch('stock_move', [
             'article_id' => (string) $this->articleId,
-            'from' => (string) $this->mainId,
-            'to' => 'issue',
+            'source' => (string) $this->mainId,
+            'target' => 'issue',
             'quantity' => '1',
         ]);
 
         $this->assertSame(3, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
         $this->assertSame(1, array_sum(array_column($this->reports->getTodayIssues(), 'quantity')));
         $this->assertSame('1 Stück ausgebucht aus Hauptlager', $result->message);
-        $this->assertStringContainsString('&from=' . $this->mainId . '&to=issue', $result->redirectUrl);
+        $this->assertStringContainsString('&source=' . $this->mainId . '&target=issue', $result->redirectUrl);
     }
 
     public function testStockMoveVonNachValidation(): void
@@ -846,21 +846,50 @@ class ActionsTest extends TestCase
 
         $base = [
             'article_id' => (string) $this->articleId,
-            'from' => (string) $this->mainId,
+            'source' => (string) $this->mainId,
             'batch_selection' => 'none',
             'quantity' => '1',
         ];
 
         foreach ([
             'ohne Nach' => [[], 'gültige Lagerorte'],
-            'Einlagern → Ausbuchen' => [['from' => 'receipt', 'to' => 'issue'], 'Lagerort auswählen'],
-            'Von = Nach' => [['to' => (string) $this->mainId], 'nicht derselbe'],
-            'unbekannter Lagerort' => [['to' => '9999'], 'gültige Lagerorte'],
-            'neues MHD beim Umbuchen' => [['to' => (string) $boxId, 'batch_selection' => 'new', 'expiry_date' => '2030-01-01'], 'nur beim Einlagern'],
-            'zu viel' => [['to' => (string) $boxId, 'quantity' => '3'], 'Nicht genügend Bestand'],
+            'Einlagern → Ausbuchen' => [['source' => 'receipt', 'target' => 'issue'], 'Lagerort auswählen'],
+            'Von = Nach' => [['target' => (string) $this->mainId], 'nicht derselbe'],
+            'unbekannter Lagerort' => [['target' => '9999'], 'gültige Lagerorte'],
+            'neues MHD beim Umbuchen' => [['target' => (string) $boxId, 'batch_selection' => 'new', 'expiry_date' => '2030-01-01'], 'nur beim Einlagern'],
+            'zu viel' => [['target' => (string) $boxId, 'quantity' => '3'], 'Nicht genügend Bestand'],
         ] as $case => [$extra, $expected]) {
             try {
                 $this->stockActions()->dispatch('stock_move', $extra + $base);
+                $this->fail('Nicht abgelehnt: ' . $case);
+            } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
+                throw $failure; // fail() erbt von RuntimeException
+            } catch (RuntimeException $exception) {
+                $this->assertStringContainsString($expected, $exception->getMessage(), $case);
+            }
+        }
+
+        $this->assertSame(2, $this->stock->getStockAtLocation($this->articleId, $this->mainId));
+    }
+
+    /**
+     * Buchen-Seite und Artikelseite prüfen Von/Nach gleich und melden
+     * dasselbe.
+     */
+    public function testScanVonNachValidationMatchesStockForm(): void
+    {
+        $this->receive(2);
+
+        $base = ['article_number' => 'A-001', 'source' => (string) $this->mainId];
+
+        foreach ([
+            'Einlagern → Ausbuchen' => [['source' => 'receipt', 'target' => 'issue', 'expiry_date' => '2030-01-01'], 'Lagerort auswählen'],
+            'Von = Nach' => [['target' => (string) $this->mainId], 'nicht derselbe'],
+            'unbekanntes Nach' => [['target' => '9999'], 'gültige Lagerorte'],
+            'unbekanntes Von' => [['source' => '9999'], 'gültige Lagerorte'],
+        ] as $case => [$extra, $expected]) {
+            try {
+                $this->stockActions()->dispatch('issue', $extra + $base);
                 $this->fail('Nicht abgelehnt: ' . $case);
             } catch (\PHPUnit\Framework\AssertionFailedError $failure) {
                 throw $failure; // fail() erbt von RuntimeException
@@ -971,8 +1000,8 @@ class ActionsTest extends TestCase
         $id = (string) $this->articleId;
         $attempts = [
             'stock_move' => [$this->stockActions(), [
-                'article_id' => $id, 'quantity' => '5', 'from' => 'receipt',
-                'to' => (string) $this->mainId, 'batch_selection' => 'none',
+                'article_id' => $id, 'quantity' => '5', 'source' => 'receipt',
+                'target' => (string) $this->mainId, 'batch_selection' => 'none',
             ]],
             'undo_issue' => [$this->stockActions(), [
                 'article_id' => $id, 'batch_id' => '0', 'location_id' => (string) $this->mainId, 'quantity' => '1',

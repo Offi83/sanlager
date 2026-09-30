@@ -19,6 +19,25 @@ class StockRepository
     use LocalDay;
 
     /**
+     * Bewegungsarten, siehe move(): Zugänge werden positiv, Abgänge negativ
+     * gespeichert. Dazu kommt `correction` (Inventur) mit Vorzeichen.
+     */
+    private const INCOMING = ['receipt', 'issue_reversal', 'disposal_reversal', 'transfer_in', 'transfer_reversal_in'];
+    private const OUTGOING = ['issue', 'disposal', 'receipt_reversal', 'transfer_out', 'transfer_reversal_out'];
+
+    /**
+     * SQL: Charge verwendbar, also ohne MHD oder noch nicht abgelaufen
+     * (Tabellenkürzel `b` für batches, Parameter `:today`). Abgelaufenes
+     * zählt nie als Bestand gegen den Mindestbestand.
+     */
+    public const USABLE = '(b.expiry_date IS NULL OR b.expiry_date >= :today)';
+
+    /**
+     * SQL: Summe der verwendbaren Menge (`sm` = stock_movements), siehe USABLE.
+     */
+    public const USABLE_QUANTITY = 'COALESCE(SUM(CASE WHEN ' . self::USABLE . ' THEN sm.quantity ELSE 0 END), 0)';
+
+    /**
      * Kennzahlen eines Artikels ohne Bewegungen, siehe getStockSummaries().
      */
     public const EMPTY_SUMMARY = [
@@ -98,10 +117,7 @@ class StockRepository
                 COALESCE(c.sort_order, 9999),
                 c.name COLLATE NOCASE,
                 a.name COLLATE NOCASE,
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
+                b.expiry_date IS NULL,
                 b.expiry_date'
         );
 
@@ -165,10 +181,7 @@ class StockRepository
                 COALESCE(c.sort_order, 9999),
                 c.name COLLATE NOCASE,
                 a.name COLLATE NOCASE,
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
+                b.expiry_date IS NULL,
                 b.expiry_date'
         );
 
@@ -304,15 +317,7 @@ class StockRepository
                 sl.id AS location_id,
                 sl.name AS location_name,
                 COALESCE(SUM(sm.quantity), 0) AS quantity,
-                COALESCE(SUM(
-                    CASE
-                        WHEN sm.batch_id IS NULL
-                            OR b.expiry_date IS NULL
-                            OR b.expiry_date >= :today
-                        THEN sm.quantity
-                        ELSE 0
-                    END
-                ), 0) AS usable_quantity,
+                ' . self::USABLE_QUANTITY . ' AS usable_quantity,
                 alm.minimum_stock AS minimum_stock
              FROM storage_locations sl
              LEFT JOIN stock_movements sm
@@ -413,10 +418,7 @@ class StockRepository
                 sl.name
              HAVING SUM(sm.quantity) > 0
              ORDER BY
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
+                b.expiry_date IS NULL,
                 b.expiry_date,
                 sl.sort_order,
                 sl.name COLLATE NOCASE'
@@ -452,10 +454,7 @@ class StockRepository
                 b.id,
                 b.expiry_date
              ORDER BY
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
+                b.expiry_date IS NULL,
                 b.expiry_date'
         );
 
@@ -529,14 +528,7 @@ class StockRepository
         $statement = $this->db->prepare(
             'SELECT
                 sm.article_id,
-                COALESCE(SUM(
-                    CASE
-                        WHEN b.expiry_date IS NULL
-                            OR b.expiry_date >= :today
-                        THEN sm.quantity
-                        ELSE 0
-                    END
-                ), 0) AS total,
+                ' . self::USABLE_QUANTITY . ' AS total,
                 COALESCE(SUM(
                     CASE
                         WHEN b.expiry_date < :today
@@ -588,14 +580,7 @@ class StockRepository
                 ON b.id = sm.batch_id
              ' . str_replace('sm.', 'alm.', $articleFilter) . '
              GROUP BY alm.id, alm.article_id, alm.minimum_stock
-             HAVING COALESCE(SUM(
-                CASE
-                    WHEN b.expiry_date IS NULL
-                        OR b.expiry_date >= :today
-                    THEN sm.quantity
-                    ELSE 0
-                END
-             ), 0) < alm.minimum_stock'
+             HAVING ' . self::USABLE_QUANTITY . ' < alm.minimum_stock'
         );
 
         $statement->execute($parameters);
@@ -838,10 +823,7 @@ class StockRepository
                 b.expiry_date
              HAVING SUM(sm.quantity) > 0
              ORDER BY
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
+                b.expiry_date IS NULL,
                 b.expiry_date ASC,
                 sm.batch_id ASC'
         );
@@ -891,13 +873,13 @@ class StockRepository
     }
 
     /**
-     * Rücknehmbare Buchungsarten für reverseToday(): Vorzeichen der
-     * Buchung, Verb für die Fehlermeldung und Notiz der Gegenbuchung.
+     * Rücknehmbare Buchungsarten für reverseToday(): Verb für die
+     * Fehlermeldung und Notiz der Gegenbuchung.
      */
     private const REVERSIBLE = [
-        'issue' => ['sign' => -1, 'verb' => 'ausgebucht', 'note' => 'Ausbuchung rückgängig gemacht'],
-        'disposal' => ['sign' => -1, 'verb' => 'entsorgt', 'note' => 'Entsorgung rückgängig gemacht'],
-        'receipt' => ['sign' => 1, 'verb' => 'eingelagert', 'note' => 'Einlagerung rückgängig gemacht'],
+        'issue' => ['verb' => 'ausgebucht', 'note' => 'Ausbuchung rückgängig gemacht'],
+        'disposal' => ['verb' => 'entsorgt', 'note' => 'Entsorgung rückgängig gemacht'],
+        'receipt' => ['verb' => 'eingelagert', 'note' => 'Einlagerung rückgängig gemacht'],
     ];
 
     /**
@@ -927,7 +909,7 @@ class StockRepository
         $this->transactional(function () use ($type, $reversal, $articleId, $batchId, $locationId, $quantity): void {
             $this->assertReversible(
                 $quantity,
-                $reversal['sign'] * $this->todayNetQuantity([$type, $type . '_reversal'], $articleId, $batchId, $locationId),
+                (in_array($type, self::OUTGOING, true) ? -1 : 1) * $this->todayNetQuantity([$type, $type . '_reversal'], $articleId, $batchId, $locationId),
                 $reversal['verb']
             );
 
@@ -1151,9 +1133,8 @@ class StockRepository
     /**
      * Erzeugt eine einzelne Lagerbewegung (einen Zugang oder Abgang).
      *
-     * `$quantity` wird immer positiv übergeben; bei den Abgangstypen
-     * `receipt_reversal`/`issue`/`disposal`/`transfer_out`/`transfer_reversal_out` wird sie
-     * hier intern negiert, nachdem geprüft wurde, dass genug Bestand der
+     * `$quantity` wird immer positiv übergeben; bei den Abgängen
+     * (self::OUTGOING) wird sie hier intern negiert, nachdem geprüft wurde, dass genug Bestand der
      * betroffenen Charge an diesem Lagerort vorhanden ist. Nur `correction`
      * (Inventur, siehe applyInventory()) wird mit Vorzeichen übergeben.
      * Für eine vollständige Umbuchung (Abgang an einem Lagerort + Zugang
@@ -1162,8 +1143,7 @@ class StockRepository
      *
      * @param int|null $transferId verbindet die beiden Hälften einer
      *                             Umbuchung, siehe transferPair()
-     * @param string $type receipt|receipt_reversal|issue|issue_reversal|disposal|disposal_reversal|correction|
-     *                     transfer_out|transfer_in|transfer_reversal_out|transfer_reversal_in
+     * @param string $type aus self::INCOMING, self::OUTGOING oder `correction`
      * @throws RuntimeException bei Menge 0, ungültigem Typ oder nicht
      *                          ausreichendem Bestand bei einem Abgang
      */
@@ -1182,23 +1162,7 @@ class StockRepository
             );
         }
 
-        if (!in_array(
-            $type,
-            [
-                'receipt',
-                'receipt_reversal',
-                'issue',
-                'issue_reversal',
-                'disposal',
-                'disposal_reversal',
-                'correction',
-                'transfer_out',
-                'transfer_in',
-                'transfer_reversal_out',
-                'transfer_reversal_in',
-            ],
-            true
-        )) {
+        if (!in_array($type, [...self::INCOMING, ...self::OUTGOING, 'correction'], true)) {
             throw new RuntimeException(
                 'Ungültiger Bewegungstyp.'
             );
@@ -1210,7 +1174,7 @@ class StockRepository
          * Schreibsperre, sonst Teil der laufenden (Umbuchung, Komplettumzug).
          */
         $this->transactional(function () use ($articleId, $locationId, $quantity, $type, $note, $batchId, $transferId): void {
-            if (in_array($type, ['receipt_reversal', 'issue', 'disposal', 'transfer_out', 'transfer_reversal_out'], true)) {
+            if (in_array($type, self::OUTGOING, true)) {
                 $current = $this->getStockAtLocation(
                     $articleId,
                     $locationId,

@@ -88,12 +88,12 @@ if ($page === 'article') {
      */
     $locationIds = array_map('strval', array_column($locations, 'id'));
 
-    $stockFormFrom = in_array($_GET['from'] ?? '', ['receipt', ...$locationIds], true)
-        ? $_GET['from']
+    $stockFormFrom = in_array($_GET['source'] ?? '', ['receipt', ...$locationIds], true)
+        ? $_GET['source']
         : 'receipt';
 
-    $stockFormTo = in_array($_GET['to'] ?? '', ['issue', ...$locationIds], true)
-        ? $_GET['to']
+    $stockFormTo = in_array($_GET['target'] ?? '', ['issue', ...$locationIds], true)
+        ? $_GET['target']
         : ($locationIds[0] ?? 'issue');
 
     /*

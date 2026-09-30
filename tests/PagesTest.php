@@ -770,8 +770,8 @@ class PagesTest extends TestCase
         $move = self::request('?page=article&id=' . $articleId, [
             'action' => 'stock_move',
             'article_id' => $articleId,
-            'from' => 'receipt',
-            'to' => $mainId,
+            'source' => 'receipt',
+            'target' => $mainId,
             'batch_selection' => 'new',
             // Relativ zu heute, sonst irgendwann "abgelaufen" (Rückfrage).
             'expiry_date' => date('d.m.Y', strtotime('+2 years')),

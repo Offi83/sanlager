@@ -193,15 +193,12 @@ Den Anfangsbestand bucht man auf der Buchen-Seite mit „Einlagern“.
 
 ## Aktualisieren
 
-Neue Versionen kommen mit `script/pull.sh` auf den Server:
+Neue Versionen kommen mit `script/pull.sh` auf den Server. Im Projektordner ausführen:
 
-1. Auf GitHub unter „Actions“ prüfen, ob der letzte Testlauf grün ist – bei Rot nicht aktualisieren.
-2. Im Projektordner ausführen:
+```bash
+./script/pull.sh
+```
 
-   ```bash
-   ./script/pull.sh
-   ```
-
-Das Skript sichert zuerst die Datenbank, holt dann den Code, installiert die PHP-Abhängigkeiten und führt fehlende Migrationen aus. `.env`, Datenbank, Sicherungen sowie `.htaccess`/`.htpasswd` werden nicht von Git verwaltet und bleiben unverändert. Die einzelnen Schritte stehen unter [Entwicklung → Änderungen auf dem Server bereitstellen](11-entwicklung.md#änderungen-auf-dem-server-bereitstellen).
+Das Skript zeigt zuerst, was neu ist und ob die Tests auf GitHub grün sind, und fragt dann nach. Bei „Tests ROT“ mit Nein antworten. Danach sichert es die Datenbank, holt den Code, installiert die PHP-Abhängigkeiten und führt fehlende Migrationen aus. Scheitert die Installation der Abhängigkeiten, geht es von selbst auf den vorherigen Stand zurück. `.env`, Datenbank, Sicherungen sowie `.htaccess`/`.htpasswd` werden nicht von Git verwaltet und bleiben unverändert. Die einzelnen Schritte stehen unter [Entwicklung → Änderungen auf dem Server bereitstellen](11-entwicklung.md#änderungen-auf-dem-server-bereitstellen).
 
 Welcher Stand läuft, steht danach unten auf jeder Seite: „Version 0.5.0“ bei einem Release, bei späteren Pushs ergänzt um Datum und Uhrzeit, z. B. „Version 0.5.0 + Stand 28.09.2026, 14:32“ (siehe [Version in der Fußzeile](11-entwicklung.md#version-in-der-fußzeile)).

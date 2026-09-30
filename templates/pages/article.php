@@ -383,7 +383,7 @@
                         </span>
 
                         <select
-                            name="from"
+                            name="source"
                             id="stock_from"
                             required
                         >
@@ -415,7 +415,7 @@
                         </span>
 
                         <select
-                            name="to"
+                            name="target"
                             id="stock_to"
                             required
                         >

@@ -35,6 +35,7 @@ sanlager/
 │   │   └── *.js
 │   └── index.php
 ├── script/
+│   ├── ci-status.php
 │   ├── demo-data.php
 │   ├── pull.sh
 │   ├── push.sh
@@ -142,7 +143,7 @@ wird **nicht über GitHub verteilt**.
 
 ### `script/`
 
-Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh`, `push.sh`) sowie für Screenshots und Beispieldaten (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
+Enthält Hilfsskripte für die Verteilung der Anwendung (`pull.sh` mit `ci-status.php`, `push.sh`) sowie für Screenshots und Beispieldaten (`screenshots.sh`, `demo-data.php`), siehe die Abschnitte weiter unten auf dieser Seite.
 
 ### `docs/`
 
@@ -212,7 +213,7 @@ Die Tests liegen unter `tests/`:
 
 ### Automatisch bei jedem Push (GitHub Actions)
 
-`.github/workflows/tests.yml` führt bei jedem Push und Pull Request auf GitHub aus: `composer validate`, PHP- und JavaScript-Syntaxprüfung sowie alle Tests. Das Ergebnis zeigt das Abzeichen oben im README bzw. der Reiter „Actions“ im GitHub-Repository. **Vor einem `./script/pull.sh` auf dem Server lohnt der Blick dorthin:** ist der letzte Lauf rot, nicht aktualisieren.
+`.github/workflows/tests.yml` führt bei jedem Push und Pull Request auf GitHub aus: `composer validate`, PHP- und JavaScript-Syntaxprüfung sowie alle Tests. Das Ergebnis zeigt das Abzeichen oben im README bzw. der Reiter „Actions“ im GitHub-Repository. `script/pull.sh` fragt es vor dem Update selbst ab (`script/ci-status.php`, öffentliche GitHub-Schnittstelle ohne Anmeldung) und warnt bei Rot.
 
 **Hinweis zu Datumswerten:** MHDs werden immer im Format `JJJJ-MM-TT` gespeichert, da alle Ablaufprüfungen in SQL als Textvergleich laufen. Benutzereingaben daher stets über `normalizeDate()` prüfen. Das Datum „heute“ wird in PHP (Zeitzone `APP_TIMEZONE`) ermittelt und als Parameter an SQL übergeben, nicht per `date('now')` in SQLite (UTC).
 
@@ -265,12 +266,13 @@ Auf dem Server wird der aktuelle Stand aus GitHub mit `script/pull.sh` übernomm
 ./script/pull.sh
 ```
 
-Nach einer Rückfrage führt das Skript nacheinander aus:
+Das Skript führt nacheinander aus:
 
-1. **Datensicherung** mit `bin/backup.php` (siehe [Datensicherung](06-datensicherung.md)) – das Update kann Migrationen mitbringen, die die Datenbank umbauen. Scheitert die Sicherung, fragt das Skript, ob es ohne weitermachen soll.
-2. **Code holen:** `git fetch --tags` (auch neue Release-Tags für die [Versionsanzeige](#version-in-der-fußzeile)) und `git reset --hard origin/main`.
-3. **Abhängigkeiten installieren:** `composer install --no-dev --optimize-autoloader`, passend zur neuen `composer.lock`.
-4. **Datenbank aktualisieren:** `bin/migrate.php` führt fehlende Migrationen sofort aus, damit ein Fehler gleich im Terminal steht. Gibt es noch keine Datenbank, legt es keine an (sie gehörte sonst dem Benutzer im Terminal statt dem Webserver). Hat dieser Benutzer keine Schreibrechte auf die Datenbank, wird die Migration beim nächsten Seitenaufruf nachgeholt.
+1. **Neuen Stand holen und anzeigen:** `git fetch --tags` (auch neue Release-Tags für die [Versionsanzeige](#version-in-der-fußzeile)) ändert noch nichts am laufenden Code. Angezeigt werden die neuen Commits und das Testergebnis dieses Stands auf GitHub (`script/ci-status.php`: grün, ROT, läuft noch oder unbekannt, z. B. ohne Internet), dann kommt die Rückfrage.
+2. **Datensicherung** mit `bin/backup.php` (siehe [Datensicherung](06-datensicherung.md)) – das Update kann Migrationen mitbringen, die die Datenbank umbauen. Scheitert die Sicherung, fragt das Skript, ob es ohne weitermachen soll.
+3. **Code aktualisieren:** `git reset --hard` auf den geholten Stand von `origin/main`.
+4. **Abhängigkeiten installieren:** `composer install --no-dev --optimize-autoloader`, passend zur neuen `composer.lock`. Scheitert das, setzt das Skript den Code auf den vorherigen Stand zurück und installiert dessen Abhängigkeiten, damit SanLager weiterläuft.
+5. **Datenbank aktualisieren:** `bin/migrate.php` führt fehlende Migrationen sofort aus, damit ein Fehler gleich im Terminal steht. Gibt es noch keine Datenbank, legt es keine an (sie gehörte sonst dem Benutzer im Terminal statt dem Webserver). Hat dieser Benutzer keine Schreibrechte auf die Datenbank, wird die Migration beim nächsten Seitenaufruf nachgeholt.
 
 Nicht von Git verwaltete Dateien – `.env`, `database/database.sqlite`, Sicherungen, `public/.htaccess` und `.htpasswd` – bleiben dabei erhalten.
 

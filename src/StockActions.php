@@ -36,7 +36,7 @@ class StockActions
     public function dispatch(?string $action, array $input): ?ActionResult
     {
         return match ($action) {
-            'issue' => $this->issue($input),
+            'issue' => $this->withJsonErrors($input, fn (bool $isAjax): ActionResult => $this->issue($input, $isAjax)),
             'stock_move' => $this->stockMove($input),
             'transfer_all_stock' => $this->transferAllStock($input),
             'undo_issue' => $this->undoToday('issue', $input),
@@ -45,7 +45,7 @@ class StockActions
             'undo_receipt' => $this->undoToday('receipt', $input),
             'dispose_batch' => $this->disposeBatch($input),
             'inventory' => $this->inventory($input),
-            'sort_out_expired' => $this->sortOutExpired($input),
+            'sort_out_expired' => $this->withJsonErrors($input, fn (bool $isAjax): ActionResult => $this->sortOutExpired($input, $isAjax)),
             default => null,
         };
     }
@@ -65,199 +65,144 @@ class StockActions
      *
      * `ajax=1` liefert JSON zurück (Kamera-Scanner), sonst erfolgt ein
      * normaler Redirect mit Erfolgsmeldung (per Session, siehe flash()).
-     * Fehler werden hier abschließend behandelt (nicht an den Aufrufer
-     * weitergereicht), damit der Scanner nach einem Fehlversuch sofort
-     * für den nächsten Scan bereit ist.
+     * Fehler kommen bei `ajax=1` als JSON zurück, siehe withJsonErrors().
      */
-    private function issue(array $input): ActionResult
+    private function issue(array $input, bool $isAjax): ActionResult
     {
-        $isAjax = $this->string($input, 'ajax') === '1';
+        $articleNumber = $this->string($input, 'article_number');
 
-        try {
-            $articleNumber = $this->string($input, 'article_number');
+        if ($articleNumber === '') {
+            throw new RuntimeException(
+                'Bitte eine Artikelnummer eingeben oder scannen.'
+            );
+        }
 
-            if ($articleNumber === '') {
-                throw new RuntimeException(
-                    'Bitte eine Artikelnummer eingeben oder scannen.'
-                );
-            }
+        $article = $this->articles->findByArticleNumber(
+            $articleNumber
+        );
 
-            $article = $this->articles->findByArticleNumber(
+        if (!$article) {
+            throw new RuntimeException(
+                'Artikelnummer nicht gefunden: ' .
                 $articleNumber
             );
-
-            if (!$article) {
-                throw new RuntimeException(
-                    'Artikelnummer nicht gefunden: ' .
-                    $articleNumber
-                );
-            }
-
-            $quantityInput = $this->string($input, 'quantity', '1');
-            $quantity = preg_match('/^\d{1,3}$/', $quantityInput) ? (int) $quantityInput : 0;
-
-            if ($quantity < 1) {
-                throw new RuntimeException(
-                    'Ungültige Menge: ' . $quantityInput . ' (erlaubt: 1 bis 999).'
-                );
-            }
-
-            $target = $this->string($input, 'target', 'issue');
-
-            if ($target === '') {
-                $target = 'issue';
-            }
-
-            if ($this->string($input, 'source') === 'receipt') {
-                return $this->receiptByScan($input, $article, $target, $quantity, $isAjax);
-            }
-
-            $sourceLocationId = $this->int($input, 'source');
-
-            $sourceLocation = $sourceLocationId > 0
-                ? $this->locations->find($sourceLocationId)
-                : $this->locations->defaultLocation();
-
-            if (!$sourceLocation) {
-                throw new RuntimeException(
-                    'Der ausgewählte Quell-Lagerort wurde nicht gefunden.'
-                );
-            }
-
-            $sourceLocationId = (int) $sourceLocation['id'];
-
-            if ($target === 'issue') {
-                $result = $this->stock->issueOldest(
-                    (int) $article['id'],
-                    $sourceLocationId,
-                    'Scanner-Ausbuchung aus ' . $sourceLocation['name'],
-                    $quantity
-                );
-
-                $actionLabel = 'ausgebucht';
-            } else {
-                $targetLocationId = (int) $target;
-
-                if (
-                    $targetLocationId <= 0
-                    || $targetLocationId === $sourceLocationId
-                ) {
-                    throw new RuntimeException(
-                        'Ungültiges Buchungsziel.'
-                    );
-                }
-
-                $targetLocation = $this->locations->find(
-                    $targetLocationId
-                );
-
-                if (!$targetLocation) {
-                    throw new RuntimeException(
-                        'Der ausgewählte Lagerort wurde nicht gefunden.'
-                    );
-                }
-
-                $result = $this->stock->transferOldest(
-                    (int) $article['id'],
-                    $sourceLocationId,
-                    $targetLocationId,
-                    'Scanner-Umbuchung von ' . $sourceLocation['name']
-                        . ' nach ' . $targetLocation['name'],
-                    $quantity
-                );
-
-                $actionLabel = 'umgebucht nach ' . $targetLocation['name'];
-            }
-
-            /*
-             * Es wird stets zuerst die Charge mit dem ältesten MHD gebucht.
-             * Ist eine gebuchte Charge bereits abgelaufen (oder läuft bald
-             * ab), wird das zusätzlich angezeigt, damit niemand unbemerkt
-             * abgelaufenes Material ausgebucht oder umgebucht bekommt.
-             */
-            $warnings = array_map(
-                static fn (array $batch): string => expiryInfo($batch['expiry_date'])['warning'],
-                $result['batches']
-            );
-
-            $expiryWarning = in_array('ABGELAUFEN', $warnings, true)
-                ? 'ABGELAUFEN'
-                : (string) current(array_filter($warnings));
-
-            /*
-             * Abgelaufene Chargen dieser Buchung für den Alarm mit
-             * „Aussortieren“ (booking.js, Aktion sort_out_expired):
-             * gebuchte Menge und was davon am Lagerort noch liegt.
-             */
-            $expiredBatches = [];
-
-            foreach ($result['batches'] as $batch) {
-                if (expiryInfo($batch['expiry_date'])['warning'] !== 'ABGELAUFEN') {
-                    continue;
-                }
-
-                $expiredBatches[] = [
-                    'batch_id' => $batch['batch_id'],
-                    'expiry_date' => formatDate($batch['expiry_date']),
-                    'quantity' => $batch['quantity'],
-                    'remaining' => $this->stock->getStockAtLocation(
-                        (int) $article['id'],
-                        $sourceLocationId,
-                        $batch['batch_id']
-                    ),
-                ];
-            }
-
-            return $this->bookingResult(
-                $isAjax,
-                $article,
-                $articleNumber,
-                $quantity,
-                $actionLabel,
-                $this->batchesText($result['batches'], $article),
-                $expiryWarning,
-                '?page=issue&source=' . $sourceLocationId . '&target=' . urlencode($target),
-                [
-                    'article_id' => (int) $article['id'],
-                    'source' => (string) $sourceLocationId,
-                    'source_name' => $sourceLocation['name'],
-                    'target' => $target,
-                    'expired_batches' => $expiredBatches,
-                ]
-            );
-        } catch (Throwable $exception) {
-            if ($isAjax) {
-                return ActionResult::json([
-                    'success' => false,
-                    'error' => userMessage($exception)
-                ], 400);
-            }
-
-            throw $exception;
         }
+
+        $quantityInput = $this->string($input, 'quantity', '1');
+        $quantity = preg_match('/^\d{1,3}$/', $quantityInput) ? (int) $quantityInput : 0;
+
+        if ($quantity < 1) {
+            throw new RuntimeException(
+                'Ungültige Menge: ' . $quantityInput . ' (erlaubt: 1 bis 999).'
+            );
+        }
+
+        $target = $this->string($input, 'target') ?: 'issue';
+        $source = $this->string($input, 'source')
+            ?: (string) ($this->locations->defaultLocation()['id'] ?? '');
+
+        [$sourceLocation, $targetLocation] = $this->route($source, $target);
+
+        if ($sourceLocation === null) {
+            return $this->receiptByScan($input, $article, $targetLocation, $quantity, $isAjax);
+        }
+
+        $sourceLocationId = (int) $sourceLocation['id'];
+
+        if ($targetLocation === null) {
+            $result = $this->stock->issueOldest(
+                (int) $article['id'],
+                $sourceLocationId,
+                'Scanner-Ausbuchung aus ' . $sourceLocation['name'],
+                $quantity
+            );
+
+            $actionLabel = 'ausgebucht';
+        } else {
+            $targetLocationId = (int) $targetLocation['id'];
+
+            $result = $this->stock->transferOldest(
+                (int) $article['id'],
+                $sourceLocationId,
+                $targetLocationId,
+                'Scanner-Umbuchung von ' . $sourceLocation['name']
+                    . ' nach ' . $targetLocation['name'],
+                $quantity
+            );
+
+            $actionLabel = 'umgebucht nach ' . $targetLocation['name'];
+        }
+
+        /*
+         * Es wird stets zuerst die Charge mit dem ältesten MHD gebucht.
+         * Ist eine gebuchte Charge bereits abgelaufen (oder läuft bald
+         * ab), wird das zusätzlich angezeigt, damit niemand unbemerkt
+         * abgelaufenes Material ausgebucht oder umgebucht bekommt.
+         */
+        $warnings = array_map(
+            static fn (array $batch): string => expiryInfo($batch['expiry_date'])['warning'],
+            $result['batches']
+        );
+
+        $expiryWarning = in_array('ABGELAUFEN', $warnings, true)
+            ? 'ABGELAUFEN'
+            : (string) current(array_filter($warnings));
+
+        /*
+         * Abgelaufene Chargen dieser Buchung für den Alarm mit
+         * „Aussortieren“ (booking.js, Aktion sort_out_expired):
+         * gebuchte Menge und was davon am Lagerort noch liegt.
+         */
+        $expiredBatches = [];
+
+        foreach ($result['batches'] as $batch) {
+            if (expiryInfo($batch['expiry_date'])['warning'] !== 'ABGELAUFEN') {
+                continue;
+            }
+
+            $expiredBatches[] = [
+                'batch_id' => $batch['batch_id'],
+                'expiry_date' => formatDate($batch['expiry_date']),
+                'quantity' => $batch['quantity'],
+                'remaining' => $this->stock->getStockAtLocation(
+                    (int) $article['id'],
+                    $sourceLocationId,
+                    $batch['batch_id']
+                ),
+            ];
+        }
+
+        return $this->bookingResult(
+            $isAjax,
+            $article,
+            $articleNumber,
+            $quantity,
+            $actionLabel,
+            $this->batchesText($result['batches'], $article),
+            $expiryWarning,
+            '?page=issue&source=' . $sourceLocationId . '&target=' . urlencode($target),
+            [
+                'article_id' => (int) $article['id'],
+                'source' => (string) $sourceLocationId,
+                'source_name' => $sourceLocation['name'],
+                'target' => $target,
+                'expired_batches' => $expiredBatches,
+            ]
+        );
     }
 
     /**
      * Einlagern per Scan (Buchen-Seite, Von „Einlagern“ = `receipt`): $quantity Stück
-     * mit dem MHD aus `expiry_date` an den Lagerort $target. Artikel ohne
+     * mit dem MHD aus `expiry_date` an den Lagerort $targetLocation. Artikel ohne
      * MHD werden ohne MHD eingelagert, das Feld wird dann nicht beachtet.
      */
     private function receiptByScan(
         array $input,
         array $article,
-        string $target,
+        array $targetLocation,
         int $quantity,
         bool $isAjax
     ): ActionResult {
-        $targetLocation = $target !== 'issue'
-            ? $this->locations->find((int) $target)
-            : null;
-
-        if (!$targetLocation) {
-            throw new RuntimeException(
-                'Bitte bei Nach einen Lagerort zum Einlagern auswählen.'
-            );
-        }
 
         $batchId = null;
         $expiryDate = null;
@@ -387,16 +332,18 @@ class StockActions
      * "Bestand buchen" auf der Artikelseite. Der Vorgang ergibt sich aus
      * Von und Nach:
      *
-     *   from=receipt,  to=<Lagerort>  → Einlagern
-     *   from=<Lagerort>, to=issue     → Ausbuchen
-     *   from=<Lagerort>, to=<anderer> → Umbuchen
+     *   source=receipt,    target=<Lagerort> → Einlagern
+     *   source=<Lagerort>, target=issue      → Ausbuchen
+     *   source=<Lagerort>, target=<anderer>  → Umbuchen
+     *
+     * wie auf der Buchen-Seite, siehe route().
      */
     private function stockMove(array $input): ActionResult
     {
         $articleId = $this->int($input, 'article_id');
         $quantity = $this->int($input, 'quantity');
-        $from = $this->string($input, 'from');
-        $to = $this->string($input, 'to');
+        $source = $this->string($input, 'source');
+        $target = $this->string($input, 'target');
 
         $article = $this->articles->findActive($articleId);
 
@@ -412,29 +359,7 @@ class StockActions
             );
         }
 
-        if ($from === 'receipt' && $to === 'issue') {
-            throw new RuntimeException(
-                'Bitte bei Von oder Nach einen Lagerort auswählen.'
-            );
-        }
-
-        $fromLocation = $from === 'receipt' ? null : $this->locations->find((int) $from);
-        $toLocation = $to === 'issue' ? null : $this->locations->find((int) $to);
-
-        if (
-            ($from !== 'receipt' && !$fromLocation)
-            || ($to !== 'issue' && !$toLocation)
-        ) {
-            throw new RuntimeException(
-                'Bitte gültige Lagerorte für Von und Nach auswählen.'
-            );
-        }
-
-        if ($fromLocation && $toLocation && (int) $fromLocation['id'] === (int) $toLocation['id']) {
-            throw new RuntimeException(
-                'Von und Nach dürfen nicht derselbe Lagerort sein.'
-            );
-        }
+        [$fromLocation, $toLocation] = $this->route($source, $target);
 
         $movementType = match (true) {
             $fromLocation === null => 'receipt',
@@ -560,10 +485,50 @@ class StockActions
          */
         return ActionResult::redirect(
             '?page=article&id=' . $articleId
-            . '&from=' . urlencode($from)
-            . '&to=' . urlencode($to),
+            . '&source=' . urlencode($source)
+            . '&target=' . urlencode($target),
             $message
         );
+    }
+
+    /**
+     * Von/Nach einer Buchung, auf der Buchen-Seite wie auf der Artikelseite:
+     *
+     *   source = `receipt` (Einlagern) oder Lagerort-ID
+     *   target = `issue` (Ausbuchen) oder Lagerort-ID
+     *
+     * @return array{0: ?array, 1: ?array} Quell-Lagerort (null beim
+     *         Einlagern) und Ziel-Lagerort (null beim Ausbuchen)
+     * @throws RuntimeException bei Einlagern → Ausbuchen, unbekanntem oder
+     *                          gleichem Lagerort
+     */
+    private function route(string $source, string $target): array
+    {
+        if ($source === 'receipt' && $target === 'issue') {
+            throw new RuntimeException(
+                'Bitte bei Von oder Nach einen Lagerort auswählen.'
+            );
+        }
+
+        $sourceLocation = $source === 'receipt' ? null : $this->locations->find((int) $source);
+        $targetLocation = $target === 'issue' ? null : $this->locations->find((int) $target);
+
+        if (
+            ($source !== 'receipt' && !$sourceLocation)
+            || ($target !== 'issue' && !$targetLocation)
+        ) {
+            throw new RuntimeException(
+                'Bitte gültige Lagerorte für Von und Nach auswählen.'
+            );
+        }
+
+        if ($sourceLocation && $targetLocation && (int) $sourceLocation['id'] === (int) $targetLocation['id']) {
+            throw new RuntimeException(
+                'Von und Nach dürfen nicht derselbe Lagerort sein.'
+            );
+        }
+
+        return [$sourceLocation, $targetLocation];
     }
 
     /**
@@ -938,53 +903,66 @@ class StockActions
      *
      * Mit `ajax=1` JSON (Buchen-Seite), sonst Redirect zurück zum Buchen.
      */
-    private function sortOutExpired(array $input): ActionResult
+    private function sortOutExpired(array $input, bool $isAjax): ActionResult
     {
-        $isAjax = $this->string($input, 'ajax') === '1';
         $target = $this->string($input, 'target', 'issue');
 
+        $article = $this->articles->findActive($this->int($input, 'article_id'));
+        $source = $this->locations->find($this->int($input, 'source'));
+        $targetLocation = $target !== 'issue' ? $this->locations->find((int) $target) : null;
+        $batches = $this->array($input, 'batches');
+
+        if (!$article || !$source || ($target !== 'issue' && !$targetLocation) || !$batches) {
+            throw new RuntimeException(
+                'Aussortieren nicht möglich: Angaben unvollständig.'
+            );
+        }
+
+        $disposed = $this->stock->sortOutExpiredBatches(
+            (int) $article['id'],
+            (int) $source['id'],
+            $targetLocation ? (int) $targetLocation['id'] : null,
+            array_map(static fn (mixed $quantity): int => is_string($quantity) ? (int) $quantity : 0, $batches)
+        );
+
+        $message = $article['name'] . ' – ' . quantityText($disposed, $article)
+            . ' aus ' . $source['name'] . ' entsorgt (MHD abgelaufen)';
+
+        if ($isAjax) {
+            return ActionResult::json([
+                'success' => true,
+                'message' => $message,
+            ]);
+        }
+
+        return ActionResult::redirect(
+            '?page=issue&source=' . (int) $source['id'] . '&target=' . urlencode($target),
+            $message
+        );
+    }
+
+    /**
+     * Führt eine Buchung der Buchen-Seite aus. Bei `ajax=1` wird ein Fehler
+     * als JSON beantwortet (die Seite bleibt bereit für den nächsten Scan),
+     * sonst an index.php weitergereicht.
+     *
+     * @param callable(bool): ActionResult $action bekommt, ob JSON erwartet wird
+     */
+    private function withJsonErrors(array $input, callable $action): ActionResult
+    {
+        $isAjax = $this->string($input, 'ajax') === '1';
+
         try {
-            $article = $this->articles->findActive($this->int($input, 'article_id'));
-            $source = $this->locations->find($this->int($input, 'source'));
-            $targetLocation = $target !== 'issue' ? $this->locations->find((int) $target) : null;
-            $batches = $this->array($input, 'batches');
-
-            if (!$article || !$source || ($target !== 'issue' && !$targetLocation) || !$batches) {
-                throw new RuntimeException(
-                    'Aussortieren nicht möglich: Angaben unvollständig.'
-                );
-            }
-
-            $disposed = $this->stock->sortOutExpiredBatches(
-                (int) $article['id'],
-                (int) $source['id'],
-                $targetLocation ? (int) $targetLocation['id'] : null,
-                array_map(static fn (mixed $quantity): int => is_string($quantity) ? (int) $quantity : 0, $batches)
-            );
-
-            $message = $article['name'] . ' – ' . quantityText($disposed, $article)
-                . ' aus ' . $source['name'] . ' entsorgt (MHD abgelaufen)';
-
-            if ($isAjax) {
-                return ActionResult::json([
-                    'success' => true,
-                    'message' => $message,
-                ]);
-            }
-
-            return ActionResult::redirect(
-                '?page=issue&source=' . (int) $source['id'] . '&target=' . urlencode($target),
-                $message
-            );
+            return $action($isAjax);
         } catch (Throwable $exception) {
-            if ($isAjax) {
-                return ActionResult::json([
-                    'success' => false,
-                    'error' => userMessage($exception),
-                ], 400);
+            if (!$isAjax) {
+                throw $exception;
             }
 
-            throw $exception;
+            return ActionResult::json([
+                'success' => false,
+                'error' => userMessage($exception),
+            ], 400);
         }
     }
 }

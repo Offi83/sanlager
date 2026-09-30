@@ -97,10 +97,7 @@ class StockReports
              HAVING ? * SUM(sm.quantity) > 0
              ORDER BY
                 a.name COLLATE NOCASE,
-                CASE
-                    WHEN b.expiry_date IS NULL THEN 1
-                    ELSE 0
-                END,
+                b.expiry_date IS NULL,
                 b.expiry_date'
         );
 
@@ -259,14 +256,7 @@ class StockReports
                 c.name AS category_name,
                 c.color AS category_color,
                 alm.minimum_stock,
-                COALESCE(SUM(
-                    CASE
-                        WHEN b.expiry_date IS NULL
-                            OR b.expiry_date >= :today
-                        THEN sm.quantity
-                        ELSE 0
-                    END
-                ), 0) AS usable_quantity
+                ' . StockRepository::USABLE_QUANTITY . ' AS usable_quantity
              FROM article_location_minimums alm
              INNER JOIN articles a
                 ON a.id = alm.article_id
@@ -321,7 +311,7 @@ class StockReports
              LEFT JOIN batches b
                 ON b.id = sm.batch_id
              WHERE sm.location_id = :location_id
-             AND (b.expiry_date IS NULL OR b.expiry_date >= :today)
+             AND ' . StockRepository::USABLE . '
              GROUP BY sm.article_id
              HAVING SUM(sm.quantity) > 0'
         );
